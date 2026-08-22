@@ -68,7 +68,7 @@ function collectDeepLinkParams(parsed: URL, pathId?: string): Record<string, str
 }
 
 function parseInternalCraftAgentsDeepLink(parsed: URL): ParsedInternalDeepLink | null {
-  if (parsed.protocol !== 'craftagents:') return null
+  if (parsed.protocol !== 'boai:' && parsed.protocol !== 'craftagents:') return null
 
   const host = parsed.hostname
   const pathParts = parsed.pathname.split('/').filter(Boolean)

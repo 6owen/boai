@@ -2,6 +2,22 @@
   <a href="https://trendshift.io/repositories/20714" target="_blank"><img src="https://trendshift.io/api/badge/repositories/20714" alt="craft-ai-agents%2Fcraft-agents-oss | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
 </div>
 
+# BoAI Skills Manager
+
+BoAI is a local-first personal AI resource manager built as an Apache-2.0 derivative of Craft Agents. Phase 1 adds a complete Skills Manager while preserving Craft's session runtime and Skill invocation behavior.
+
+- Complete global, workspace, and project Skill inventory without hiding shadowed duplicates
+- Validation, provenance, favorites, tags, local modification and three-way update state
+- Staged `npx skills`/Git and local-directory installs with preview and atomic commit
+- Managed adoption, safe removal, operation history, and guarded restore
+- Independent `BoAI` app identity, `boai://` protocol, and `~/.boai` profile
+
+See [Skills Manager architecture and usage](docs/skills-manager.md) and [upstream sync workflow](docs/upstream-sync.md).
+
+## Upstream foundation
+
+The original Craft Agents README follows. Craft Agents copyright and attribution are retained in [NOTICE](NOTICE).
+
 # Craft Agents
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
@@ -84,6 +100,8 @@ cd craft-agents-oss
 bun install
 bun run electron:start
 ```
+
+For this BoAI branch, use `bun run electron:build` for a build smoke test and `bun run electron:start` to launch after Electron's runtime binary has been downloaded.
 
 ## Features
 

@@ -40,11 +40,16 @@ describe('classifyExternalUrl — safe external (custom app schemes)', () => {
 })
 
 describe('classifyExternalUrl — internal deep links', () => {
+  it('classifies boai:// as internal-deeplink', () => {
+    expect(classifyExternalUrl('boai://skills').kind).toBe('internal-deeplink')
+  })
+
   it('classifies craftagents:// as internal-deeplink', () => {
     expect(classifyExternalUrl('craftagents://settings').kind).toBe('internal-deeplink')
   })
 
   it('is case-insensitive for the scheme', () => {
+    expect(classifyExternalUrl('BOAI://settings').kind).toBe('internal-deeplink')
     expect(classifyExternalUrl('CRAFTAGENTS://settings').kind).toBe('internal-deeplink')
   })
 })
@@ -129,6 +134,7 @@ describe('formatBlockedUrlError', () => {
   it('returns an empty string for non-dangerous classifications', () => {
     expect(formatBlockedUrlError(classifyExternalUrl('https://example.com'))).toBe('')
     expect(formatBlockedUrlError(classifyExternalUrl('craftagents://settings'))).toBe('')
+    expect(formatBlockedUrlError(classifyExternalUrl('boai://skills'))).toBe('')
   })
 })
 
@@ -144,6 +150,7 @@ describe('isSafeExternalUrl', () => {
   })
 
   it('returns false for internal deep links', () => {
+    expect(isSafeExternalUrl('boai://skills')).toBe(false)
     expect(isSafeExternalUrl('craftagents://settings')).toBe(false)
   })
 

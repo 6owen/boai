@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { handleDeepLink } from '../deep-link'
+import { handleDeepLink, parseDeepLink } from '../deep-link'
 import { RPC_CHANNELS } from '../../shared/types'
 import type { EventSink } from '@craft-agent/server-core/transport'
 import type { WindowManager } from '../window-manager'
@@ -20,6 +20,15 @@ function createMockWindow(webContentsId: number) {
 }
 
 describe('handleDeepLink routing', () => {
+  it('parses the BoAI scheme while retaining legacy Craft links', () => {
+    expect(parseDeepLink('boai://skills')).toMatchObject({ view: 'skills' })
+    expect(parseDeepLink('boai://workspace/ws-target/skills')).toMatchObject({
+      workspaceId: 'ws-target',
+      view: 'skills',
+    })
+    expect(parseDeepLink('craftagents://skills')).toMatchObject({ view: 'skills' })
+  })
+
   it('prefers resolved target client over preferred caller client', async () => {
     const targetWindow = createMockWindow(22)
 

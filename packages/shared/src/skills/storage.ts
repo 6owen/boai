@@ -104,7 +104,7 @@ function parseSkillFile(content: string): { metadata: SkillMetadata; body: strin
  * @param slug - Skill directory name
  * @param source - Where this skill is loaded from
  */
-function loadSkillFromDir(skillsDir: string, slug: string, source: SkillSource): LoadedSkill | null {
+export function loadSkillFromDir(skillsDir: string, slug: string, source: SkillSource): LoadedSkill | null {
   const skillDir = join(skillsDir, slug);
   const skillFile = join(skillDir, 'SKILL.md');
 

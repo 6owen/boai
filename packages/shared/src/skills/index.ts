@@ -5,6 +5,12 @@
  */
 
 export * from './types.ts';
+export * from './inventory.ts';
+export * from './catalog.ts';
+export * from './operations.ts';
+export * from './command-adapter.ts';
+export * from './diff.ts';
+export * from './watcher.ts';
 export {
   GLOBAL_AGENT_SKILLS_DIR,
   PROJECT_AGENT_SKILLS_DIR,
