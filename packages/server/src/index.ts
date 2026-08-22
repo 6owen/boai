@@ -26,6 +26,7 @@
  */
 
 import { join } from 'node:path'
+import { homedir } from 'node:os'
 import { readFileSync, existsSync } from 'node:fs'
 import { version as packageVersion } from '../package.json'
 import { enableDebug } from '@craft-agent/shared/utils/debug'
@@ -33,7 +34,7 @@ import { bootstrapServer, startHealthHttpServer, generateServerToken } from '@cr
 import { validateSession, createWebuiHandler, nodeHttpAdapter } from '@craft-agent/server-core/webui'
 import type { WebuiHandler } from '@craft-agent/server-core/webui'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
-import { CONFIG_DIR, getWorkspaces } from '@craft-agent/shared/config'
+import { getWorkspaces } from '@craft-agent/shared/config'
 import { createMessagingBootstrap, type MessagingBootstrapHandle } from '@craft-agent/messaging-gateway'
 
 // --generate-token: print a crypto-random token and exit
@@ -210,7 +211,7 @@ const instance = await (async () => {
           sessionManager,
           credentialManager: getCredentialManager(),
           getMessagingDir: (wsId: string) =>
-            join(CONFIG_DIR, 'workspaces', wsId, 'messaging'),
+            join(homedir(), '.craft-agent', 'workspaces', wsId, 'messaging'),
           // Headless has no legacy messaging dir — workspaces start clean.
           whatsapp: {
             workerEntry: waWorkerEntry,

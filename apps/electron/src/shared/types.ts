@@ -60,31 +60,8 @@ import type { LoadedSource, FolderSourceConfig, SourceConnectionStatus } from '@
 export type { LoadedSource, FolderSourceConfig, SourceConnectionStatus };
 
 // Skill types
-import type {
-  LoadedSkill,
-  SkillAdoptRequest,
-  SkillInstallDirectoryRequest,
-  SkillInstallNpxRequest,
-  SkillInstallPlan,
-  SkillInventory,
-  SkillMetadataUpdateRequest,
-  SkillOperationRecord,
-  SkillRecord,
-  SkillRemoveManagedRequest,
-} from '@craft-agent/shared/skills/types';
-export type {
-  LoadedSkill,
-  SkillMetadata,
-  SkillAdoptRequest,
-  SkillInstallDirectoryRequest,
-  SkillInstallNpxRequest,
-  SkillInstallPlan,
-  SkillInventory,
-  SkillMetadataUpdateRequest,
-  SkillOperationRecord,
-  SkillRecord,
-  SkillRemoveManagedRequest,
-} from '@craft-agent/shared/skills/types';
+import type { LoadedSkill, SkillMetadata } from '@craft-agent/shared/skills/types';
+export type { LoadedSkill, SkillMetadata };
 
 // Resource bundle types (cross-workspace export/import)
 import type { ExportResourcesOptions, ExportResult, ResourceImportMode, ResourceBundle, ResourceImportResult } from '@craft-agent/shared/resources';
@@ -522,26 +499,13 @@ export interface ElectronAPI {
 
   // Skills
   getSkills(workspaceId: string, workingDirectory?: string): Promise<LoadedSkill[]>
-  getSkillInventory(workspaceId: string, workingDirectory?: string): Promise<SkillInventory>
   getSkillFiles?(workspaceId: string, skillSlug: string): Promise<SkillFile[]>
   deleteSkill(workspaceId: string, skillSlug: string): Promise<void>
-  adoptSkill(workspaceId: string, request: SkillAdoptRequest): Promise<SkillOperationRecord>
-  stopManagingSkill(workspaceId: string, recordId: string, workingDirectory?: string): Promise<void>
-  updateSkillMetadata(workspaceId: string, request: SkillMetadataUpdateRequest): Promise<SkillOperationRecord>
-  previewSkillDirectory(workspaceId: string, request: SkillInstallDirectoryRequest): Promise<SkillInstallPlan>
-  previewSkillFromNpx(workspaceId: string, request: SkillInstallNpxRequest): Promise<SkillInstallPlan>
-  installSkillDirectory(workspaceId: string, request: SkillInstallDirectoryRequest): Promise<SkillOperationRecord>
-  installSkillFromNpx(workspaceId: string, request: SkillInstallNpxRequest): Promise<SkillOperationRecord>
-  removeManagedSkill(workspaceId: string, request: SkillRemoveManagedRequest): Promise<SkillOperationRecord>
-  restoreSkillOperation(workspaceId: string, operationId: string, workingDirectory?: string): Promise<SkillOperationRecord>
-  listSkillOperations(workspaceId: string, workingDirectory?: string): Promise<SkillOperationRecord[]>
-  refreshSkillInventory(workspaceId: string, workingDirectory?: string): Promise<SkillInventory>
   openSkillInEditor(workspaceId: string, skillSlug: string): Promise<void>
   openSkillInFinder(workspaceId: string, skillSlug: string): Promise<void>
 
   // Skills change listener (live updates when skills are added/removed/modified)
   onSkillsChanged(callback: (workspaceId: string, skills: LoadedSkill[]) => void): () => void
-  onSkillInventoryChanged(callback: (workspaceId: string, inventory: SkillInventory) => void): () => void
 
   // Statuses (workspace-scoped)
   listStatuses(workspaceId: string): Promise<import('@craft-agent/shared/statuses').StatusConfig[]>

@@ -31,22 +31,22 @@ const CONFIG_FILE_PATTERNS: { pattern: RegExp; type: ConfigFileType }[] = [
  */
 const CRAFT_AGENT_CONFIG_PATTERNS = [
   // Main config
-  /\.(?:boai|craft-agent)\/config\.json$/,
+  /\.craft-agent\/config\.json$/,
   // Preferences
-  /\.(?:boai|craft-agent)\/preferences\.json$/,
+  /\.craft-agent\/preferences\.json$/,
   // Source configs
-  /\.(?:boai|craft-agent)\/workspaces\/[^/]+\/sources\/[^/]+\/config\.json$/,
+  /\.craft-agent\/workspaces\/[^/]+\/sources\/[^/]+\/config\.json$/,
   // Permissions
-  /\.(?:boai|craft-agent)\/workspaces\/[^/]+\/permissions\.json$/,
-  /\.(?:boai|craft-agent)\/permissions\/[^/]+\.json$/,
+  /\.craft-agent\/workspaces\/[^/]+\/permissions\.json$/,
+  /\.craft-agent\/permissions\/[^/]+\.json$/,
   // Theme
-  /\.(?:boai|craft-agent)\/workspaces\/[^/]+\/theme\.json$/,
+  /\.craft-agent\/workspaces\/[^/]+\/theme\.json$/,
   // Statuses
-  /\.(?:boai|craft-agent)\/workspaces\/[^/]+\/statuses\/config\.json$/,
+  /\.craft-agent\/workspaces\/[^/]+\/statuses\/config\.json$/,
   // Labels
-  /\.(?:boai|craft-agent)\/workspaces\/[^/]+\/labels\.json$/,
+  /\.craft-agent\/workspaces\/[^/]+\/labels\.json$/,
   // Tool icons
-  /\.(?:boai|craft-agent)\/tool-icons\/tool-icons\.json$/,
+  /\.craft-agent\/tool-icons\/tool-icons\.json$/,
 ];
 
 /**

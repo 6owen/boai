@@ -6,7 +6,7 @@
  * script sets CRAFT_CONFIG_DIR to ~/.craft-agent-1, allowing multiple instances to run
  * simultaneously with separate configurations.
  *
- * BoAI defaults to ~/.boai/ so it never reads or writes an installed Craft Agents profile.
+ * Default (non-numbered folders): ~/.craft-agent/
  * Instance 1 (-1 suffix): ~/.craft-agent-1/
  * Instance 2 (-2 suffix): ~/.craft-agent-2/
  */
@@ -16,4 +16,4 @@ import { join } from 'path';
 
 // Allow override via environment variable for multi-instance dev
 // Falls back to default ~/.craft-agent/ for production and non-numbered dev folders
-export const CONFIG_DIR = process.env.CRAFT_CONFIG_DIR || join(homedir(), '.boai');
+export const CONFIG_DIR = process.env.CRAFT_CONFIG_DIR || join(homedir(), '.craft-agent');

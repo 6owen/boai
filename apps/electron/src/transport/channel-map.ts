@@ -240,24 +240,11 @@ export const CHANNEL_MAP = {
 
   // Skills
   getSkills: invoke(RPC_CHANNELS.skills.GET),
-  getSkillInventory: invoke(RPC_CHANNELS.skills.GET_INVENTORY),
   getSkillFiles: invoke(RPC_CHANNELS.skills.GET_FILES),
   deleteSkill: invoke(RPC_CHANNELS.skills.DELETE),
-  adoptSkill: invoke(RPC_CHANNELS.skills.ADOPT),
-  stopManagingSkill: invoke(RPC_CHANNELS.skills.STOP_MANAGING),
-  updateSkillMetadata: invoke(RPC_CHANNELS.skills.UPDATE_METADATA),
-  previewSkillDirectory: invoke(RPC_CHANNELS.skills.PREVIEW_DIRECTORY),
-  previewSkillFromNpx: invoke(RPC_CHANNELS.skills.PREVIEW_NPX),
-  installSkillDirectory: invoke(RPC_CHANNELS.skills.INSTALL_DIRECTORY),
-  installSkillFromNpx: invoke(RPC_CHANNELS.skills.INSTALL_NPX),
-  removeManagedSkill: invoke(RPC_CHANNELS.skills.REMOVE_MANAGED),
-  restoreSkillOperation: invoke(RPC_CHANNELS.skills.RESTORE),
-  listSkillOperations: invoke(RPC_CHANNELS.skills.LIST_OPERATIONS),
-  refreshSkillInventory: invoke(RPC_CHANNELS.skills.REFRESH),
   openSkillInEditor: invoke(RPC_CHANNELS.skills.OPEN_EDITOR),
   openSkillInFinder: invoke(RPC_CHANNELS.skills.OPEN_FINDER),
   onSkillsChanged: listener(RPC_CHANNELS.skills.CHANGED),
-  onSkillInventoryChanged: listener(RPC_CHANNELS.skills.INVENTORY_CHANGED),
 
   // Statuses
   listStatuses: invoke(RPC_CHANNELS.statuses.LIST),

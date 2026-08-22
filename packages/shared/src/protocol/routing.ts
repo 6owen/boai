@@ -377,22 +377,9 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
 
   // skills — skill content per-workspace (not openEditor/openFinder which are local OS)
   RPC_CHANNELS.skills.GET,
-  RPC_CHANNELS.skills.GET_INVENTORY,
   RPC_CHANNELS.skills.GET_FILES,
   RPC_CHANNELS.skills.DELETE,
-  RPC_CHANNELS.skills.ADOPT,
-  RPC_CHANNELS.skills.STOP_MANAGING,
-  RPC_CHANNELS.skills.UPDATE_METADATA,
-  RPC_CHANNELS.skills.PREVIEW_DIRECTORY,
-  RPC_CHANNELS.skills.PREVIEW_NPX,
-  RPC_CHANNELS.skills.INSTALL_DIRECTORY,
-  RPC_CHANNELS.skills.INSTALL_NPX,
-  RPC_CHANNELS.skills.REMOVE_MANAGED,
-  RPC_CHANNELS.skills.RESTORE,
-  RPC_CHANNELS.skills.LIST_OPERATIONS,
-  RPC_CHANNELS.skills.REFRESH,
   RPC_CHANNELS.skills.CHANGED,
-  RPC_CHANNELS.skills.INVENTORY_CHANGED,
 
   // statuses — workspace metadata
   RPC_CHANNELS.statuses.LIST,

@@ -34,11 +34,11 @@ import {
   isProjectsNavigation,
 } from '@/contexts/NavigationContext'
 import { useSessionSelection, useIsMultiSelectActive, useSelectedIds, useSelectionCount } from '@/hooks/useSession'
-import { sourceSelection, automationSelection } from '@/hooks/useEntitySelection'
+import { sourceSelection, skillSelection, automationSelection } from '@/hooks/useEntitySelection'
 import { extractLabelId } from '@craft-agent/shared/labels'
 import type { SessionStatusId } from '@/config/session-status-config'
 import { SourceInfoPage, ChatPage } from '@/pages'
-import SkillsManagerPage from '@/pages/SkillsManagerPage'
+import SkillInfoPage from '@/pages/SkillInfoPage'
 import { getSettingsPageComponent } from '@/pages/settings/settings-pages'
 import { AutomationInfoPage } from '../automations/AutomationInfoPage'
 import ProjectInfoPage from '@/pages/ProjectInfoPage'
@@ -127,6 +127,12 @@ export function MainContentPanel({
   const sourceSelectionCount = sourceSelection.useSelectionCount()
   const selectedSourceIds = sourceSelection.useSelectedIds()
   const { clearMultiSelect: clearSourceSelection } = sourceSelection.useSelection()
+
+  // Skill multi-select state
+  const isSkillMultiSelectActive = skillSelection.useIsMultiSelectActive()
+  const skillSelectionCount = skillSelection.useSelectionCount()
+  const selectedSkillIds = skillSelection.useSelectedIds()
+  const { clearMultiSelect: clearSkillSelection } = skillSelection.useSelection()
 
   // Automation multi-select state
   const isAutomationMultiSelectActive = automationSelection.useIsMultiSelectActive()
@@ -277,12 +283,35 @@ export function MainContentPanel({
 
   // Skills navigator - show skill info, multi-select panel, or empty state
   if (isSkillsNavigation(navState)) {
+    if (isSkillMultiSelectActive) {
+      return wrapWithStoplight(
+        <Panel variant="grow" className={className}>
+          <MultiSelectPanel
+            count={skillSelectionCount}
+            entityType="skill"
+            onSendToWorkspace={hasOtherWorkspaces ? () => openSendDialog('skill', selectedSkillIds) : undefined}
+            onClearSelection={clearSkillSelection}
+          />
+        </Panel>
+      )
+    }
+    if (navState.details?.type === 'skill') {
+      return wrapWithStoplight(
+        <Panel variant="grow" className={className}>
+          <SkillInfoPage
+            skillSlug={navState.details.skillSlug}
+            workspaceId={activeWorkspaceId || ''}
+            workingDirectory={activeSessionWorkingDirectory}
+          />
+        </Panel>
+      )
+    }
+    // No skill selected - empty state
     return wrapWithStoplight(
       <Panel variant="grow" className={className}>
-        <SkillsManagerPage
-          workspaceId={activeWorkspaceId || ''}
-          workingDirectory={activeSessionWorkingDirectory}
-        />
+        <div className="flex items-center justify-center h-full text-muted-foreground">
+          <p className="text-sm">{t("skillsList.noSkillsConfigured")}</p>
+        </div>
       </Panel>
     )
   }

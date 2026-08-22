@@ -1,18 +1,18 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'bun:test';
 import { writeFileSync, unlinkSync, mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { join } from 'node:path';
+import { homedir } from 'node:os';
 
 let injectMetadataIntoToolSchema: typeof import('../unified-network-interceptor.ts').injectMetadataIntoToolSchema;
 let sanitizeEmptyTextCacheControl: typeof import('../unified-network-interceptor.ts').sanitizeEmptyTextCacheControl;
 let upgradePromptCacheTtl: typeof import('../unified-network-interceptor.ts').upgradePromptCacheTtl;
 let _resetConfigCacheForTesting: typeof import('../interceptor-common.ts')._resetConfigCacheForTesting;
-let interceptorConfigFile: typeof import('../interceptor-common.ts').CONFIG_FILE;
 
 describe('unified-network-interceptor schema metadata injection', () => {
   beforeAll(async () => {
     process.env.CRAFT_INTERCEPTOR_DISABLE_AUTO_INSTALL = '1';
     ({ injectMetadataIntoToolSchema, sanitizeEmptyTextCacheControl, upgradePromptCacheTtl } = await import('../unified-network-interceptor.ts'));
-    ({ _resetConfigCacheForTesting, CONFIG_FILE: interceptorConfigFile } = await import('../interceptor-common.ts'));
+    ({ _resetConfigCacheForTesting } = await import('../interceptor-common.ts'));
   });
 
   it('injects metadata fields into empty/zero-arg schemas', () => {
@@ -123,12 +123,13 @@ describe('sanitizeEmptyTextCacheControl', () => {
 });
 
 describe('upgradePromptCacheTtl', () => {
+  const configFile = join(homedir(), '.craft-agent', 'config.json');
   let originalConfig: string | null = null;
 
   beforeEach(() => {
     // Save original config if it exists
     try {
-      originalConfig = require('node:fs').readFileSync(interceptorConfigFile, 'utf-8');
+      originalConfig = require('node:fs').readFileSync(configFile, 'utf-8');
     } catch {
       originalConfig = null;
     }
@@ -137,24 +138,26 @@ describe('upgradePromptCacheTtl', () => {
   afterEach(() => {
     // Restore original config
     if (originalConfig !== null) {
-      writeFileSync(interceptorConfigFile, originalConfig);
+      writeFileSync(configFile, originalConfig);
     } else {
-      try { unlinkSync(interceptorConfigFile); } catch { /* ignore */ }
+      try { unlinkSync(configFile); } catch { /* ignore */ }
     }
     _resetConfigCacheForTesting();
   });
 
   function enableExtendedCache() {
-    mkdirSync(dirname(interceptorConfigFile), { recursive: true });
+    const dir = join(homedir(), '.craft-agent');
+    mkdirSync(dir, { recursive: true });
     const existing = originalConfig ? JSON.parse(originalConfig) : {};
-    writeFileSync(interceptorConfigFile, JSON.stringify({ ...existing, extendedPromptCache: true }));
+    writeFileSync(configFile, JSON.stringify({ ...existing, extendedPromptCache: true }));
     _resetConfigCacheForTesting();
   }
 
   function disableExtendedCache() {
-    mkdirSync(dirname(interceptorConfigFile), { recursive: true });
+    const dir = join(homedir(), '.craft-agent');
+    mkdirSync(dir, { recursive: true });
     const existing = originalConfig ? JSON.parse(originalConfig) : {};
-    writeFileSync(interceptorConfigFile, JSON.stringify({ ...existing, extendedPromptCache: false }));
+    writeFileSync(configFile, JSON.stringify({ ...existing, extendedPromptCache: false }));
     _resetConfigCacheForTesting();
   }
 

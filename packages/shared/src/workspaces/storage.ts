@@ -16,6 +16,7 @@ import {
   statSync,
 } from 'fs';
 import { join } from 'path';
+import { homedir } from 'os';
 import { randomUUID } from 'crypto';
 import { expandPath, toPortablePath } from '../utils/paths.ts';
 import { atomicWriteFileSync, readJsonFileSync } from '../utils/files.ts';
@@ -24,7 +25,6 @@ import { getDefaultLabelConfig, saveLabelConfig } from '../labels/storage.ts';
 import { loadConfigDefaults } from '../config/storage.ts';
 import { parsePermissionMode, PERMISSION_MODE_ORDER } from '../agent/mode-types.ts';
 import { normalizeThinkingLevel } from '../agent/thinking-levels.ts';
-import { CONFIG_DIR } from '../config/paths.ts';
 import type {
   WorkspaceConfig,
   CreateWorkspaceInput,
@@ -32,6 +32,7 @@ import type {
   WorkspaceSummary,
 } from './types.ts';
 
+const CONFIG_DIR = join(homedir(), '.craft-agent');
 const DEFAULT_WORKSPACES_DIR = join(CONFIG_DIR, 'workspaces');
 
 // ============================================================

@@ -259,25 +259,12 @@ const EXPECTED_CHANNELS: string[] = [
   'shell:openFile',
   'shell:openUrl',
   'shell:showInFolder',
-  'skills:adopt',
   'skills:changed',
   'skills:delete',
   'skills:get',
   'skills:getFiles',
-  'skills:getInventory',
-  'skills:installDirectory',
-  'skills:installNpx',
-  'skills:inventoryChanged',
-  'skills:listOperations',
   'skills:openEditor',
   'skills:openFinder',
-  'skills:previewDirectory',
-  'skills:previewNpx',
-  'skills:refresh',
-  'skills:removeManaged',
-  'skills:restore',
-  'skills:stopManaging',
-  'skills:updateMetadata',
   'sources:changed',
   'sources:create',
   'sources:delete',
@@ -394,12 +381,6 @@ describe('BroadcastEventMap payload shapes', () => {
 
   it('skills:changed carries (workspaceId, skills)', () => {
     type Payload = BroadcastEventMap[typeof RPC_CHANNELS.skills.CHANGED]
-    const _check: AssertTuple<Payload, 2> = true
-    expect(_check).toBe(true)
-  })
-
-  it('skills:inventoryChanged carries (workspaceId, inventory)', () => {
-    type Payload = BroadcastEventMap[typeof RPC_CHANNELS.skills.INVENTORY_CHANGED]
     const _check: AssertTuple<Payload, 2> = true
     expect(_check).toBe(true)
   })

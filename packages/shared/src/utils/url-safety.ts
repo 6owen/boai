@@ -30,7 +30,7 @@ const DANGEROUS_SCHEMES: ReadonlyMap<string, string> = new Map([
   ],
 ])
 
-const INTERNAL_DEEPLINK_SCHEMES = new Set(['boai:', 'craftagents:'])
+const INTERNAL_DEEPLINK_SCHEME = 'craftagents:'
 
 export function classifyExternalUrl(rawUrl: string): UrlClassification {
   if (typeof rawUrl !== 'string' || rawUrl.trim() === '') {
@@ -51,7 +51,7 @@ export function classifyExternalUrl(rawUrl: string): UrlClassification {
     return { kind: 'dangerous', scheme: protocol, reason: blockedReason }
   }
 
-  if (INTERNAL_DEEPLINK_SCHEMES.has(protocol)) {
+  if (protocol === INTERNAL_DEEPLINK_SCHEME) {
     return { kind: 'internal-deeplink' }
   }
 
