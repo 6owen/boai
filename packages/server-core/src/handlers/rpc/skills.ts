@@ -12,6 +12,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.skills.GET_FILES,
   RPC_CHANNELS.skills.INSTALL,
   RPC_CHANNELS.skills.UPDATE,
+  RPC_CHANNELS.skills.UNINSTALL,
   RPC_CHANNELS.skills.DELETE,
   RPC_CHANNELS.skills.OPEN_EDITOR,
   RPC_CHANNELS.skills.OPEN_FINDER,
@@ -167,6 +168,43 @@ export function registerSkillsHandlers(
     const skills = annotateManagedSkills(loadAllSkills(workspace.rootPath, viewProjectRoot), viewProjectRoot)
     server.push(RPC_CHANNELS.skills.CHANGED, { to: 'workspace', workspaceId }, workspaceId, skills)
     deps.platform.logger?.info(`Updated ${request.scope} skill: ${request.slug}`)
+    return result
+  })
+
+  // Uninstall only skills whose exact scope is tracked by the skills CLI.
+  server.handle(RPC_CHANNELS.skills.UNINSTALL, async (_ctx, workspaceId: string, request: ManageSkillRequest) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    const viewProjectRoot = resolveProjectRoot(workspaceId, request.workingDirectory)
+    const projectRoot = request.scope === 'project' ? viewProjectRoot : undefined
+    if (request.scope === 'project' && !projectRoot) {
+      throw new Error('Select a project before uninstalling a project skill')
+    }
+
+    const { invalidateSkillsCache, loadAllSkills } = await import('@craft-agent/shared/skills')
+    const currentSkills = annotateManagedSkills(
+      loadAllSkills(workspace.rootPath, viewProjectRoot),
+      viewProjectRoot,
+    )
+    const skill = currentSkills.find(item =>
+      item.slug === request.slug
+      && item.source === request.scope
+      && item.management?.manager === 'skills-cli',
+    )
+    if (!skill) throw new Error('This skill is not managed by the skills CLI')
+
+    const result = await skillsCli.uninstall({
+      slug: request.slug,
+      scope: request.scope,
+      projectRoot,
+      cwd: projectRoot ?? workspace.rootPath,
+    })
+
+    invalidateSkillsCache()
+    const skills = annotateManagedSkills(loadAllSkills(workspace.rootPath, viewProjectRoot), viewProjectRoot)
+    server.push(RPC_CHANNELS.skills.CHANGED, { to: 'workspace', workspaceId }, workspaceId, skills)
+    deps.platform.logger?.info(`Uninstalled ${request.scope} skill: ${request.slug}`)
     return result
   })
 

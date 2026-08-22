@@ -22,6 +22,7 @@ import {
   AppWindow,
   Send,
   RefreshCw,
+  PackageMinus,
 } from 'lucide-react'
 import { useMenuComponents } from '@/components/ui/menu-context'
 import { getFileManagerName } from '@/lib/platform'
@@ -36,6 +37,7 @@ export interface SkillMenuProps {
   onShowInFinder: () => void | Promise<void>
   onDelete?: () => void
   onUpdate?: () => void | Promise<void>
+  onUninstall?: () => void
   canShowInFinder?: boolean
   canDelete?: boolean
   deleteLabel?: string
@@ -54,6 +56,7 @@ export function SkillMenu({
   onShowInFinder,
   onDelete,
   onUpdate,
+  onUninstall,
   canShowInFinder = true,
   canDelete = true,
   deleteLabel,
@@ -95,11 +98,17 @@ export function SkillMenu({
 
       <Separator />
 
-      {/* Delete */}
-      <MenuItem onClick={canDelete ? onDelete : undefined} variant="destructive" disabled={!canDelete}>
-        <Trash2 className="h-3.5 w-3.5" />
-        <span className="flex-1">{deleteLabel || t("sidebarMenu.deleteSkill")}</span>
-      </MenuItem>
+      {onUninstall ? (
+        <MenuItem onClick={onUninstall} variant="destructive">
+          <PackageMinus className="h-3.5 w-3.5" />
+          <span className="flex-1">{t('skillsManager.uninstall')}</span>
+        </MenuItem>
+      ) : (
+        <MenuItem onClick={canDelete ? onDelete : undefined} variant="destructive" disabled={!canDelete}>
+          <Trash2 className="h-3.5 w-3.5" />
+          <span className="flex-1">{deleteLabel || t("sidebarMenu.deleteSkill")}</span>
+        </MenuItem>
+      )}
     </>
   )
 }

@@ -29,6 +29,8 @@ export interface UpdateManagedSkillInput {
   cwd?: string
 }
 
+export type UninstallManagedSkillInput = UpdateManagedSkillInput
+
 interface SkillsCliRunOptions {
   cwd: string
   timeoutMs?: number
@@ -209,6 +211,35 @@ export class SkillsCliService {
 
     if (!existsSync(join(targetDir, 'SKILL.md'))) {
       throw new Error(`Skill "${slug}" disappeared while updating`)
+    }
+    return result
+  }
+
+  async uninstall(input: UninstallManagedSkillInput): Promise<SkillManagementResult> {
+    const slug = input.slug.trim()
+    if (!VALID_SKILL_SLUG.test(slug)) {
+      throw new Error('Enter a valid skill name')
+    }
+    if (input.scope === 'project' && !input.projectRoot) {
+      throw new Error('Select a project before uninstalling a project skill')
+    }
+
+    const targetDir = input.scope === 'global'
+      ? join(this.globalSkillsDir, slug)
+      : join(input.projectRoot!, PROJECT_AGENT_SKILLS_DIR, slug)
+    if (!existsSync(join(targetDir, 'SKILL.md'))) {
+      throw new Error(`Skill "${slug}" does not exist in ${input.scope} scope`)
+    }
+
+    const args = ['--yes', 'skills', 'remove', slug]
+    if (input.scope === 'global') args.push('--global')
+    args.push('--yes')
+    const result = await this.runner(args, {
+      cwd: input.cwd ?? input.projectRoot ?? homedir(),
+    })
+
+    if (existsSync(join(targetDir, 'SKILL.md'))) {
+      throw new Error(`skills command completed but "${slug}" is still installed`)
     }
     return result
   }

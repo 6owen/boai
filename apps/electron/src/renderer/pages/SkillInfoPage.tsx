@@ -13,6 +13,7 @@ import { Check, X, Minus } from 'lucide-react'
 import { EditPopover, EditButton, getEditConfig } from '@/components/ui/EditPopover'
 import { toast } from 'sonner'
 import { SkillMenu } from '@/components/app-shell/SkillMenu'
+import { UninstallSkillDialog } from '@/components/app-shell/UninstallSkillDialog'
 import { SkillAvatar } from '@/components/ui/skill-avatar'
 import { routes, navigate } from '@/lib/navigate'
 import { useActiveWorkspace } from '@/context/AppShellContext'
@@ -36,6 +37,7 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
   const [skill, setSkill] = useState<LoadedSkill | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [uninstallDialogOpen, setUninstallDialogOpen] = useState(false)
   const activeWorkspace = useActiveWorkspace()
   const canRevealLocally = !activeWorkspace?.remoteServer
 
@@ -176,6 +178,7 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
             onOpenInNewWindow={handleOpenInNewWindow}
             onShowInFinder={handleOpenInFinder}
             canShowInFinder={canRevealLocally}
+            onUninstall={skill?.management ? () => setUninstallDialogOpen(true) : undefined}
             onUpdate={skill?.management?.canUpdate ? handleUpdate : undefined}
             onDelete={canDeleteSkill ? handleDelete : undefined}
             canDelete={canDeleteSkill}
@@ -294,6 +297,17 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
           </Info_Section>
 
         </Info_Page.Content>
+      )}
+
+      {skill?.management && (
+        <UninstallSkillDialog
+          open={uninstallDialogOpen}
+          onOpenChange={setUninstallDialogOpen}
+          workspaceId={workspaceId}
+          workingDirectory={workingDirectory}
+          skill={skill}
+          onComplete={() => navigate(routes.view.skills())}
+        />
       )}
     </Info_Page>
   )

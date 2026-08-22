@@ -147,6 +147,68 @@ describe('SkillsCliService.update', () => {
   })
 })
 
+describe('SkillsCliService.uninstall', () => {
+  test('uninstalls a global skill and cleans all agent links', async () => {
+    const root = makeTempDir()
+    const globalSkillsDir = join(root, '.agents', 'skills')
+    const target = join(globalSkillsDir, 'agent-browser')
+    mkdirSync(target, { recursive: true })
+    writeFileSync(join(target, 'SKILL.md'), '# Agent Browser')
+    let receivedArgs: string[] = []
+    const runner: SkillsCliRunner = async (args) => {
+      receivedArgs = args
+      rmSync(target, { recursive: true, force: true })
+      return { stdout: 'removed', stderr: '' }
+    }
+    const service = new SkillsCliService({ globalSkillsDir, runner })
+
+    await service.uninstall({ slug: 'agent-browser', scope: 'global', cwd: root })
+
+    expect(receivedArgs).toEqual([
+      '--yes', 'skills', 'remove', 'agent-browser', '--global', '--yes',
+    ])
+    expect(receivedArgs).not.toContain('--agent')
+  })
+
+  test('uninstalls a project skill from the project directory', async () => {
+    const projectRoot = makeTempDir()
+    const target = join(projectRoot, '.agents', 'skills', 'ai-sdk')
+    mkdirSync(target, { recursive: true })
+    writeFileSync(join(target, 'SKILL.md'), '# AI SDK')
+    let receivedArgs: string[] = []
+    let receivedCwd = ''
+    const runner: SkillsCliRunner = async (args, options) => {
+      receivedArgs = args
+      receivedCwd = options.cwd
+      rmSync(target, { recursive: true, force: true })
+      return { stdout: '', stderr: '' }
+    }
+    const service = new SkillsCliService({ runner })
+
+    await service.uninstall({ slug: 'ai-sdk', scope: 'project', projectRoot })
+
+    expect(receivedArgs).toEqual([
+      '--yes', 'skills', 'remove', 'ai-sdk', '--yes',
+    ])
+    expect(receivedCwd).toBe(projectRoot)
+  })
+
+  test('fails if the CLI reports success without removing the skill', async () => {
+    const root = makeTempDir()
+    const globalSkillsDir = join(root, '.agents', 'skills')
+    const target = join(globalSkillsDir, 'stuck')
+    mkdirSync(target, { recursive: true })
+    writeFileSync(join(target, 'SKILL.md'), '# Stuck')
+    const service = new SkillsCliService({
+      globalSkillsDir,
+      runner: async () => ({ stdout: '', stderr: '' }),
+    })
+
+    expect(service.uninstall({ slug: 'stuck', scope: 'global', cwd: root }))
+      .rejects.toThrow('still installed')
+  })
+})
+
 describe('annotateManagedSkills', () => {
   function skill(slug: string, source: LoadedSkill['source']): LoadedSkill {
     return {

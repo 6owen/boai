@@ -8,6 +8,7 @@ import { EntityListEmptyScreen } from '@/components/ui/entity-list-empty'
 import { skillSelection } from '@/hooks/useEntitySelection'
 import { SkillMenu } from './SkillMenu'
 import { SendResourceToWorkspaceDialog } from './SendResourceToWorkspaceDialog'
+import { UninstallSkillDialog } from './UninstallSkillDialog'
 import { EditPopover, getEditConfig } from '@/components/ui/EditPopover'
 import { useActiveWorkspace, useAppShellContext } from '@/context/AppShellContext'
 import { getFileManagerName } from '@/lib/platform'
@@ -44,6 +45,7 @@ export function SkillsListPanel({
   const [sendDialogOpen, setSendDialogOpen] = React.useState(false)
   const [sendResourceSlug, setSendResourceSlug] = React.useState<string | null>(null)
   const [sendResourceLabel, setSendResourceLabel] = React.useState('')
+  const [uninstallSkill, setUninstallSkill] = React.useState<LoadedSkill | null>(null)
 
   return (
     <>
@@ -105,6 +107,7 @@ export function SkillsListPanel({
               }
             }}
             canShowInFinder={canRevealLocally}
+            onUninstall={skill.management ? () => setUninstallSkill(skill) : undefined}
             onUpdate={skill.management?.canUpdate && workspaceId ? async () => {
               const toastId = toast.loading(t('skillsManager.updating', { name: skill.metadata.name }))
               try {
@@ -144,6 +147,16 @@ export function SkillsListPanel({
         resourceLabel={sendResourceLabel}
         workspaces={workspaces}
         activeWorkspaceId={activeWorkspaceId}
+      />
+    )}
+
+    {uninstallSkill && workspaceId && (
+      <UninstallSkillDialog
+        open
+        onOpenChange={(open) => { if (!open) setUninstallSkill(null) }}
+        workspaceId={workspaceId}
+        workingDirectory={workingDirectory}
+        skill={uninstallSkill}
       />
     )}
     </>
