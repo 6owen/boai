@@ -31,6 +31,27 @@ export interface SkillMetadata {
 /** Source of a loaded skill */
 export type SkillSource = 'global' | 'workspace' | 'project';
 
+/** Scope supported by the skills CLI. */
+export type SkillManagementScope = 'global' | 'project';
+
+/** Request for installing one skill through the skills CLI. */
+export interface InstallSkillRequest {
+  /** GitHub shorthand, Git URL, or local package path accepted by `skills add`. */
+  source: string;
+  /** Skill slug to select from the package. */
+  slug: string;
+  /** Install globally or into the active project's .agents directory. */
+  scope: SkillManagementScope;
+  /** Required when scope is project. */
+  workingDirectory?: string;
+}
+
+/** Sanitized output returned by a skills CLI operation. */
+export interface SkillManagementResult {
+  stdout: string;
+  stderr: string;
+}
+
 /**
  * Plugin name for project-level and global skills.
  *

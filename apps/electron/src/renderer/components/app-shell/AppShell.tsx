@@ -33,6 +33,7 @@ import {
   Info,
   MailOpen,
   FolderKanban,
+  PackagePlus,
 } from "lucide-react"
 // SessionStatusIcons no longer used - icons come from dynamic sessionStatuses
 import { SourceAvatar } from "@/components/ui/source-avatar"
@@ -73,6 +74,7 @@ import {
 } from "@/components/ui/collapsible"
 import { SessionList, type ChatGroupingMode } from "./SessionList"
 import { MainContentPanel } from "./MainContentPanel"
+import { InstallSkillDialog } from "./InstallSkillDialog"
 import { BoardListToggle } from "./kanban/BoardListToggle"
 import { PanelStackContainer } from "./PanelStackContainer"
 import { CompactSessionListFilter } from "./CompactSessionListFilter"
@@ -1990,6 +1992,7 @@ function AppShellContent({
   // The previous flow auto-created with the default name and produced ugly
   // permanent slugs (new-project, new-project-1, …).
   const [createProjectDialogOpen, setCreateProjectDialogOpen] = useState(false)
+  const [installSkillDialogOpen, setInstallSkillDialogOpen] = useState(false)
   const openAddProject = useCallback(() => {
     if (!activeWorkspace?.id) return
     setCreateProjectDialogOpen(true)
@@ -3426,16 +3429,24 @@ function AppShellContent({
                   )}
                   {/* Add Skill button (only for skills mode) */}
                   {isSkillsNavigation(navState) && activeWorkspace && (
-                    <EditPopover
-                      trigger={
-                        <HeaderIconButton
-                          icon={<Plus className="h-4 w-4" />}
-                          tooltip={t("sidebarMenu.addSkill")}
-                          data-tutorial="add-skill-button"
-                        />
-                      }
-                      {...getEditConfig('add-skill', activeWorkspace.rootPath)}
-                    />
+                    <>
+                      <HeaderIconButton
+                        icon={<PackagePlus className="h-4 w-4" />}
+                        tooltip={t("skillsManager.install")}
+                        onClick={() => setInstallSkillDialogOpen(true)}
+                        data-tutorial="install-skill-button"
+                      />
+                      <EditPopover
+                        trigger={
+                          <HeaderIconButton
+                            icon={<Plus className="h-4 w-4" />}
+                            tooltip={t("sidebarMenu.addSkill")}
+                            data-tutorial="add-skill-button"
+                          />
+                        }
+                        {...getEditConfig('add-skill', activeWorkspace.rootPath)}
+                      />
+                    </>
                   )}
                   {/* Add Automation button (only for automations mode) */}
                   {isAutomationsNavigation(navState) && activeWorkspace && (
@@ -3883,6 +3894,15 @@ function AppShellContent({
         onCancel={() => setCreateProjectDialogOpen(false)}
         onSubmit={handleCreateProjectSubmit}
       />
+
+      {activeWorkspaceId && (
+        <InstallSkillDialog
+          open={installSkillDialogOpen}
+          onOpenChange={setInstallSkillDialogOpen}
+          workspaceId={activeWorkspaceId}
+          workingDirectory={activeSessionWorkingDirectory}
+        />
+      )}
 
       {/* Messaging dialogs (pairing-code + WA connect) — driven by messagingDialogAtom.
           Mounted here so they survive context-menu / dropdown close. */}
