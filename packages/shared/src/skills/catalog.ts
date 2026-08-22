@@ -144,24 +144,63 @@ export class SkillCatalogStore {
     return updated;
   }
 
+  updateOrigin(recordId: string, origin: SkillOrigin): SkillRecord {
+    const catalog = this.load();
+    const current = catalog.records.find(record => record.id === recordId);
+    if (!current) throw new Error(`Managed Skill record not found: ${recordId}`);
+    const updated: SkillRecord = { ...current, origin, updatedAt: Date.now() };
+    writeJsonAtomic(this.catalogPath, {
+      ...catalog,
+      records: catalog.records.map(record => record.id === recordId ? updated : record),
+    });
+    return updated;
+  }
+
   annotate(inventory: SkillInventory): SkillInventory {
-    const recordsByPlacement = new Map(
-      this.load().records.map(record => [record.placementId, record] as const),
-    );
+    const records = this.load().records;
+    const recordsByPlacement = new Map(records.map(record => [record.placementId, record] as const));
+    const presentIds = new Set(inventory.placements.map(placement => placement.id));
+    const missingPlacements: SkillPlacement[] = records.flatMap(record => {
+      if (presentIds.has(record.placementId)) return [];
+      const separator = record.placementId.indexOf(':');
+      const source = record.placementId.slice(0, separator);
+      if (separator < 0 || (source !== 'global' && source !== 'workspace' && source !== 'project')) return [];
+      const path = record.placementId.slice(separator + 1);
+      return [{
+        id: record.placementId,
+        slug: record.slug,
+        source,
+        path,
+        status: 'missing',
+        diagnostics: [{
+          path,
+          message: 'Managed Skill directory is missing',
+          severity: 'error',
+          suggestion: 'Reinstall from the recorded source or stop managing this record',
+        }],
+        effective: false,
+        shadowed: false,
+        conflict: false,
+        ownership: 'managed',
+        recordId: record.id,
+        record,
+      }];
+    });
+    const annotatedPlacements: SkillPlacement[] = inventory.placements.map(placement => {
+      const record = recordsByPlacement.get(placement.id);
+      return {
+        ...placement,
+        ownership: record ? 'managed' : 'external',
+        recordId: record?.id,
+        record,
+        modified: record
+          ? placement.contentHash !== record.baselineHash
+          : undefined,
+      };
+    });
     return {
       ...inventory,
-      placements: inventory.placements.map(placement => {
-        const record = recordsByPlacement.get(placement.id);
-        return {
-          ...placement,
-          ownership: record ? 'managed' : 'external',
-          recordId: record?.id,
-          record,
-          modified: record
-            ? placement.contentHash !== record.baselineHash
-            : undefined,
-        };
-      }),
+      placements: [...annotatedPlacements, ...missingPlacements],
     };
   }
 }

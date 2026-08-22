@@ -23,12 +23,21 @@ const SOURCE_PRIORITY: Record<SkillSource, number> = {
   project: 2,
 };
 
+const IGNORED_IDENTITY_ENTRIES = new Set([
+  '.DS_Store',
+  'Thumbs.db',
+  '.git',
+  '.cache',
+  '__pycache__',
+  'node_modules',
+]);
+
 function hashDirectory(directory: string): string {
   const hash = createHash('sha256');
 
   function visit(current: string): void {
     const entries = readdirSync(current, { withFileTypes: true })
-      .filter(entry => entry.name !== '.DS_Store')
+      .filter(entry => !IGNORED_IDENTITY_ENTRIES.has(entry.name) && !entry.name.endsWith('.pyc'))
       .sort((left, right) => left.name.localeCompare(right.name));
 
     for (const entry of entries) {

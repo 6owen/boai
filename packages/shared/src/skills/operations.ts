@@ -15,7 +15,7 @@ import { dirname, join, resolve, sep } from 'path';
 import { validateSkillContent } from '../config/validators.ts';
 import { getWorkspaceSkillsPath } from '../workspaces/storage.ts';
 import { SkillCatalogStore } from './catalog.ts';
-import { NpxSkillsAdapter, inferSkillOrigin, type AcquireSkillRequest, type AcquiredSkill } from './command-adapter.ts';
+import { buildSkillsAddCommand, NpxSkillsAdapter, inferSkillOrigin, type AcquireSkillRequest, type AcquiredSkill } from './command-adapter.ts';
 import { diffSkillDirectories } from './diff.ts';
 import { scanSkillRoot } from './inventory.ts';
 import type {
@@ -65,6 +65,15 @@ function assertSafeSourceTree(directory: string): void {
   visit(directory);
 }
 
+function removeTreeBestEffort(path: string): void {
+  try {
+    if (existsSync(path)) rmSync(path, { recursive: true, force: true });
+  } catch {
+    // Staging/displaced cleanup is non-authoritative. A later startup or user
+    // cleanup can remove the residue without changing the committed target.
+  }
+}
+
 export interface InstallSkillFromDirectoryRequest {
   sourceDirectory: string;
   slug: string;
@@ -104,63 +113,61 @@ export class SkillOperationService {
   }
 
   async installFromNpx(request: InstallSkillFromNpxRequest): Promise<SkillOperationRecord> {
-    const cliStagingRoot = join(this.dataRoot, 'skills', 'cli-staging');
-    mkdirSync(cliStagingRoot, { recursive: true });
-    const requestStagingRoot = mkdtempSync(join(cliStagingRoot, 'request-'));
-    try {
-      const acquired = await this.acquirer.acquire({
-        source: request.source,
-        slug: request.slug,
-        stagingRoot: requestStagingRoot,
-        signal: request.signal,
-      });
-      return this.installFromDirectory({
+    return this.withAcquiredSkill(request, 'request-', acquired =>
+      this.installFromDirectory({
         sourceDirectory: acquired.skillDirectory,
         slug: request.slug,
         target: request.target,
         origin: inferSkillOrigin(request.source),
         overwrite: request.overwrite,
-      });
-    } finally {
-      rmSync(requestStagingRoot, { recursive: true, force: true });
-    }
+      })
+    );
   }
 
   async previewFromNpx(request: InstallSkillFromNpxRequest): Promise<SkillInstallPlan> {
-    const cliStagingRoot = join(this.dataRoot, 'skills', 'cli-staging');
-    mkdirSync(cliStagingRoot, { recursive: true });
-    const requestStagingRoot = mkdtempSync(join(cliStagingRoot, 'preview-'));
-    try {
-      const acquired = await this.acquirer.acquire({
-        source: request.source,
-        slug: request.slug,
-        stagingRoot: requestStagingRoot,
-        signal: request.signal,
-      });
-      return this.previewFromDirectory({
+    return this.withAcquiredSkill(request, 'preview-', acquired => ({
+      ...this.previewFromDirectory({
         sourceDirectory: acquired.skillDirectory,
         slug: request.slug,
         target: request.target,
         origin: inferSkillOrigin(request.source),
         overwrite: request.overwrite,
-      });
-    } finally {
-      rmSync(requestStagingRoot, { recursive: true, force: true });
-    }
+      }),
+      command: buildSkillsAddCommand(request.source.trim(), request.slug),
+    }));
   }
 
   adopt(placement: ReturnType<typeof scanSkillRoot>[number], target: SkillTarget, origin: SkillOrigin = { type: 'unknown' }): SkillOperationRecord {
     const startedAt = Date.now();
     const id = randomUUID();
     const beforeRecord = this.catalog.getRecordForPlacement(placement.id);
-    const record = this.catalog.adopt(placement, origin);
-    const operation: SkillOperationRecord = {
-      id, type: 'adopt', status: 'succeeded', slug: placement.slug,
-      target, targetPath: placement.path, startedAt, completedAt: Date.now(),
-      hadTarget: true, recordId: record.id, beforeRecord, afterHash: placement.contentHash,
+    const base = {
+      id, type: 'adopt' as const, slug: placement.slug, target,
+      targetPath: placement.path, startedAt, hadTarget: true, beforeRecord,
+      afterHash: placement.contentHash,
     };
-    this.appendOperation(operation);
-    return operation;
+    let changedRecordId: string | undefined;
+    this.appendOperation({ ...base, status: 'running' });
+    try {
+      // Editing provenance must not silently accept the user's current local
+      // edits as a new baseline. Only a successful content install/update does
+      // that through catalog.adopt().
+      const record = beforeRecord
+        ? this.catalog.updateOrigin(beforeRecord.id, origin)
+        : this.catalog.adopt(placement, origin);
+      changedRecordId = record.id;
+      const operation: SkillOperationRecord = {
+        ...base, status: 'succeeded', completedAt: Date.now(), recordId: record.id,
+      };
+      this.appendOperation(operation);
+      return operation;
+    } catch (error) {
+      if (beforeRecord) this.catalog.restoreRecord(beforeRecord);
+      else if (changedRecordId) this.catalog.stopManaging(changedRecordId);
+      const message = error instanceof Error ? error.message : 'Unknown Skill adoption error';
+      this.appendOperation({ ...base, status: 'failed', completedAt: Date.now(), error: message });
+      throw new Error(message);
+    }
   }
 
   stopManaging(placement: ReturnType<typeof scanSkillRoot>[number], target: SkillTarget): SkillOperationRecord {
@@ -168,14 +175,23 @@ export class SkillOperationService {
     if (!record) throw new Error(`Managed Skill not found: ${placement.id}`);
     const startedAt = Date.now();
     const id = randomUUID();
-    this.catalog.stopManaging(record.id);
-    const operation: SkillOperationRecord = {
-      id, type: 'stop-managing', status: 'succeeded', slug: placement.slug,
-      target, targetPath: placement.path, startedAt, completedAt: Date.now(),
-      hadTarget: true, recordId: record.id, beforeRecord: record, afterHash: placement.contentHash,
+    const base = {
+      id, type: 'stop-managing' as const, slug: placement.slug, target,
+      targetPath: placement.path, startedAt, hadTarget: true, recordId: record.id,
+      beforeRecord: record, afterHash: placement.contentHash,
     };
-    this.appendOperation(operation);
-    return operation;
+    this.appendOperation({ ...base, status: 'running' });
+    try {
+      this.catalog.stopManaging(record.id);
+      const operation: SkillOperationRecord = { ...base, status: 'succeeded', completedAt: Date.now() };
+      this.appendOperation(operation);
+      return operation;
+    } catch (error) {
+      this.catalog.restoreRecord(record);
+      const message = error instanceof Error ? error.message : 'Unknown stop-managing error';
+      this.appendOperation({ ...base, status: 'failed', completedAt: Date.now(), error: message });
+      throw new Error(message);
+    }
   }
 
   updateMetadata(
@@ -187,22 +203,65 @@ export class SkillOperationService {
     if (!beforeRecord) throw new Error(`Managed Skill not found: ${placement.id}`);
     const startedAt = Date.now();
     const id = randomUUID();
-    const record = this.catalog.updateMetadata(beforeRecord.id, updates);
-    const operation: SkillOperationRecord = {
-      id, type: 'metadata', status: 'succeeded', slug: placement.slug,
-      target, targetPath: placement.path, startedAt, completedAt: Date.now(),
-      hadTarget: true, recordId: record.id, beforeRecord, afterHash: placement.contentHash,
+    const base = {
+      id, type: 'metadata' as const, slug: placement.slug, target,
+      targetPath: placement.path, startedAt, hadTarget: true,
+      recordId: beforeRecord.id, beforeRecord, afterHash: placement.contentHash,
     };
-    this.appendOperation(operation);
-    return operation;
+    this.appendOperation({ ...base, status: 'running' });
+    try {
+      const record = this.catalog.updateMetadata(beforeRecord.id, updates);
+      const operation: SkillOperationRecord = {
+        ...base, status: 'succeeded', completedAt: Date.now(), recordId: record.id,
+      };
+      this.appendOperation(operation);
+      return operation;
+    } catch (error) {
+      this.catalog.restoreRecord(beforeRecord);
+      const message = error instanceof Error ? error.message : 'Unknown Skill metadata error';
+      this.appendOperation({ ...base, status: 'failed', completedAt: Date.now(), error: message });
+      throw new Error(message);
+    }
   }
 
   listOperations(): SkillOperationRecord[] {
     if (!existsSync(this.operationsPath)) return [];
-    return readFileSync(this.operationsPath, 'utf8')
+    const parsed = readFileSync(this.operationsPath, 'utf8')
       .split('\n')
       .filter(Boolean)
-      .map(line => JSON.parse(line) as SkillOperationRecord);
+      .flatMap(line => {
+        try {
+          return [JSON.parse(line) as SkillOperationRecord];
+        } catch {
+          // A process kill can leave one partial JSONL tail. Preserve all
+          // earlier audit records and let the next append continue the log.
+          return [];
+        }
+      });
+    const latestById = new Map<string, SkillOperationRecord>();
+    for (const operation of parsed) latestById.set(operation.id, operation);
+    return [...latestById.values()];
+  }
+
+  private async withAcquiredSkill<T>(
+    request: InstallSkillFromNpxRequest,
+    prefix: string,
+    use: (acquired: AcquiredSkill) => T | Promise<T>,
+  ): Promise<T> {
+    const cliStagingRoot = join(this.dataRoot, 'skills', 'cli-staging');
+    mkdirSync(cliStagingRoot, { recursive: true });
+    const requestStagingRoot = mkdtempSync(join(cliStagingRoot, prefix));
+    try {
+      const acquired = await this.acquirer.acquire({
+        source: request.source,
+        slug: request.slug,
+        stagingRoot: requestStagingRoot,
+        signal: request.signal,
+      });
+      return await use(acquired);
+    } finally {
+      removeTreeBestEffort(requestStagingRoot);
+    }
   }
 
   previewFromDirectory(request: InstallSkillFromDirectoryRequest): SkillInstallPlan {
@@ -268,6 +327,9 @@ export class SkillOperationService {
     let adoptedRecordId: string | undefined;
     let beforeRecord;
 
+    // Transaction invariant: the target always names either the complete old
+    // tree or the complete validated new tree. The old tree is retained beside
+    // it until both catalog persistence and the operation log have succeeded.
     try {
       validateSlug(request.slug);
       assertContained(targetRoot, targetPath);
@@ -275,6 +337,17 @@ export class SkillOperationService {
       mkdirSync(targetRoot, { recursive: true });
       hadTarget = existsSync(targetPath);
       beforeRecord = this.catalog.getRecordForPlacement(`${request.target.source}:${targetPath}`);
+      this.appendOperation({
+        id,
+        type: hadTarget ? 'update' : 'install',
+        status: 'running',
+        slug: request.slug,
+        target: request.target,
+        targetPath,
+        startedAt,
+        hadTarget,
+        beforeRecord,
+      });
       if (hadTarget && !request.overwrite) {
         throw new Error(`Skill already exists: ${request.slug}`);
       }
@@ -330,7 +403,7 @@ export class SkillOperationService {
         afterHash: placement.contentHash,
       };
       this.appendOperation(operation);
-      if (oldTarget && existsSync(oldTarget)) rmSync(oldTarget, { recursive: true, force: true });
+      if (oldTarget) removeTreeBestEffort(oldTarget);
       return operation;
     } catch (error) {
       if (committed) {
@@ -356,7 +429,7 @@ export class SkillOperationService {
       });
       throw new Error(message);
     } finally {
-      if (stagingRoot && existsSync(stagingRoot)) rmSync(stagingRoot, { recursive: true, force: true });
+      if (stagingRoot) removeTreeBestEffort(stagingRoot);
     }
   }
 
@@ -371,12 +444,17 @@ export class SkillOperationService {
 
     const placementId = `${request.target.source}:${targetPath}`;
     const record = this.catalog.getRecordForPlacement(placementId);
+    this.appendOperation({
+      id, type: 'remove', status: 'running', slug: request.slug,
+      target: request.target, targetPath, startedAt, hadTarget: true,
+      recordId: record?.id, beforeRecord: record,
+    });
     const beforeSnapshot = join(this.backupsRoot, id, 'before');
-    mkdirSync(dirname(beforeSnapshot), { recursive: true });
-    cpSync(targetPath, beforeSnapshot, { recursive: true, errorOnExist: true });
     const displaced = join(targetRoot, `.skill-manager-remove-${id}`);
-    renameSync(targetPath, displaced);
     try {
+      mkdirSync(dirname(beforeSnapshot), { recursive: true });
+      cpSync(targetPath, beforeSnapshot, { recursive: true, errorOnExist: true });
+      renameSync(targetPath, displaced);
       if (record) this.catalog.stopManaging(record.id);
       const operation: SkillOperationRecord = {
         id,
@@ -393,7 +471,7 @@ export class SkillOperationService {
         beforeRecord: record,
       };
       this.appendOperation(operation);
-      rmSync(displaced, { recursive: true, force: true });
+      removeTreeBestEffort(displaced);
       return operation;
     } catch (error) {
       if (!existsSync(targetPath) && existsSync(displaced)) renameSync(displaced, targetPath);
@@ -412,61 +490,107 @@ export class SkillOperationService {
   restore(operationId: string): SkillOperationRecord {
     const original = this.listOperations().find(operation => operation.id === operationId);
     if (!original || original.status !== 'succeeded') throw new Error(`Restorable operation not found: ${operationId}`);
+    if (original.type === 'restore') throw new Error('Restore operations cannot themselves be restored');
     const id = randomUUID();
     const startedAt = Date.now();
     const currentExists = existsSync(original.targetPath);
+    const currentRecord = original.recordId ? this.catalog.getRecord(original.recordId) : undefined;
+    const targetRoot = dirname(original.targetPath);
+    let stagingRoot: string | undefined;
+    const displaced = join(targetRoot, `.skill-manager-displaced-${id}`);
+    let contentChanged = false;
 
-    if (original.type === 'adopt') {
+    this.appendOperation({
+      id,
+      type: 'restore',
+      status: 'running',
+      slug: original.slug,
+      target: original.target,
+      targetPath: original.targetPath,
+      startedAt,
+      hadTarget: currentExists,
+      restoredOperationId: original.id,
+    });
+
+    const applyCatalogBeforeState = () => {
       if (original.beforeRecord) this.catalog.restoreRecord(original.beforeRecord);
       else if (original.recordId) this.catalog.stopManaging(original.recordId);
-      return this.appendRestore(original, id, startedAt, currentExists);
-    }
-    if (original.type === 'stop-managing' || original.type === 'metadata') {
-      if (!original.beforeRecord) throw new Error(`Catalog backup is missing for operation: ${operationId}`);
-      this.catalog.restoreRecord(original.beforeRecord);
-      return this.appendRestore(original, id, startedAt, currentExists);
-    }
+    };
+    const restoreCatalogAfterState = () => {
+      if (currentRecord) this.catalog.restoreRecord(currentRecord);
+      else if (original.recordId) this.catalog.stopManaging(original.recordId);
+    };
 
-    if (original.type === 'remove' && currentExists) {
-      throw new Error(`Cannot restore ${original.slug}: target was created since the operation`);
-    }
-    if (original.type !== 'remove' && currentExists && original.afterHash) {
-      const current = scanSkillRoot(dirname(original.targetPath), original.target.source)
-        .find(item => item.slug === original.slug);
-      if (!current?.contentHash || current.contentHash !== original.afterHash) {
-        throw new Error(`Cannot restore ${original.slug}: target changed since the operation`);
+    // Restore is also a transaction: retain the displaced post-operation tree
+    // until the catalog and success record are durable. Any later failure puts
+    // both the content tree and catalog back into their exact after-operation state.
+    try {
+      if ((original.type === 'stop-managing' || original.type === 'metadata') && !original.beforeRecord) {
+        throw new Error(`Catalog backup is missing for operation: ${operationId}`);
       }
-    }
+      if (original.type === 'remove' && currentExists) {
+        throw new Error(`Cannot restore ${original.slug}: target was created since the operation`);
+      }
+      if (original.type !== 'remove' && currentExists && original.afterHash) {
+        const current = scanSkillRoot(targetRoot, original.target.source)
+          .find(item => item.slug === original.slug);
+        if (!current?.contentHash || current.contentHash !== original.afterHash) {
+          throw new Error(`Cannot restore ${original.slug}: target changed since the operation`);
+        }
+      }
 
-    if (original.hadTarget) {
-      if (!original.beforeSnapshot || !existsSync(original.beforeSnapshot)) {
-        throw new Error(`Backup is missing for operation: ${operationId}`);
-      }
-      const targetRoot = dirname(original.targetPath);
-      const stagingRoot = mkdtempSync(join(targetRoot, '.skill-manager-restore-'));
-      const stagedSkill = join(stagingRoot, original.slug);
-      cpSync(original.beforeSnapshot, stagedSkill, { recursive: true, errorOnExist: true });
-      const displaced = join(targetRoot, `.skill-manager-displaced-${id}`);
-      if (currentExists) renameSync(original.targetPath, displaced);
-      try {
+      const catalogOnly = original.type === 'adopt' || original.type === 'stop-managing' || original.type === 'metadata';
+      if (!catalogOnly && original.hadTarget) {
+        if (!original.beforeSnapshot || !existsSync(original.beforeSnapshot)) {
+          throw new Error(`Backup is missing for operation: ${operationId}`);
+        }
+        stagingRoot = mkdtempSync(join(targetRoot, '.skill-manager-restore-'));
+        const stagedSkill = join(stagingRoot, original.slug);
+        cpSync(original.beforeSnapshot, stagedSkill, { recursive: true, errorOnExist: true });
+        assertSafeSourceTree(stagedSkill);
+        if (currentExists) renameSync(original.targetPath, displaced);
         renameSync(stagedSkill, original.targetPath);
-        if (existsSync(displaced)) rmSync(displaced, { recursive: true, force: true });
-      } catch (error) {
+        contentChanged = true;
+      } else if (!catalogOnly && currentExists) {
+        // Undoing a fresh install removes it, but keep the complete tree beside
+        // the target until catalog persistence and audit append have succeeded.
+        renameSync(original.targetPath, displaced);
+        contentChanged = true;
+      }
+
+      applyCatalogBeforeState();
+      const restore = this.appendRestore(original, id, startedAt, currentExists);
+      removeTreeBestEffort(displaced);
+      return restore;
+    } catch (error) {
+      if (contentChanged) {
         if (existsSync(original.targetPath)) rmSync(original.targetPath, { recursive: true, force: true });
         if (existsSync(displaced)) renameSync(displaced, original.targetPath);
-        throw error;
-      } finally {
-        rmSync(stagingRoot, { recursive: true, force: true });
       }
-      if (original.beforeRecord) this.catalog.restoreRecord(original.beforeRecord);
-      else if (original.recordId) this.catalog.stopManaging(original.recordId);
-    } else if (currentExists) {
-      rmSync(original.targetPath, { recursive: true });
-      const record = original.recordId ? this.catalog.getRecord(original.recordId) : undefined;
-      if (record) this.catalog.stopManaging(record.id);
+      restoreCatalogAfterState();
+      const message = error instanceof Error ? error.message : 'Unknown Skill restore error';
+      try {
+        this.appendOperation({
+          id,
+          type: 'restore',
+          status: 'failed',
+          slug: original.slug,
+          target: original.target,
+          targetPath: original.targetPath,
+          startedAt,
+          completedAt: Date.now(),
+          hadTarget: currentExists,
+          restoredOperationId: original.id,
+          error: message,
+        });
+      } catch {
+        // The original error remains the actionable failure if the audit disk
+        // itself is unavailable; all content/catalog mutations are rolled back.
+      }
+      throw new Error(message);
+    } finally {
+      if (stagingRoot) removeTreeBestEffort(stagingRoot);
     }
-
-    return this.appendRestore(original, id, startedAt, currentExists);
   }
 
   private appendRestore(

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'bun:test';
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'fs';
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { scanSkillInventory } from '../inventory.ts';
@@ -93,5 +93,35 @@ describe('scanSkillInventory', () => {
 
     expect(inventory.placements.find(item => item.slug === 'linked')?.diagnostics[0]?.message).toContain('Symbolic-link');
     expect(inventory.placements.find(item => item.slug === 'malformed')?.status).toBe('invalid');
+  });
+
+  it('ignores known cache artifacts when calculating identity', () => {
+    const root = createTempRoot();
+    const globalSkillsRoot = join(root, 'global');
+    const workspaceRoot = join(root, 'workspace');
+    createSkill(globalSkillsRoot, 'review', 'Review');
+    const skillDirectory = join(globalSkillsRoot, 'review');
+    const before = scanSkillInventory({ globalSkillsRoot, workspaceRoot }).placements[0]!.contentHash;
+    mkdirSync(join(skillDirectory, '.cache'));
+    writeFileSync(join(skillDirectory, '.cache', 'generated.bin'), 'first');
+    writeFileSync(join(skillDirectory, '.DS_Store'), 'finder');
+
+    const after = scanSkillInventory({ globalSkillsRoot, workspaceRoot }).placements[0]!.contentHash;
+    expect(after).toBe(before);
+  });
+
+  it('surfaces an unreadable Skill root as a validation placement', () => {
+    const root = createTempRoot();
+    const globalSkillsRoot = join(root, 'restricted');
+    const workspaceRoot = join(root, 'workspace');
+    mkdirSync(globalSkillsRoot);
+    chmodSync(globalSkillsRoot, 0o000);
+    try {
+      const inventory = scanSkillInventory({ globalSkillsRoot, workspaceRoot });
+      expect(inventory.placements[0]?.status).toBe('invalid');
+      expect(inventory.placements[0]?.diagnostics[0]?.message).toContain('Cannot read skills directory');
+    } finally {
+      chmodSync(globalSkillsRoot, 0o700);
+    }
   });
 });

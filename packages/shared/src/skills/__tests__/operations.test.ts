@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { SkillCatalogStore } from '../catalog.ts';
+import { scanSkillInventory } from '../inventory.ts';
 import { SkillOperationService } from '../operations.ts';
 import { invalidateSkillsCache, loadAllSkills } from '../storage.ts';
 
@@ -80,6 +81,10 @@ describe('SkillOperationService', () => {
 
     expect(preview.operationType).toBe('update');
     expect(preview.diff?.changed).toBe(true);
+    expect(preview.command).toEqual({
+      executable: 'npx',
+      args: ['--yes', 'skills', 'add', 'owner/repository', '--skill', 'review', '--agent', 'universal', '--yes', '--copy'],
+    });
     expect(readFileSync(join(workspaceRoot, 'skills', 'review', 'SKILL.md'), 'utf8')).toContain('Local instructions.');
   });
 
@@ -103,6 +108,9 @@ describe('SkillOperationService', () => {
     expect(existsSync(installedFile)).toBe(true);
     expect(catalog.getRecord(result.recordId!)?.slug).toBe('review');
     expect(operations.listOperations()[0]?.id).toBe(result.id);
+    const transitions = readFileSync(join(dataRoot, 'skills', 'operations.jsonl'), 'utf8')
+      .trim().split('\n').map(line => JSON.parse(line).status);
+    expect(transitions).toEqual(['running', 'succeeded']);
   });
 
   it('makes a newly installed Skill available to the existing Agent runtime loader without restart', () => {
@@ -162,6 +170,9 @@ describe('SkillOperationService', () => {
 
     expect(() => operations.restore(update.id)).toThrow('changed since the operation')
     expect(readFileSync(join(existing, 'SKILL.md'), 'utf8')).toContain('Later change.');
+    expect(operations.listOperations().at(-1)).toMatchObject({
+      type: 'restore', status: 'failed', restoredOperationId: update.id,
+    });
   });
 
   it('restores the previous Catalog provenance with an updated directory', () => {
@@ -228,6 +239,30 @@ describe('SkillOperationService', () => {
     expect(preview.localModified).toBe(true);
     expect(preview.upstreamChanged).toBe(true);
     expect(preview.threeWayConflict).toBe(true);
+  });
+
+  it('updates provenance without accepting local edits as a new baseline', () => {
+    const root = createTempRoot();
+    const workspaceRoot = join(root, 'workspace');
+    const source = createSkill(join(root, 'source'), 'review', 'Baseline instructions.');
+    const dataRoot = join(root, 'manager');
+    const catalog = new SkillCatalogStore(dataRoot);
+    const operations = new SkillOperationService(dataRoot, catalog);
+    const installed = operations.installFromDirectory({
+      sourceDirectory: source, slug: 'review',
+      target: { source: 'workspace', workspaceRoot }, origin: { type: 'git', url: 'old/repository' },
+    });
+    const baselineHash = catalog.getRecord(installed.recordId!)!.baselineHash;
+    writeFileSync(join(workspaceRoot, 'skills', 'review', 'notes.txt'), 'local edit');
+    const roots = { globalSkillsRoot: join(root, 'global'), workspaceRoot };
+    const placement = scanSkillInventory(roots).placements[0]!;
+
+    operations.adopt(placement, { source: 'workspace', workspaceRoot }, { type: 'git', url: 'new/repository' });
+    const annotated = catalog.annotate(scanSkillInventory(roots)).placements[0]!;
+
+    expect(annotated.modified).toBe(true);
+    expect(annotated.record?.baselineHash).toBe(baselineHash);
+    expect(annotated.record?.origin).toEqual({ type: 'git', url: 'new/repository' });
   });
 
   it('removes a Skill into a restorable backup', () => {

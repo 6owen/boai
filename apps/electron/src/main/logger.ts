@@ -35,6 +35,10 @@ function resolveDebugMode(): boolean {
 
 export const isDebugMode = resolveDebugMode()
 
+// Do not let electron-log derive its path from the inherited workspace package
+// name (`@craft-agent/electron`): this fork must never write into Craft's profile.
+log.transports.file.resolvePathFn = () => join(CONFIG_DIR, 'logs', 'main.log')
+
 // Configure transports based on debug mode
 if (isDebugMode) {
   // JSON format for file (agent-parseable)

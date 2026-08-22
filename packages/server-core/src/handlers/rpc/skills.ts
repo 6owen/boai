@@ -1,4 +1,4 @@
-import { join } from 'path'
+import { join, resolve } from 'path'
 import { existsSync, readdirSync, statSync } from 'fs'
 import { RPC_CHANNELS, type SkillFile } from '@craft-agent/shared/protocol'
 import { CONFIG_DIR, getWorkspaceByNameOrId } from '@craft-agent/shared/config'
@@ -116,29 +116,36 @@ export function registerSkillsHandlers(
     return workspace
   }
 
-  function resolveWorkingDirectory(workingDirectory?: string): string | undefined {
+  function resolveWorkingDirectory(workspaceId: string, workingDirectory?: string): string | undefined {
     if (!workingDirectory) return undefined
-    if (!existsSync(workingDirectory) || !statSync(workingDirectory).isDirectory()) {
+    const candidate = resolve(workingDirectory)
+    if (!existsSync(candidate) || !statSync(candidate).isDirectory()) {
       throw new Error(`Project directory does not exist on this server: ${workingDirectory}`)
     }
-    return workingDirectory
+    const authorized = deps.sessionManager.getSessions(workspaceId).some(session =>
+      !!session.workingDirectory && resolve(session.workingDirectory) === candidate,
+    )
+    if (!authorized) {
+      throw new Error('Project directory is not authorized by an active workspace session')
+    }
+    return candidate
   }
 
-  function rootsFor(workspaceRoot: string, workingDirectory?: string): SkillInventoryRoots {
+  function rootsFor(workspaceId: string, workspaceRoot: string, workingDirectory?: string): SkillInventoryRoots {
     return {
       globalSkillsRoot: runtime.globalSkillsRoot,
       workspaceRoot,
-      projectRoot: resolveWorkingDirectory(workingDirectory),
+      projectRoot: resolveWorkingDirectory(workspaceId, workingDirectory),
     }
   }
 
-  function inventoryFor(workspaceRoot: string, workingDirectory?: string): SkillInventory {
-    return runtime.annotateInventory(runtime.scanInventory(rootsFor(workspaceRoot, workingDirectory)))
+  function inventoryFor(workspaceId: string, workspaceRoot: string, workingDirectory?: string): SkillInventory {
+    return runtime.annotateInventory(runtime.scanInventory(rootsFor(workspaceId, workspaceRoot, workingDirectory)))
   }
 
   function ensureWatcher(workspaceId: string, workspaceRoot: string, workingDirectory?: string): void {
     if (!runtime.watchInventory) return
-    const roots = rootsFor(workspaceRoot, workingDirectory)
+    const roots = rootsFor(workspaceId, workspaceRoot, workingDirectory)
     const signature = JSON.stringify(roots)
     const existing = watchers.get(workspaceId)
     if (existing?.signature === signature) return
@@ -158,6 +165,7 @@ export function registerSkillsHandlers(
   }
 
   function resolveTarget(
+    workspaceId: string,
     target: SkillRpcTarget,
     workspaceRoot: string,
     workingDirectory?: string,
@@ -166,17 +174,18 @@ export function registerSkillsHandlers(
       return { source: 'global', globalSkillsRoot: runtime.globalSkillsRoot }
     }
     if (target.source === 'workspace') return { source: 'workspace', workspaceRoot }
-    const projectRoot = resolveWorkingDirectory(workingDirectory)
+    const projectRoot = resolveWorkingDirectory(workspaceId, workingDirectory)
     if (!projectRoot) throw new Error('Project directory is required for a project Skill')
     return { source: 'project', projectRoot }
   }
 
   function targetForPlacement(
+    workspaceId: string,
     placement: SkillPlacement,
     workspaceRoot: string,
     workingDirectory?: string,
   ): SkillTarget {
-    return resolveTarget({ source: placement.source }, workspaceRoot, workingDirectory)
+    return resolveTarget(workspaceId, { source: placement.source }, workspaceRoot, workingDirectory)
   }
 
   function operationInScope(operation: SkillOperationRecord, workspaceRoot: string, workingDirectory?: string): boolean {
@@ -188,7 +197,7 @@ export function registerSkillsHandlers(
   function broadcastInventory(workspaceId: string, workspaceRoot: string, workingDirectory?: string): SkillInventory {
     ensureWatcher(workspaceId, workspaceRoot, workingDirectory)
     runtime.invalidate()
-    const inventory = inventoryFor(workspaceRoot, workingDirectory)
+    const inventory = inventoryFor(workspaceId, workspaceRoot, workingDirectory)
     const target = { to: 'workspace' as const, workspaceId }
     server.push(RPC_CHANNELS.skills.INVENTORY_CHANGED, target, workspaceId, inventory)
     server.push(RPC_CHANNELS.skills.CHANGED, target, workspaceId, inventory.effectiveSkills)
@@ -205,9 +214,7 @@ export function registerSkillsHandlers(
     }
     // Validate workingDirectory exists on this server — a thin client may pass
     // its local path which doesn't exist on the remote server's filesystem.
-    const effectiveWorkingDir = workingDirectory && existsSync(workingDirectory)
-      ? workingDirectory
-      : undefined
+    const effectiveWorkingDir = resolveWorkingDirectory(workspaceId, workingDirectory)
     const { loadAllSkills } = await import('@craft-agent/shared/skills')
     const skills = loadAllSkills(workspace.rootPath, effectiveWorkingDir)
     deps.platform.logger?.info(`SKILLS_GET: Loaded ${skills.length} skills from ${workspace.rootPath}`)
@@ -217,17 +224,17 @@ export function registerSkillsHandlers(
   server.handle(RPC_CHANNELS.skills.GET_INVENTORY, (_ctx, workspaceId: string, workingDirectory?: string) => {
     const workspace = resolveWorkspace(workspaceId)
     ensureWatcher(workspaceId, workspace.rootPath, workingDirectory)
-    return inventoryFor(workspace.rootPath, workingDirectory)
+    return inventoryFor(workspaceId, workspace.rootPath, workingDirectory)
   })
 
   server.handle(RPC_CHANNELS.skills.ADOPT, (_ctx, workspaceId: string, request: SkillAdoptRequest) => {
     const workspace = resolveWorkspace(workspaceId)
-    const inventory = inventoryFor(workspace.rootPath, request.workingDirectory)
+    const inventory = inventoryFor(workspaceId, workspace.rootPath, request.workingDirectory)
     const placement = inventory.placements.find(item => item.id === request.placementId)
     if (!placement) throw new Error(`Skill placement not found: ${request.placementId}`)
     const operation = runtime.adopt(
       placement,
-      targetForPlacement(placement, workspace.rootPath, request.workingDirectory),
+      targetForPlacement(workspaceId, placement, workspace.rootPath, request.workingDirectory),
       request.origin,
     )
     broadcastInventory(workspaceId, workspace.rootPath, request.workingDirectory)
@@ -236,21 +243,21 @@ export function registerSkillsHandlers(
 
   server.handle(RPC_CHANNELS.skills.STOP_MANAGING, (_ctx, workspaceId: string, recordId: string, workingDirectory?: string) => {
     const workspace = resolveWorkspace(workspaceId)
-    const placement = inventoryFor(workspace.rootPath, workingDirectory).placements
+    const placement = inventoryFor(workspaceId, workspace.rootPath, workingDirectory).placements
       .find(item => item.recordId === recordId)
     if (!placement) throw new Error(`Managed Skill not found: ${recordId}`)
-    runtime.stopManaging(placement, targetForPlacement(placement, workspace.rootPath, workingDirectory))
+    runtime.stopManaging(placement, targetForPlacement(workspaceId, placement, workspace.rootPath, workingDirectory))
     broadcastInventory(workspaceId, workspace.rootPath, workingDirectory)
   })
 
   server.handle(RPC_CHANNELS.skills.UPDATE_METADATA, (_ctx, workspaceId: string, request: SkillMetadataUpdateRequest) => {
     const workspace = resolveWorkspace(workspaceId)
-    const placement = inventoryFor(workspace.rootPath, request.workingDirectory).placements
+    const placement = inventoryFor(workspaceId, workspace.rootPath, request.workingDirectory).placements
       .find(item => item.id === request.placementId && item.ownership === 'managed')
     if (!placement) throw new Error(`Managed Skill placement not found: ${request.placementId}`)
     const operation = runtime.updateMetadata(
       placement,
-      targetForPlacement(placement, workspace.rootPath, request.workingDirectory),
+      targetForPlacement(workspaceId, placement, workspace.rootPath, request.workingDirectory),
       { favorite: request.favorite, tags: request.tags },
     )
     broadcastInventory(workspaceId, workspace.rootPath, request.workingDirectory)
@@ -262,7 +269,7 @@ export function registerSkillsHandlers(
     return runtime.previewDirectory({
       sourceDirectory: request.sourceDirectory,
       slug: request.slug,
-      target: resolveTarget(request.target, workspace.rootPath, request.workingDirectory),
+      target: resolveTarget(workspaceId, request.target, workspace.rootPath, request.workingDirectory),
       origin: request.origin ?? { type: 'local', path: request.sourceDirectory },
       overwrite: request.overwrite,
     })
@@ -273,7 +280,7 @@ export function registerSkillsHandlers(
     const operation = runtime.installDirectory({
       sourceDirectory: request.sourceDirectory,
       slug: request.slug,
-      target: resolveTarget(request.target, workspace.rootPath, request.workingDirectory),
+      target: resolveTarget(workspaceId, request.target, workspace.rootPath, request.workingDirectory),
       origin: request.origin ?? { type: 'local', path: request.sourceDirectory },
       overwrite: request.overwrite,
     })
@@ -286,7 +293,7 @@ export function registerSkillsHandlers(
     return runtime.previewNpx({
       source: request.source,
       slug: request.slug,
-      target: resolveTarget(request.target, workspace.rootPath, request.workingDirectory),
+      target: resolveTarget(workspaceId, request.target, workspace.rootPath, request.workingDirectory),
       overwrite: request.overwrite,
     })
   })
@@ -296,7 +303,7 @@ export function registerSkillsHandlers(
     const operation = await runtime.installNpx({
       source: request.source,
       slug: request.slug,
-      target: resolveTarget(request.target, workspace.rootPath, request.workingDirectory),
+      target: resolveTarget(workspaceId, request.target, workspace.rootPath, request.workingDirectory),
       overwrite: request.overwrite,
     })
     broadcastInventory(workspaceId, workspace.rootPath, request.workingDirectory)
@@ -305,14 +312,14 @@ export function registerSkillsHandlers(
 
   server.handle(RPC_CHANNELS.skills.REMOVE_MANAGED, (_ctx, workspaceId: string, request: SkillRemoveManagedRequest) => {
     const workspace = resolveWorkspace(workspaceId)
-    const inventory = inventoryFor(workspace.rootPath, request.workingDirectory)
+    const inventory = inventoryFor(workspaceId, workspace.rootPath, request.workingDirectory)
     const placement = inventory.placements.find(item => item.id === request.placementId)
     if (!placement || placement.ownership !== 'managed') {
       throw new Error(`Managed Skill placement not found: ${request.placementId}`)
     }
     const operation = runtime.remove({
       slug: placement.slug,
-      target: targetForPlacement(placement, workspace.rootPath, request.workingDirectory),
+      target: targetForPlacement(workspaceId, placement, workspace.rootPath, request.workingDirectory),
     })
     broadcastInventory(workspaceId, workspace.rootPath, request.workingDirectory)
     return operation

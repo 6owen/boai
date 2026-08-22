@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 import type { SkillInstallPlan, SkillPlacement } from '@craft-agent/shared/skills'
-import { filterSkillPlacements, requiresOverwriteConfirmation } from '../skills-manager-model'
+import { filterSkillPlacements, formatCommandPreview, formatSkillOriginSource, parseSkillOriginInput, requiresOverwriteConfirmation } from '../skills-manager-model'
 
 function placement(overrides: Partial<SkillPlacement> = {}): SkillPlacement {
   return {
@@ -25,6 +25,9 @@ describe('Skills Manager view model', () => {
     expect(filterSkillPlacements(items, 'external', '')).toHaveLength(1)
     expect(filterSkillPlacements(items, 'invalid', '')[0]?.slug).toBe('broken')
     expect(filterSkillPlacements(items, 'conflict', '')[0]?.slug).toBe('broken')
+    expect(filterSkillPlacements([
+      placement({ id: 'workspace:/missing', status: 'missing', skill: undefined }),
+    ], 'missing', '')).toHaveLength(1)
   })
 
   it('searches name, provenance, tags, scope, and path', () => {
@@ -38,5 +41,23 @@ describe('Skills Manager view model', () => {
     const plan = { valid: true, localModified: true } as SkillInstallPlan
     expect(requiresOverwriteConfirmation(plan)).toBe(true)
     expect(requiresOverwriteConfirmation({ ...plan, localModified: false })).toBe(false)
+  })
+
+  it('round-trips stored Git refs and registry versions into update sources', () => {
+    expect(formatSkillOriginSource({ type: 'git', url: 'owner/repository', ref: 'release-1' }))
+      .toBe('owner/repository#release-1')
+    expect(formatSkillOriginSource({ type: 'registry', package: '@scope/skill', version: '2.0.0' }))
+      .toBe('npm:@scope/skill@2.0.0')
+    expect(parseSkillOriginInput('owner/repository#release-1')).toEqual({
+      type: 'git', url: 'owner/repository', ref: 'release-1',
+    })
+    expect(parseSkillOriginInput('npm:@scope/skill@2.0.0')).toEqual({
+      type: 'registry', package: '@scope/skill', version: '2.0.0',
+    })
+  })
+
+  it('renders the adapter-owned command without losing argument boundaries', () => {
+    expect(formatCommandPreview({ executable: 'npx', args: ['skills', 'add', 'path with spaces'] }))
+      .toBe('npx skills add "path with spaces"')
   })
 })

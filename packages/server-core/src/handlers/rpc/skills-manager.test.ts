@@ -1,11 +1,18 @@
 import { describe, expect, it } from 'bun:test'
-import { mkdtempSync, mkdirSync, writeFileSync } from 'fs'
+import { existsSync, mkdtempSync, mkdirSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import type {
   SkillInventory,
   SkillOperationRecord,
+} from '@craft-agent/shared/skills'
+import {
+  SkillCatalogStore,
+  SkillOperationService,
+  invalidateSkillsCache,
+  loadAllSkills,
+  scanSkillInventory,
 } from '@craft-agent/shared/skills'
 import type { HandlerFn, RpcServer } from '../../transport/types'
 import type { HandlerDeps } from '../handler-deps'
@@ -18,7 +25,7 @@ function validSkill(root: string, slug: string): string {
   return directory
 }
 
-function createHarness() {
+function createHarness(options: { realRuntime?: boolean } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'skills-rpc-'))
   const workspaceRoot = join(root, 'workspace')
   const projectRoot = join(root, 'project')
@@ -68,7 +75,7 @@ function createHarness() {
     startedAt: 1, completedAt: 2, hadTarget: false,
   }
   const calls: string[] = []
-  const runtime: SkillsHandlerRuntime = {
+  const mockRuntime: SkillsHandlerRuntime = {
     globalSkillsRoot: join(root, 'global'),
     scanInventory: () => inventory,
     annotateInventory: value => value,
@@ -90,8 +97,33 @@ function createHarness() {
     listOperations: () => [operation],
     invalidate: () => { calls.push('invalidate') },
   }
+  const managerDataRoot = join(root, 'manager-data')
+  const catalog = new SkillCatalogStore(managerDataRoot)
+  const operationService = new SkillOperationService(managerDataRoot, catalog)
+  const realRuntime: SkillsHandlerRuntime = {
+    globalSkillsRoot: join(root, 'global'),
+    scanInventory: scanSkillInventory,
+    annotateInventory: value => catalog.annotate(value),
+    adopt: (placement, target, origin) => operationService.adopt(placement, target, origin),
+    stopManaging: (placement, target) => operationService.stopManaging(placement, target),
+    updateMetadata: (placement, target, updates) => operationService.updateMetadata(placement, target, updates),
+    previewDirectory: request => operationService.previewFromDirectory(request),
+    previewNpx: request => operationService.previewFromNpx(request),
+    installDirectory: request => operationService.installFromDirectory(request),
+    installNpx: request => operationService.installFromNpx(request),
+    remove: request => operationService.remove(request),
+    restore: id => operationService.restore(id),
+    listOperations: () => operationService.listOperations(),
+    invalidate: invalidateSkillsCache,
+  }
+  const runtime = options.realRuntime ? realRuntime : mockRuntime
   const deps = {
-    sessionManager: {}, oauthFlowStore: {},
+    sessionManager: {
+      getSessions: (workspaceId?: string) => workspaceId === 'ws'
+        ? [{ workingDirectory: projectRoot }]
+        : [],
+    },
+    oauthFlowStore: {},
     platform: { appRootPath: root, resourcesPath: root, isPackaged: false, appVersion: 'test', isDebugMode: true },
   } as HandlerDeps
   registerSkillsHandlers(server, deps, {
@@ -145,6 +177,15 @@ describe('Skills Manager RPC', () => {
       target: { source: 'project' },
       workingDirectory: join(projectRoot, 'missing'),
     })).toThrow('Project directory')
+
+    const existingButUnauthorized = join(projectRoot, 'other')
+    mkdirSync(existingButUnauthorized)
+    expect(() => handlers.get(RPC_CHANNELS.skills.INSTALL_DIRECTORY)!({} as never, 'ws', {
+      sourceDirectory,
+      slug: 'demo',
+      target: { source: 'project' },
+      workingDirectory: existingButUnauthorized,
+    })).toThrow('not authorized')
   })
 
   it('adopts only a placement returned by the server inventory', async () => {
@@ -174,5 +215,32 @@ describe('Skills Manager RPC', () => {
       channel: RPC_CHANNELS.skills.INVENTORY_CHANGED,
       args: ['ws', expect.any(Object)],
     })
+  })
+
+  it('runs install, modification detection, removal, restore, and runtime loading across the real RPC boundary', async () => {
+    const { handlers, sourceDirectory, workspaceRoot } = createHarness({ realRuntime: true })
+    await handlers.get(RPC_CHANNELS.skills.INSTALL_DIRECTORY)!({} as never, 'ws', {
+      sourceDirectory,
+      slug: 'demo',
+      target: { source: 'workspace' },
+      origin: { type: 'local', path: sourceDirectory },
+    })
+    let inventory = await handlers.get(RPC_CHANNELS.skills.GET_INVENTORY)!({} as never, 'ws') as SkillInventory
+    expect(inventory.placements[0]).toMatchObject({ slug: 'demo', ownership: 'managed', modified: false })
+
+    const installedDirectory = join(workspaceRoot, 'skills', 'demo')
+    writeFileSync(join(installedDirectory, 'local-note.txt'), 'changed')
+    inventory = await handlers.get(RPC_CHANNELS.skills.REFRESH)!({} as never, 'ws') as SkillInventory
+    expect(inventory.placements[0]?.modified).toBe(true)
+
+    const removal = await handlers.get(RPC_CHANNELS.skills.REMOVE_MANAGED)!({} as never, 'ws', {
+      placementId: inventory.placements[0]!.id,
+    }) as SkillOperationRecord
+    expect(existsSync(installedDirectory)).toBe(false)
+    await handlers.get(RPC_CHANNELS.skills.RESTORE)!({} as never, 'ws', removal.id)
+
+    invalidateSkillsCache()
+    expect(loadAllSkills(workspaceRoot).find(skill => skill.slug === 'demo')).toBeDefined()
+    expect(existsSync(join(installedDirectory, 'local-note.txt'))).toBe(true)
   })
 })

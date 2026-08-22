@@ -1,6 +1,43 @@
-import type { SkillInstallPlan, SkillPlacement } from '@craft-agent/shared/skills'
+import type { SkillInstallPlan, SkillOrigin, SkillPlacement } from '@craft-agent/shared/skills'
 
-export type SkillInventoryFilter = 'all' | 'managed' | 'external' | 'invalid' | 'modified' | 'conflict'
+export type SkillInventoryFilter = 'all' | 'managed' | 'external' | 'invalid' | 'missing' | 'modified' | 'conflict'
+
+export function formatSkillOriginSource(origin?: SkillOrigin): string {
+  if (!origin) return ''
+  if (origin.type === 'git') return `${origin.url}${origin.ref ? `#${origin.ref}` : ''}`
+  if (origin.type === 'registry') return `npm:${origin.package}${origin.version ? `@${origin.version}` : ''}`
+  if (origin.type === 'local') return origin.path
+  return ''
+}
+
+export function parseSkillOriginInput(input: string): SkillOrigin {
+  const value = input.trim()
+  if (!value) return { type: 'unknown' }
+  if (value.startsWith('npm:')) {
+    const spec = value.slice(4)
+    const versionAt = spec.lastIndexOf('@')
+    return {
+      type: 'registry',
+      package: versionAt > 0 ? spec.slice(0, versionAt) : spec,
+      version: versionAt > 0 ? spec.slice(versionAt + 1) : undefined,
+    }
+  }
+  if (/^(https?:\/\/|ssh:\/\/|git@|[\w.-]+\/[\w.-]+)/.test(value)) {
+    const hashAt = value.lastIndexOf('#')
+    return {
+      type: 'git',
+      url: hashAt >= 0 ? value.slice(0, hashAt) : value,
+      ref: hashAt >= 0 ? value.slice(hashAt + 1) : undefined,
+    }
+  }
+  return { type: 'local', path: value }
+}
+
+export function formatCommandPreview(command: { executable: string; args: string[] }): string {
+  return [command.executable, ...command.args]
+    .map(value => /^[a-zA-Z0-9_./:@#=-]+$/.test(value) ? value : JSON.stringify(value))
+    .join(' ')
+}
 
 function originText(placement: SkillPlacement): string {
   const origin = placement.record?.origin
@@ -22,6 +59,7 @@ export function filterSkillPlacements(
       || (filter === 'managed' && item.ownership === 'managed')
       || (filter === 'external' && item.ownership === 'external')
       || (filter === 'invalid' && item.status === 'invalid')
+      || (filter === 'missing' && item.status === 'missing')
       || (filter === 'modified' && !!item.modified)
       || (filter === 'conflict' && item.conflict)
     if (!matchesFilter) return false

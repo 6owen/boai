@@ -27,6 +27,8 @@ function skillRoots(roots: SkillInventoryRoots): string[] {
 export class SkillInventoryWatcher {
   private watchers: FSWatcher[] = [];
   private timer: ReturnType<typeof setTimeout> | undefined;
+  private pollTimer: ReturnType<typeof setInterval> | undefined;
+  private bindingSignature = '';
   private disposed = false;
 
   constructor(
@@ -35,6 +37,8 @@ export class SkillInventoryWatcher {
     private readonly debounceMs = 150,
   ) {
     this.bind();
+    this.pollTimer = setInterval(() => this.reconcileBindings(), 250);
+    this.pollTimer.unref?.();
   }
 
   updateRoots(roots: SkillInventoryRoots): void {
@@ -46,6 +50,8 @@ export class SkillInventoryWatcher {
     this.disposed = true;
     if (this.timer) clearTimeout(this.timer);
     this.timer = undefined;
+    if (this.pollTimer) clearInterval(this.pollTimer);
+    this.pollTimer = undefined;
     this.closeWatchers();
   }
 
@@ -61,6 +67,7 @@ export class SkillInventoryWatcher {
       const existing = nearestExistingDirectory(path);
       return existing ? [existing] : [];
     }));
+    this.bindingSignature = JSON.stringify([...paths].sort());
     for (const path of paths) {
       const handleEvent = () => this.scheduleChange();
       try {
@@ -69,6 +76,16 @@ export class SkillInventoryWatcher {
         this.watchers.push(watch(path, handleEvent));
       }
     }
+  }
+
+  private reconcileBindings(): void {
+    if (this.disposed) return;
+    const nextPaths = skillRoots(this.roots).flatMap(path => {
+      const existing = nearestExistingDirectory(path);
+      return existing ? [existing] : [];
+    });
+    const nextSignature = JSON.stringify([...new Set(nextPaths)].sort());
+    if (nextSignature !== this.bindingSignature) this.scheduleChange();
   }
 
   private scheduleChange(): void {

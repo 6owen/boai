@@ -36,6 +36,13 @@ export interface AcquiredSkill {
 
 const OUTPUT_LIMIT = 1024 * 1024;
 
+export function buildSkillsAddCommand(source: string, slug: string): { executable: string; args: string[] } {
+  return {
+    executable: 'npx',
+    args: ['--yes', 'skills', 'add', source, '--skill', slug, '--agent', 'universal', '--yes', '--copy'],
+  };
+}
+
 export function inferSkillOrigin(source: string): SkillOrigin {
   const value = source.trim();
   if (value.startsWith('.') || value.startsWith('/')) return { type: 'local', path: value };
@@ -118,7 +125,8 @@ export class NpxSkillsAdapter {
   constructor(private readonly runner: SkillCommandRunner = runSkillCommand) {}
 
   async acquire(request: AcquireSkillRequest): Promise<AcquiredSkill> {
-    if (!request.source.trim() || request.source.startsWith('-')) {
+    const source = request.source.trim();
+    if (!source || source.startsWith('-')) {
       throw new Error('Invalid Skills source');
     }
     if (!/^[a-z0-9-]+$/.test(request.slug)) {
@@ -127,20 +135,9 @@ export class NpxSkillsAdapter {
 
     mkdirSync(request.stagingRoot, { recursive: true });
     const workingDirectory = mkdtempSync(join(request.stagingRoot, 'npx-skills-'));
+    const commandPreview = buildSkillsAddCommand(source, request.slug);
     const command: SkillCommandRequest = {
-      executable: 'npx',
-      args: [
-        '--yes',
-        'skills',
-        'add',
-        request.source,
-        '--skill',
-        request.slug,
-        '--agent',
-        'universal',
-        '--yes',
-        '--copy',
-      ],
+      ...commandPreview,
       cwd: workingDirectory,
       shell: false,
       timeoutMs: 120_000,

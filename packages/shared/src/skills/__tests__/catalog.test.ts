@@ -68,6 +68,24 @@ describe('SkillCatalogStore', () => {
     expect(updated.baselineHash).toBe(record.baselineHash);
   });
 
+  it('keeps a managed record visible when its directory disappears', () => {
+    const root = createTempRoot();
+    const globalSkillsRoot = join(root, 'global');
+    const workspaceRoot = join(root, 'workspace');
+    const skillDirectory = join(globalSkillsRoot, 'review');
+    mkdirSync(skillDirectory, { recursive: true });
+    writeFileSync(join(skillDirectory, 'SKILL.md'), '---\nname: Review\ndescription: Reviews code\n---\nBody\n');
+    const store = new SkillCatalogStore(join(root, 'manager-data'));
+    store.adopt(scanSkillInventory({ globalSkillsRoot, workspaceRoot }).placements[0]!, { type: 'manual' });
+
+    rmSync(skillDirectory, { recursive: true });
+    const missing = store.annotate(scanSkillInventory({ globalSkillsRoot, workspaceRoot })).placements[0]!;
+
+    expect(missing.status).toBe('missing');
+    expect(missing.ownership).toBe('managed');
+    expect(missing.path).toBe(skillDirectory);
+  });
+
   it('migrates a pre-versioned catalog into schema version 1', () => {
     const root = createTempRoot();
     const dataRoot = join(root, 'manager-data');

@@ -29,7 +29,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
-import { filterSkillPlacements, requiresOverwriteConfirmation, type SkillInventoryFilter } from '@/lib/skills-manager-model'
+import { filterSkillPlacements, formatCommandPreview, formatSkillOriginSource, parseSkillOriginInput, requiresOverwriteConfirmation, type SkillInventoryFilter } from '@/lib/skills-manager-model'
 import { useActiveWorkspace, useAppShellContext } from '@/context/AppShellContext'
 import { EditPopover, getEditConfig } from '@/components/ui/EditPopover'
 import type {
@@ -45,6 +45,7 @@ const FILTERS: Array<{ id: SkillInventoryFilter; label: string }> = [
   { id: 'managed', label: 'Managed' },
   { id: 'external', label: 'External' },
   { id: 'invalid', label: 'Invalid' },
+  { id: 'missing', label: 'Missing' },
   { id: 'modified', label: 'Modified' },
   { id: 'conflict', label: 'Conflict' },
 ]
@@ -85,10 +86,7 @@ function InstallSkillDialog({
   const initialMode = existingOrigin?.type === 'local' && localFilesAllowed ? 'local' : 'npx'
   const [mode, setMode] = useState<'npx' | 'local'>(initialMode)
   const [source, setSource] = useState(
-    existingOrigin?.type === 'git' ? existingOrigin.url
-      : existingOrigin?.type === 'registry' ? existingOrigin.package
-        : existingOrigin?.type === 'local' ? existingOrigin.path
-          : '',
+    formatSkillOriginSource(existingOrigin),
   )
   const [slug, setSlug] = useState(placement?.slug ?? '')
   const [target, setTarget] = useState<SkillRpcTarget>(scopeTarget(placement))
@@ -100,12 +98,7 @@ function InstallSkillDialog({
     if (!open) return
     const origin = placement?.record?.origin
     setMode(origin?.type === 'local' && localFilesAllowed ? 'local' : 'npx')
-    setSource(
-      origin?.type === 'git' ? origin.url
-        : origin?.type === 'registry' ? origin.package
-          : origin?.type === 'local' ? origin.path
-            : '',
-    )
+    setSource(formatSkillOriginSource(origin))
     setSlug(placement?.slug ?? '')
     setTarget(scopeTarget(placement))
     setPlan(null)
@@ -220,9 +213,9 @@ function InstallSkillDialog({
             </label>
           </div>
 
-          {mode === 'npx' && source && slug && (
+          {plan?.command && (
             <div className="rounded-md bg-foreground/[0.04] p-3 font-mono text-xs break-all">
-              npx --yes skills add {source} --skill {slug} --agent universal --yes --copy
+              {formatCommandPreview(plan.command)}
               <div className="mt-1 font-sans text-muted-foreground">Executed only inside app staging; the selected scope is committed by the transaction layer.</div>
             </div>
           )}
@@ -329,14 +322,10 @@ export default function SkillsManagerPage({ workspaceId, workingDirectory }: { w
     try {
       let origin = placement.record?.origin
       if (editOrigin || !origin) {
-        const current = origin?.type === 'git' ? origin.url : origin?.type === 'local' ? origin.path : ''
+        const current = formatSkillOriginSource(origin)
         const value = window.prompt('Optional Git URL or local source path', current)
         if (value === null) return
-        origin = value.trim()
-          ? (/^(https?:\/\/|git@|[\w.-]+\/[\w.-]+$)/.test(value.trim())
-              ? { type: 'git' as const, url: value.trim() }
-              : { type: 'local' as const, path: value.trim() })
-          : { type: 'unknown' as const }
+        origin = parseSkillOriginInput(value)
       }
       await window.electronAPI.adoptSkill(workspaceId, { placementId: placement.id, workingDirectory, origin })
       toast.success(`${placement.slug} is now managed`)
@@ -361,17 +350,25 @@ export default function SkillsManagerPage({ workspaceId, workingDirectory }: { w
 
   const adoptVisible = async () => {
     const external = placements.filter(item => item.ownership === 'external' && item.status === 'valid')
-    for (const placement of external) {
-      await window.electronAPI.adoptSkill(workspaceId, {
-        placementId: placement.id, workingDirectory, origin: { type: 'unknown' },
-      })
+    try {
+      for (const placement of external) {
+        await window.electronAPI.adoptSkill(workspaceId, {
+          placementId: placement.id, workingDirectory, origin: { type: 'unknown' },
+        })
+      }
+      toast.success(`${external.length} Skill${external.length === 1 ? '' : 's'} managed`)
+    } catch (actionError) {
+      toast.error('Bulk management stopped', { description: actionError instanceof Error ? actionError.message : String(actionError) })
     }
-    toast.success(`${external.length} Skill${external.length === 1 ? '' : 's'} managed`)
   }
 
   const exportOperations = async () => {
-    await navigator.clipboard.writeText(`${JSON.stringify(operations.slice().reverse(), null, 2)}\n`)
-    toast.success('Operation log copied as JSON')
+    try {
+      await navigator.clipboard.writeText(`${JSON.stringify(operations.slice().reverse(), null, 2)}\n`)
+      toast.success('Operation log copied as JSON')
+    } catch (actionError) {
+      toast.error('Could not copy operation log', { description: actionError instanceof Error ? actionError.message : String(actionError) })
+    }
   }
 
   const stopManaging = async (placement: SkillPlacement) => {
@@ -444,7 +441,7 @@ export default function SkillsManagerPage({ workspaceId, workingDirectory }: { w
                     <div className="truncate text-sm font-medium">{item.skill?.metadata.name ?? (item.slug || 'Unreadable directory')}</div>
                     <div className="mt-0.5 truncate text-xs text-muted-foreground">{item.skill?.metadata.description ?? item.diagnostics[0]?.message}</div>
                   </div>
-                  {item.status === 'invalid' ? <AlertTriangle className="size-4 shrink-0 text-destructive" /> : item.effective ? <CheckCircle2 className="size-4 shrink-0 text-emerald-600" /> : null}
+                  {item.status !== 'valid' ? <AlertTriangle className="size-4 shrink-0 text-destructive" /> : item.effective ? <CheckCircle2 className="size-4 shrink-0 text-emerald-600" /> : null}
                 </div>
                 <div className="mt-2 flex flex-wrap gap-1 text-[10px]">
                   <span className="rounded bg-foreground/5 px-1.5 py-0.5 capitalize">{item.source}</span>
@@ -520,7 +517,7 @@ export default function SkillsManagerPage({ workspaceId, workingDirectory }: { w
                   <div><div className="text-sm font-medium">Management actions</div><div className="text-xs text-muted-foreground">Removing creates a backup. Stopping management keeps every file in place.</div></div>
                   <div className="flex gap-2">
                     <Button size="sm" variant="outline" onClick={() => void stopManaging(selected)}>Stop managing</Button>
-                    <Button size="sm" variant="destructive" onClick={() => void remove(selected)}><Trash2 /> Remove safely</Button>
+                    {selected.status !== 'missing' && <Button size="sm" variant="destructive" onClick={() => void remove(selected)}><Trash2 /> Remove safely</Button>}
                   </div>
                 </section>
               )}
@@ -531,7 +528,7 @@ export default function SkillsManagerPage({ workspaceId, workingDirectory }: { w
                   {operations.length === 0 && <div className="p-4 text-sm text-muted-foreground">No managed operations yet.</div>}
                   {operations.slice(0, 20).map(operation => (
                     <div key={operation.id} className="flex items-center justify-between gap-3 p-3 text-sm">
-                      <div className="min-w-0"><div className="font-medium capitalize">{operation.type} · {operation.slug}</div><div className="truncate text-xs text-muted-foreground">{new Date(operation.completedAt).toLocaleString()} · {operation.status}{operation.error ? ` · ${operation.error}` : ''}</div></div>
+                      <div className="min-w-0"><div className="font-medium capitalize">{operation.type} · {operation.slug}</div><div className="truncate text-xs text-muted-foreground">{new Date(operation.completedAt ?? operation.startedAt).toLocaleString()} · {operation.status}{operation.error ? ` · ${operation.error}` : ''}</div></div>
                       {operation.status === 'succeeded' && operation.type !== 'restore' && <Button size="sm" variant="ghost" onClick={() => void restore(operation)}><Undo2 /> Restore</Button>}
                     </div>
                   ))}

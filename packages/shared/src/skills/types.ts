@@ -69,7 +69,7 @@ export interface SkillPlacement {
   skill?: LoadedSkill;
   /** Deterministic hash of the files in this placement. */
   contentHash?: string;
-  status: 'valid' | 'invalid';
+  status: 'valid' | 'invalid' | 'missing';
   diagnostics: Array<{
     path: string;
     message: string;
@@ -178,12 +178,12 @@ export interface SkillMetadataUpdateRequest {
 export interface SkillOperationRecord {
   id: string;
   type: 'adopt' | 'metadata' | 'stop-managing' | 'install' | 'update' | 'remove' | 'restore';
-  status: 'succeeded' | 'failed';
+  status: 'planned' | 'running' | 'succeeded' | 'failed' | 'rolled-back';
   slug: string;
   target: SkillTarget;
   targetPath: string;
   startedAt: number;
-  completedAt: number;
+  completedAt?: number;
   hadTarget: boolean;
   beforeSnapshot?: string;
   recordId?: string;
@@ -220,4 +220,6 @@ export interface SkillInstallPlan {
   localModified?: boolean;
   upstreamChanged?: boolean;
   threeWayConflict?: boolean;
+  /** Exact external command the adapter will execute when the plan is confirmed. */
+  command?: { executable: string; args: string[] };
 }

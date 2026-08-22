@@ -12,7 +12,7 @@ The Agent runtime still resolves `project > workspace > global`. The management 
 
 The page supports:
 
-- All, Managed, External, Invalid, Modified, and Conflict views
+- All, Managed, External, Invalid, Missing, Modified, and Conflict views
 - search across metadata, scope, status, provenance, tags, and paths
 - adoption of an existing placement without moving its files
 - individual or bulk adoption, source editing, favorites, and tags
@@ -31,13 +31,16 @@ BoAI's app profile is isolated from Craft Agents:
 ~/.boai/
 ├── config.json and app settings
 ├── workspaces/
-└── skill-manager/
-    └── skills/
-        ├── catalog.json
-        ├── operations.jsonl
-        ├── baselines/
-        ├── backups/
-        └── cli-staging/
+├── skill-manager/
+│   └── skills/
+│       ├── catalog.json
+│       ├── operations.jsonl
+│       ├── baselines/
+│       ├── backups/
+│       └── cli-staging/
+└── logs/
+    ├── main.log
+    └── messaging-gateway.log
 ```
 
 Global universal Skills intentionally remain in `~/.agents/skills`, because sharing them with compatible agents is one of the product's core goals. BoAI metadata never replaces a Skill directory as the content source of truth.
@@ -52,13 +55,13 @@ For an `npx skills`/Git source, the server runs an argument-array command withou
 npx --yes skills add <source> --skill <slug> --agent universal --yes --copy
 ```
 
-The command runs in an isolated temporary project. BoAI validates the acquired tree, rejects symlinks and unsupported file types, limits total size, prepares a Diff, and only then commits the directory into the selected real scope. Renderer requests describe a scope; they cannot supply the actual global or workspace destination root.
+The command runs in an isolated temporary project. BoAI validates the acquired tree, rejects symlinks and unsupported file types, limits total size, prepares a Diff, and only then commits the directory into the selected real scope. Renderer requests describe a scope; they cannot supply the actual global or workspace destination root. A project destination must exactly match a working directory already authorized by a server-side session in that workspace; an arbitrary existing server path is rejected.
 
 Updates capture immutable baseline snapshots. The preview compares baseline→local and baseline→upstream. If local content changed, the UI requires an explicit overwrite decision; changing the slug provides a save-as path.
 
 ## Restore guarantees
 
-Every managed content mutation records a JSONL operation. Update and removal operations keep snapshots. Restore refuses to overwrite a target that was created or modified after the original operation. Catalog provenance is restored together with content.
+Every managed mutation records `running` followed by a terminal success/failure transition in JSONL. Update and removal operations keep snapshots. Restore refuses to overwrite a target that was created or modified after the original operation, logs failed attempts, and rolls content and Catalog state back together if its audit append cannot complete. Catalog provenance is restored together with content.
 
 ## Main implementation map
 
