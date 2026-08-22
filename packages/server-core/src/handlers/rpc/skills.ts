@@ -40,6 +40,17 @@ export function registerSkillsHandlers(
     return requestedRoot
   }
 
+  const refreshAndBroadcastSkills = async (
+    workspaceId: string,
+    workspaceRoot: string,
+    projectRoot?: string,
+  ): Promise<void> => {
+    const { invalidateSkillsCache, loadAllSkills } = await import('@craft-agent/shared/skills')
+    invalidateSkillsCache()
+    const skills = annotateManagedSkills(loadAllSkills(workspaceRoot, projectRoot), projectRoot)
+    server.push(RPC_CHANNELS.skills.CHANGED, { to: 'workspace', workspaceId }, workspaceId, skills)
+  }
+
   // Get all skills for a workspace (and optionally project-level skills from workingDirectory)
   server.handle(RPC_CHANNELS.skills.GET, async (_ctx, workspaceId: string, workingDirectory?: string) => {
     deps.platform.logger?.info(`SKILLS_GET: Loading skills for workspace: ${workspaceId}${workingDirectory ? `, workingDirectory: ${workingDirectory}` : ''}`)
@@ -127,10 +138,7 @@ export function registerSkillsHandlers(
       cwd: projectRoot ?? workspace.rootPath,
     })
 
-    const { invalidateSkillsCache, loadAllSkills } = await import('@craft-agent/shared/skills')
-    invalidateSkillsCache()
-    const skills = annotateManagedSkills(loadAllSkills(workspace.rootPath, viewProjectRoot), viewProjectRoot)
-    server.push(RPC_CHANNELS.skills.CHANGED, { to: 'workspace', workspaceId }, workspaceId, skills)
+    await refreshAndBroadcastSkills(workspaceId, workspace.rootPath, viewProjectRoot)
     deps.platform.logger?.info(`Installed ${request.scope} skill: ${request.slug}`)
     return result
   })
@@ -146,7 +154,7 @@ export function registerSkillsHandlers(
       throw new Error('Select a project before updating a project skill')
     }
 
-    const { invalidateSkillsCache, loadAllSkills } = await import('@craft-agent/shared/skills')
+    const { loadAllSkills } = await import('@craft-agent/shared/skills')
     const currentSkills = annotateManagedSkills(
       loadAllSkills(workspace.rootPath, viewProjectRoot),
       viewProjectRoot,
@@ -165,9 +173,7 @@ export function registerSkillsHandlers(
       cwd: projectRoot ?? workspace.rootPath,
     })
 
-    invalidateSkillsCache()
-    const skills = annotateManagedSkills(loadAllSkills(workspace.rootPath, viewProjectRoot), viewProjectRoot)
-    server.push(RPC_CHANNELS.skills.CHANGED, { to: 'workspace', workspaceId }, workspaceId, skills)
+    await refreshAndBroadcastSkills(workspaceId, workspace.rootPath, viewProjectRoot)
     deps.platform.logger?.info(`Updated ${request.scope} skill: ${request.slug}`)
     return result
   })
@@ -184,10 +190,7 @@ export function registerSkillsHandlers(
       : undefined
     const result = await skillsCli.updateAllGlobal(workspace.rootPath)
 
-    const { invalidateSkillsCache, loadAllSkills } = await import('@craft-agent/shared/skills')
-    invalidateSkillsCache()
-    const skills = annotateManagedSkills(loadAllSkills(workspace.rootPath, viewProjectRoot), viewProjectRoot)
-    server.push(RPC_CHANNELS.skills.CHANGED, { to: 'workspace', workspaceId }, workspaceId, skills)
+    await refreshAndBroadcastSkills(workspaceId, workspace.rootPath, viewProjectRoot)
     deps.platform.logger?.info('Updated all global skills')
     return result
   })
@@ -203,7 +206,7 @@ export function registerSkillsHandlers(
       throw new Error('Select a project before uninstalling a project skill')
     }
 
-    const { invalidateSkillsCache, loadAllSkills } = await import('@craft-agent/shared/skills')
+    const { loadAllSkills } = await import('@craft-agent/shared/skills')
     const currentSkills = annotateManagedSkills(
       loadAllSkills(workspace.rootPath, viewProjectRoot),
       viewProjectRoot,
@@ -222,9 +225,7 @@ export function registerSkillsHandlers(
       cwd: projectRoot ?? workspace.rootPath,
     })
 
-    invalidateSkillsCache()
-    const skills = annotateManagedSkills(loadAllSkills(workspace.rootPath, viewProjectRoot), viewProjectRoot)
-    server.push(RPC_CHANNELS.skills.CHANGED, { to: 'workspace', workspaceId }, workspaceId, skills)
+    await refreshAndBroadcastSkills(workspaceId, workspace.rootPath, viewProjectRoot)
     deps.platform.logger?.info(`Uninstalled ${request.scope} skill: ${request.slug}`)
     return result
   })
