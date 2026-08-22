@@ -147,6 +147,28 @@ describe('SkillsCliService.update', () => {
   })
 })
 
+describe('SkillsCliService.updateAllGlobal', () => {
+  test('updates every global skill non-interactively', async () => {
+    const root = makeTempDir()
+    let receivedArgs: string[] = []
+    let receivedCwd = ''
+    const runner: SkillsCliRunner = async (args, options) => {
+      receivedArgs = args
+      receivedCwd = options.cwd
+      return { stdout: 'all global skills are up to date', stderr: '' }
+    }
+    const service = new SkillsCliService({ runner })
+
+    const result = await service.updateAllGlobal(root)
+
+    expect(receivedArgs).toEqual([
+      '--yes', 'skills', 'update', '--global', '--yes',
+    ])
+    expect(receivedCwd).toBe(root)
+    expect(result.stdout).toBe('all global skills are up to date')
+  })
+})
+
 describe('SkillsCliService.uninstall', () => {
   test('uninstalls a global skill and cleans all agent links', async () => {
     const root = makeTempDir()

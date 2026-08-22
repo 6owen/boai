@@ -502,6 +502,7 @@ export interface ElectronAPI {
   getSkillFiles?(workspaceId: string, skillSlug: string): Promise<SkillFile[]>
   installSkill(workspaceId: string, request: InstallSkillRequest): Promise<SkillManagementResult>
   updateSkill(workspaceId: string, request: ManageSkillRequest): Promise<SkillManagementResult>
+  updateAllGlobalSkills(workspaceId: string, workingDirectory?: string): Promise<SkillManagementResult>
   uninstallSkill(workspaceId: string, request: ManageSkillRequest): Promise<SkillManagementResult>
   deleteSkill(workspaceId: string, skillSlug: string): Promise<void>
   openSkillInEditor(workspaceId: string, skillSlug: string): Promise<void>

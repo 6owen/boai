@@ -276,6 +276,7 @@ export const RPC_CHANNELS = {
     GET_FILES: 'skills:getFiles',
     INSTALL: 'skills:install',
     UPDATE: 'skills:update',
+    UPDATE_ALL_GLOBAL: 'skills:updateAllGlobal',
     UNINSTALL: 'skills:uninstall',
     DELETE: 'skills:delete',
     OPEN_EDITOR: 'skills:openEditor',

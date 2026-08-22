@@ -1993,6 +1993,7 @@ function AppShellContent({
   // permanent slugs (new-project, new-project-1, …).
   const [createProjectDialogOpen, setCreateProjectDialogOpen] = useState(false)
   const [installSkillDialogOpen, setInstallSkillDialogOpen] = useState(false)
+  const [updatingAllGlobalSkills, setUpdatingAllGlobalSkills] = useState(false)
   const openAddProject = useCallback(() => {
     if (!activeWorkspace?.id) return
     setCreateProjectDialogOpen(true)
@@ -2077,6 +2078,27 @@ function AppShellContent({
       toast.error(t('toast.failedToDeleteSkill'))
     }
   }, [activeWorkspace])
+
+  const handleUpdateAllGlobalSkills = useCallback(async () => {
+    if (!activeWorkspace || updatingAllGlobalSkills) return
+
+    setUpdatingAllGlobalSkills(true)
+    const toastId = toast.loading(t('skillsManager.updatingAllGlobal'))
+    try {
+      await window.electronAPI.updateAllGlobalSkills(
+        activeWorkspace.id,
+        activeSessionWorkingDirectory,
+      )
+      toast.success(t('skillsManager.updatedAllGlobal'), { id: toastId })
+    } catch (error) {
+      toast.error(t('skillsManager.updateFailed'), {
+        id: toastId,
+        description: error instanceof Error ? error.message : String(error),
+      })
+    } finally {
+      setUpdatingAllGlobalSkills(false)
+    }
+  }, [activeSessionWorkingDirectory, activeWorkspace, t, updatingAllGlobalSkills])
 
   // Respond to menu bar "New Chat" trigger
   const menuTriggerRef = useRef(menuNewChatTrigger)
@@ -3430,6 +3452,13 @@ function AppShellContent({
                   {/* Add Skill button (only for skills mode) */}
                   {isSkillsNavigation(navState) && activeWorkspace && (
                     <>
+                      <HeaderIconButton
+                        icon={<RotateCw className={cn('h-4 w-4', updatingAllGlobalSkills && 'animate-spin')} />}
+                        tooltip={t("skillsManager.updateAllGlobal")}
+                        onClick={() => void handleUpdateAllGlobalSkills()}
+                        disabled={updatingAllGlobalSkills}
+                        data-tutorial="update-all-global-skills-button"
+                      />
                       <HeaderIconButton
                         icon={<PackagePlus className="h-4 w-4" />}
                         tooltip={t("skillsManager.install")}

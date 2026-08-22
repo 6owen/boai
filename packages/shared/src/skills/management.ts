@@ -215,6 +215,13 @@ export class SkillsCliService {
     return result
   }
 
+  async updateAllGlobal(cwd = homedir()): Promise<SkillManagementResult> {
+    return this.runner(
+      ['--yes', 'skills', 'update', '--global', '--yes'],
+      { cwd },
+    )
+  }
+
   async uninstall(input: UninstallManagedSkillInput): Promise<SkillManagementResult> {
     const slug = input.slug.trim()
     if (!VALID_SKILL_SLUG.test(slug)) {

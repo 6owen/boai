@@ -12,6 +12,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.skills.GET_FILES,
   RPC_CHANNELS.skills.INSTALL,
   RPC_CHANNELS.skills.UPDATE,
+  RPC_CHANNELS.skills.UPDATE_ALL_GLOBAL,
   RPC_CHANNELS.skills.UNINSTALL,
   RPC_CHANNELS.skills.DELETE,
   RPC_CHANNELS.skills.OPEN_EDITOR,
@@ -168,6 +169,26 @@ export function registerSkillsHandlers(
     const skills = annotateManagedSkills(loadAllSkills(workspace.rootPath, viewProjectRoot), viewProjectRoot)
     server.push(RPC_CHANNELS.skills.CHANGED, { to: 'workspace', workspaceId }, workspaceId, skills)
     deps.platform.logger?.info(`Updated ${request.scope} skill: ${request.slug}`)
+    return result
+  })
+
+  // Update every global skill tracked by the skills CLI, then refresh the current view.
+  server.handle(RPC_CHANNELS.skills.UPDATE_ALL_GLOBAL, async (_ctx, workspaceId: string, workingDirectory?: string) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    // The active project is only needed to rebuild the current list after the
+    // global operation. A stale or client-local path must not block the update.
+    const viewProjectRoot = workingDirectory && existsSync(workingDirectory)
+      ? workingDirectory
+      : undefined
+    const result = await skillsCli.updateAllGlobal(workspace.rootPath)
+
+    const { invalidateSkillsCache, loadAllSkills } = await import('@craft-agent/shared/skills')
+    invalidateSkillsCache()
+    const skills = annotateManagedSkills(loadAllSkills(workspace.rootPath, viewProjectRoot), viewProjectRoot)
+    server.push(RPC_CHANNELS.skills.CHANGED, { to: 'workspace', workspaceId }, workspaceId, skills)
+    deps.platform.logger?.info('Updated all global skills')
     return result
   })
 
