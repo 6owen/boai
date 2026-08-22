@@ -52,7 +52,7 @@ export function InstallSkillDialog({
         source: source.trim(),
         slug: slug.trim(),
         scope,
-        workingDirectory: scope === 'project' ? workingDirectory : undefined,
+        workingDirectory,
       })
       toast.success(t('skillsManager.installed', { name: slug.trim() }))
       onOpenChange(false)

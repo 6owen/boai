@@ -2,7 +2,12 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { SkillsCliService, type SkillsCliRunner } from '../management.ts'
+import {
+  annotateManagedSkills,
+  SkillsCliService,
+  type SkillsCliRunner,
+} from '../management.ts'
+import type { LoadedSkill } from '../types.ts'
 
 const tempDirs: string[] = []
 
@@ -95,5 +100,122 @@ describe('SkillsCliService.install', () => {
     expect(service.install({ source: '--help', slug: 'valid', scope: 'global' })).rejects.toThrow('valid skill source')
     expect(service.install({ source: 'owner/repo', slug: '../escape', scope: 'global' })).rejects.toThrow('Skill name')
     expect(service.install({ source: 'owner/repo', slug: 'valid', scope: 'project' })).rejects.toThrow('Select a project')
+  })
+})
+
+describe('SkillsCliService.update', () => {
+  test('updates one global skill non-interactively', async () => {
+    const root = makeTempDir()
+    const globalSkillsDir = join(root, '.agents', 'skills')
+    const target = join(globalSkillsDir, 'agent-browser')
+    mkdirSync(target, { recursive: true })
+    writeFileSync(join(target, 'SKILL.md'), '# Agent Browser')
+    let receivedArgs: string[] = []
+    const runner: SkillsCliRunner = async (args) => {
+      receivedArgs = args
+      return { stdout: 'up to date', stderr: '' }
+    }
+    const service = new SkillsCliService({ globalSkillsDir, runner })
+
+    await service.update({ slug: 'agent-browser', scope: 'global', cwd: root })
+
+    expect(receivedArgs).toEqual([
+      '--yes', 'skills', 'update', 'agent-browser', '--global', '--yes',
+    ])
+  })
+
+  test('updates a project skill from the project directory', async () => {
+    const projectRoot = makeTempDir()
+    const target = join(projectRoot, '.agents', 'skills', 'ai-sdk')
+    mkdirSync(target, { recursive: true })
+    writeFileSync(join(target, 'SKILL.md'), '# AI SDK')
+    let receivedCwd = ''
+    let receivedArgs: string[] = []
+    const runner: SkillsCliRunner = async (args, options) => {
+      receivedArgs = args
+      receivedCwd = options.cwd
+      return { stdout: '', stderr: '' }
+    }
+    const service = new SkillsCliService({ runner })
+
+    await service.update({ slug: 'ai-sdk', scope: 'project', projectRoot })
+
+    expect(receivedArgs).toEqual([
+      '--yes', 'skills', 'update', 'ai-sdk', '--project', '--yes',
+    ])
+    expect(receivedCwd).toBe(projectRoot)
+  })
+})
+
+describe('annotateManagedSkills', () => {
+  function skill(slug: string, source: LoadedSkill['source']): LoadedSkill {
+    return {
+      slug,
+      source,
+      path: `/skills/${slug}`,
+      metadata: { name: slug, description: '' },
+      content: '',
+    }
+  }
+
+  test('marks only skills tracked by the matching global or project lock', () => {
+    const root = makeTempDir()
+    const globalLockPath = join(root, 'global-lock.json')
+    const projectRoot = join(root, 'project')
+    mkdirSync(projectRoot, { recursive: true })
+    writeFileSync(globalLockPath, JSON.stringify({
+      version: 3,
+      skills: {
+        'agent-browser': {
+          source: 'vercel-labs/agent-browser',
+          sourceType: 'github',
+          sourceUrl: 'https://github.com/vercel-labs/agent-browser.git',
+          skillPath: 'skills/agent-browser/SKILL.md',
+          skillFolderHash: 'abc',
+        },
+      },
+    }))
+    writeFileSync(join(projectRoot, 'skills-lock.json'), JSON.stringify({
+      version: 1,
+      skills: {
+        'AI SDK': {
+          source: 'vercel/ai',
+          sourceType: 'github',
+          skillPath: 'skills/ai-sdk/SKILL.md',
+        },
+      },
+    }))
+
+    const result = annotateManagedSkills([
+      skill('agent-browser', 'global'),
+      skill('ai-sdk', 'project'),
+      skill('manual', 'global'),
+      skill('agent-browser', 'workspace'),
+    ], projectRoot, { globalLockPath })
+
+    expect(result[0]!.management).toMatchObject({ scope: 'global', canUpdate: true })
+    expect(result[1]!.management).toMatchObject({ scope: 'project', canUpdate: true })
+    expect(result[2]!.management).toBeUndefined()
+    expect(result[3]!.management).toBeUndefined()
+  })
+
+  test('tracks local CLI entries but does not offer unsupported updates', () => {
+    const root = makeTempDir()
+    const projectRoot = join(root, 'project')
+    mkdirSync(projectRoot, { recursive: true })
+    writeFileSync(join(projectRoot, 'skills-lock.json'), JSON.stringify({
+      version: 1,
+      skills: {
+        local: { source: '../local', sourceType: 'local', skillPath: 'SKILL.md' },
+      },
+    }))
+
+    const [result] = annotateManagedSkills(
+      [skill('local', 'project')],
+      projectRoot,
+      { globalLockPath: join(root, 'missing.json') },
+    )
+
+    expect(result!.management).toMatchObject({ manager: 'skills-cli', canUpdate: false })
   })
 })

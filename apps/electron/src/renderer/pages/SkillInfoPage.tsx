@@ -112,6 +112,24 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
     }
   }, [skill, workspaceId, skillSlug])
 
+  const handleUpdate = useCallback(async () => {
+    if (!skill?.management?.canUpdate) return
+    const toastId = toast.loading(t('skillsManager.updating', { name: skill.metadata.name }))
+    try {
+      await window.electronAPI.updateSkill(workspaceId, {
+        slug: skill.slug,
+        scope: skill.management.scope,
+        workingDirectory,
+      })
+      toast.success(t('skillsManager.updated', { name: skill.metadata.name }), { id: toastId })
+    } catch (err) {
+      toast.error(t('skillsManager.updateFailed'), {
+        id: toastId,
+        description: err instanceof Error ? err.message : String(err),
+      })
+    }
+  }, [skill, t, workspaceId, workingDirectory])
+
   // Handle opening in new window
   const handleOpenInNewWindow = useCallback(() => {
     window.electronAPI.openUrl(`craftagents://skills/skill/${skillSlug}?window=focused`)
@@ -158,6 +176,7 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
             onOpenInNewWindow={handleOpenInNewWindow}
             onShowInFinder={handleOpenInFinder}
             canShowInFinder={canRevealLocally}
+            onUpdate={skill?.management?.canUpdate ? handleUpdate : undefined}
             onDelete={canDeleteSkill ? handleDelete : undefined}
             canDelete={canDeleteSkill}
             deleteLabel={canDeleteSkill ? t('skillInfo.deleteSkill') : t('skillInfo.managedByProject')}

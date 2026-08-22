@@ -266,6 +266,7 @@ const EXPECTED_CHANNELS: string[] = [
   'skills:install',
   'skills:openEditor',
   'skills:openFinder',
+  'skills:update',
   'sources:changed',
   'sources:create',
   'sources:delete',

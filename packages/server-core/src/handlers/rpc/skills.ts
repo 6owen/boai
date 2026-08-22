@@ -2,8 +2,8 @@ import { join, resolve } from 'path'
 import { existsSync, readdirSync, statSync } from 'fs'
 import { RPC_CHANNELS, type SkillFile } from '@craft-agent/shared/protocol'
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
-import type { InstallSkillRequest } from '@craft-agent/shared/skills'
-import { SkillsCliService } from '@craft-agent/shared/skills'
+import type { InstallSkillRequest, ManageSkillRequest } from '@craft-agent/shared/skills'
+import { annotateManagedSkills, SkillsCliService } from '@craft-agent/shared/skills'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 
@@ -11,6 +11,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.skills.GET,
   RPC_CHANNELS.skills.GET_FILES,
   RPC_CHANNELS.skills.INSTALL,
+  RPC_CHANNELS.skills.UPDATE,
   RPC_CHANNELS.skills.DELETE,
   RPC_CHANNELS.skills.OPEN_EDITOR,
   RPC_CHANNELS.skills.OPEN_FINDER,
@@ -21,6 +22,22 @@ export function registerSkillsHandlers(
   deps: HandlerDeps,
   skillsCli = new SkillsCliService(),
 ): void {
+  const resolveProjectRoot = (workspaceId: string, workingDirectory?: string): string | undefined => {
+    if (!workingDirectory) return undefined
+    if (!existsSync(workingDirectory) || !statSync(workingDirectory).isDirectory()) {
+      throw new Error('The selected project directory is not available')
+    }
+
+    const requestedRoot = resolve(workingDirectory)
+    const belongsToActiveSession = deps.sessionManager
+      .getSessions(workspaceId)
+      .some(session => session.workingDirectory && resolve(session.workingDirectory) === requestedRoot)
+    if (!belongsToActiveSession) {
+      throw new Error('The selected project directory is not attached to this workspace')
+    }
+    return requestedRoot
+  }
+
   // Get all skills for a workspace (and optionally project-level skills from workingDirectory)
   server.handle(RPC_CHANNELS.skills.GET, async (_ctx, workspaceId: string, workingDirectory?: string) => {
     deps.platform.logger?.info(`SKILLS_GET: Loading skills for workspace: ${workspaceId}${workingDirectory ? `, workingDirectory: ${workingDirectory}` : ''}`)
@@ -37,7 +54,7 @@ export function registerSkillsHandlers(
     const { loadAllSkills } = await import('@craft-agent/shared/skills')
     const skills = loadAllSkills(workspace.rootPath, effectiveWorkingDir)
     deps.platform.logger?.info(`SKILLS_GET: Loaded ${skills.length} skills from ${workspace.rootPath}`)
-    return skills
+    return annotateManagedSkills(skills, effectiveWorkingDir)
   })
 
   // Get files in a skill directory
@@ -94,20 +111,10 @@ export function registerSkillsHandlers(
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error('Workspace not found')
 
-    let projectRoot: string | undefined
-    if (request.scope === 'project') {
-      if (!request.workingDirectory || !existsSync(request.workingDirectory)) {
-        throw new Error('The selected project directory is not available')
-      }
-
-      const requestedRoot = resolve(request.workingDirectory)
-      const belongsToActiveSession = deps.sessionManager
-        .getSessions(workspaceId)
-        .some(session => session.workingDirectory && resolve(session.workingDirectory) === requestedRoot)
-      if (!belongsToActiveSession) {
-        throw new Error('The selected project directory is not attached to this workspace')
-      }
-      projectRoot = requestedRoot
+    const viewProjectRoot = resolveProjectRoot(workspaceId, request.workingDirectory)
+    const projectRoot = request.scope === 'project' ? viewProjectRoot : undefined
+    if (request.scope === 'project' && !projectRoot) {
+      throw new Error('Select a project before installing a project skill')
     }
 
     const result = await skillsCli.install({
@@ -120,9 +127,46 @@ export function registerSkillsHandlers(
 
     const { invalidateSkillsCache, loadAllSkills } = await import('@craft-agent/shared/skills')
     invalidateSkillsCache()
-    const skills = loadAllSkills(workspace.rootPath, projectRoot)
+    const skills = annotateManagedSkills(loadAllSkills(workspace.rootPath, viewProjectRoot), viewProjectRoot)
     server.push(RPC_CHANNELS.skills.CHANGED, { to: 'workspace', workspaceId }, workspaceId, skills)
     deps.platform.logger?.info(`Installed ${request.scope} skill: ${request.slug}`)
+    return result
+  })
+
+  // Update one skill only when its matching CLI lock file confirms provenance.
+  server.handle(RPC_CHANNELS.skills.UPDATE, async (_ctx, workspaceId: string, request: ManageSkillRequest) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    const viewProjectRoot = resolveProjectRoot(workspaceId, request.workingDirectory)
+    const projectRoot = request.scope === 'project' ? viewProjectRoot : undefined
+    if (request.scope === 'project' && !projectRoot) {
+      throw new Error('Select a project before updating a project skill')
+    }
+
+    const { invalidateSkillsCache, loadAllSkills } = await import('@craft-agent/shared/skills')
+    const currentSkills = annotateManagedSkills(
+      loadAllSkills(workspace.rootPath, viewProjectRoot),
+      viewProjectRoot,
+    )
+    const skill = currentSkills.find(item =>
+      item.slug === request.slug
+      && item.source === request.scope
+      && item.management?.canUpdate,
+    )
+    if (!skill) throw new Error('This skill is not updateable through the skills CLI')
+
+    const result = await skillsCli.update({
+      slug: request.slug,
+      scope: request.scope,
+      projectRoot,
+      cwd: projectRoot ?? workspace.rootPath,
+    })
+
+    invalidateSkillsCache()
+    const skills = annotateManagedSkills(loadAllSkills(workspace.rootPath, viewProjectRoot), viewProjectRoot)
+    server.push(RPC_CHANNELS.skills.CHANGED, { to: 'workspace', workspaceId }, workspaceId, skills)
+    deps.platform.logger?.info(`Updated ${request.scope} skill: ${request.slug}`)
     return result
   })
 

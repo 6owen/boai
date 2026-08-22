@@ -21,6 +21,7 @@ import {
   FolderOpen,
   AppWindow,
   Send,
+  RefreshCw,
 } from 'lucide-react'
 import { useMenuComponents } from '@/components/ui/menu-context'
 import { getFileManagerName } from '@/lib/platform'
@@ -34,6 +35,7 @@ export interface SkillMenuProps {
   onOpenInNewWindow: () => void
   onShowInFinder: () => void | Promise<void>
   onDelete?: () => void
+  onUpdate?: () => void | Promise<void>
   canShowInFinder?: boolean
   canDelete?: boolean
   deleteLabel?: string
@@ -51,6 +53,7 @@ export function SkillMenu({
   onOpenInNewWindow,
   onShowInFinder,
   onDelete,
+  onUpdate,
   canShowInFinder = true,
   canDelete = true,
   deleteLabel,
@@ -80,6 +83,13 @@ export function SkillMenu({
         <MenuItem onClick={onSendToWorkspace}>
           <Send className="h-3.5 w-3.5" />
           <span className="flex-1">{t("sessionMenu.sendToWorkspace")}</span>
+        </MenuItem>
+      )}
+
+      {onUpdate && (
+        <MenuItem onClick={onUpdate}>
+          <RefreshCw className="h-3.5 w-3.5" />
+          <span className="flex-1">{t('skillsManager.update')}</span>
         </MenuItem>
       )}
 

@@ -52,6 +52,26 @@ export interface SkillManagementResult {
   stderr: string;
 }
 
+/** Request for updating or removing one CLI-managed skill. */
+export interface ManageSkillRequest {
+  slug: string;
+  scope: SkillManagementScope;
+  workingDirectory?: string;
+}
+
+/** Provenance read from the lock file maintained by the skills CLI. */
+export interface SkillManagementInfo {
+  manager: 'skills-cli';
+  scope: SkillManagementScope;
+  source?: string;
+  sourceType?: string;
+  sourceUrl?: string;
+  skillPath?: string;
+  installedAt?: string;
+  updatedAt?: string;
+  canUpdate: boolean;
+}
+
 /**
  * Plugin name for project-level and global skills.
  *
@@ -77,4 +97,6 @@ export interface LoadedSkill {
   path: string;
   /** Where this skill was loaded from */
   source: SkillSource;
+  /** Present only when this exact skill is tracked by the skills CLI. */
+  management?: SkillManagementInfo;
 }

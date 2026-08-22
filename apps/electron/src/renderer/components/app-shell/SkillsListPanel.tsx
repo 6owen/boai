@@ -20,6 +20,7 @@ export interface SkillsListPanelProps {
   selectedSkillSlug?: string | null
   workspaceId?: string
   workspaceRootPath?: string
+  workingDirectory?: string
   className?: string
 }
 
@@ -30,6 +31,7 @@ export function SkillsListPanel({
   selectedSkillSlug,
   workspaceId,
   workspaceRootPath,
+  workingDirectory,
   className,
 }: SkillsListPanelProps) {
   const { t } = useTranslation()
@@ -103,6 +105,22 @@ export function SkillsListPanel({
               }
             }}
             canShowInFinder={canRevealLocally}
+            onUpdate={skill.management?.canUpdate && workspaceId ? async () => {
+              const toastId = toast.loading(t('skillsManager.updating', { name: skill.metadata.name }))
+              try {
+                await window.electronAPI.updateSkill(workspaceId, {
+                  slug: skill.slug,
+                  scope: skill.management!.scope,
+                  workingDirectory,
+                })
+                toast.success(t('skillsManager.updated', { name: skill.metadata.name }), { id: toastId })
+              } catch (error) {
+                toast.error(t('skillsManager.updateFailed'), {
+                  id: toastId,
+                  description: error instanceof Error ? error.message : String(error),
+                })
+              }
+            } : undefined}
             onDelete={skill.source === 'workspace' ? () => onDeleteSkill(skill.slug) : undefined}
             canDelete={skill.source === 'workspace'}
             deleteLabel={skill.source === 'workspace' ? t('skillsList.deleteSkill') : t('skillsList.managedByProject')}
