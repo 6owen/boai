@@ -147,6 +147,93 @@ describe('SkillsCliService.update', () => {
   })
 })
 
+describe('SkillsCliService.checkUpdates', () => {
+  test('finds changed global skills without running the update command', async () => {
+    const root = makeTempDir()
+    const globalSkillsDir = join(root, '.agents', 'skills')
+    const globalLockPath = join(root, '.agents', '.skill-lock.json')
+    mkdirSync(globalSkillsDir, { recursive: true })
+    writeFileSync(globalLockPath, JSON.stringify({
+      version: 3,
+      skills: {
+        changed: {
+          source: 'owner/repo',
+          sourceType: 'github',
+          skillPath: 'skills/changed/SKILL.md',
+          skillFolderHash: 'old-hash',
+        },
+        current: {
+          source: 'owner/repo',
+          sourceType: 'github',
+          skillPath: 'skills/current/SKILL.md',
+          skillFolderHash: 'same-hash',
+        },
+      },
+    }))
+    let runnerCalled = false
+    const service = new SkillsCliService({
+      globalSkillsDir,
+      globalLockPath,
+      runner: async () => {
+        runnerCalled = true
+        return { stdout: '', stderr: '' }
+      },
+      treeFetcher: async () => ({
+        rootHash: 'root-hash',
+        folders: {
+          'skills/changed': 'new-hash',
+          'skills/current': 'same-hash',
+        },
+      }),
+    })
+
+    const result = await service.checkUpdates({ scope: 'global' })
+
+    expect(result).toEqual({
+      updates: [{ slug: 'changed', scope: 'global' }],
+      checkedCount: 2,
+      skippedCount: 0,
+    })
+    expect(runnerCalled).toBe(false)
+  })
+
+  test('checks only the requested skill and reports unavailable sources as skipped', async () => {
+    const root = makeTempDir()
+    const projectRoot = join(root, 'project')
+    mkdirSync(projectRoot, { recursive: true })
+    writeFileSync(join(projectRoot, 'skills-lock.json'), JSON.stringify({
+      version: 1,
+      skills: {
+        'AI SDK': {
+          source: 'local/package',
+          sourceType: 'local',
+          skillPath: 'skills/ai-sdk/SKILL.md',
+          skillFolderHash: 'old-hash',
+        },
+        other: {
+          source: 'owner/repo',
+          sourceType: 'github',
+          skillPath: 'skills/other/SKILL.md',
+          skillFolderHash: 'old-hash',
+        },
+      },
+    }))
+    const service = new SkillsCliService({
+      treeFetcher: async () => {
+        throw new Error('unrequested source should not be fetched')
+      },
+    })
+
+    const result = await service.checkUpdates({
+      scope: 'project',
+      slugs: ['ai-sdk'],
+      projectRoot,
+    })
+
+    expect(result).toEqual({ updates: [], checkedCount: 0, skippedCount: 1 })
+  })
+})
+
 describe('SkillsCliService.updateAllGlobal', () => {
   test('updates every global skill non-interactively', async () => {
     const root = makeTempDir()

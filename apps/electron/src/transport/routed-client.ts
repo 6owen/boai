@@ -93,6 +93,14 @@ export class RoutedClient implements RpcClient {
   // -------------------------------------------------------------------------
 
   async invoke(channel: string, ...args: any[]): Promise<any> {
+    return this.invokeRouted(channel, args)
+  }
+
+  async invokeWithTimeout(timeoutMs: number, channel: string, ...args: any[]): Promise<any> {
+    return this.invokeRouted(channel, args, timeoutMs)
+  }
+
+  private async invokeRouted(channel: string, args: any[], timeoutMs?: number): Promise<any> {
     const isLocal = isLocalOnly(channel)
     const target = isLocal ? this.localClient : this.workspaceClient
 
@@ -112,7 +120,9 @@ export class RoutedClient implements RpcClient {
         })
       : args
 
-    const result = await target.invoke(channel, ...translatedArgs)
+    const result = timeoutMs === undefined
+      ? await target.invoke(channel, ...translatedArgs)
+      : await target.invokeWithTimeout(timeoutMs, channel, ...translatedArgs)
 
     // Intercept SWITCH_WORKSPACE response to swap workspace client
     if (channel === RPC_CHANNELS.window.SWITCH_WORKSPACE) {

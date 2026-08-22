@@ -14,6 +14,7 @@ import { EditPopover, EditButton, getEditConfig } from '@/components/ui/EditPopo
 import { toast } from 'sonner'
 import { SkillMenu } from '@/components/app-shell/SkillMenu'
 import { UninstallSkillDialog } from '@/components/app-shell/UninstallSkillDialog'
+import { UpdateSkillDialog } from '@/components/app-shell/UpdateSkillDialog'
 import { SkillAvatar } from '@/components/ui/skill-avatar'
 import { routes, navigate } from '@/lib/navigate'
 import { useActiveWorkspace } from '@/context/AppShellContext'
@@ -38,6 +39,7 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [uninstallDialogOpen, setUninstallDialogOpen] = useState(false)
+  const [updateDialogOpen, setUpdateDialogOpen] = useState(false)
   const activeWorkspace = useActiveWorkspace()
   const canRevealLocally = !activeWorkspace?.remoteServer
 
@@ -114,23 +116,9 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
     }
   }, [skill, workspaceId, skillSlug])
 
-  const handleUpdate = useCallback(async () => {
-    if (!skill?.management?.canUpdate) return
-    const toastId = toast.loading(t('skillsManager.updating', { name: skill.metadata.name }))
-    try {
-      await window.electronAPI.updateSkill(workspaceId, {
-        slug: skill.slug,
-        scope: skill.management.scope,
-        workingDirectory,
-      })
-      toast.success(t('skillsManager.updated', { name: skill.metadata.name }), { id: toastId })
-    } catch (err) {
-      toast.error(t('skillsManager.updateFailed'), {
-        id: toastId,
-        description: err instanceof Error ? err.message : String(err),
-      })
-    }
-  }, [skill, t, workspaceId, workingDirectory])
+  const handleUpdate = useCallback(() => {
+    if (skill?.management?.canUpdate) setUpdateDialogOpen(true)
+  }, [skill])
 
   // Handle opening in new window
   const handleOpenInNewWindow = useCallback(() => {
@@ -300,14 +288,23 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
       )}
 
       {skill?.management && (
-        <UninstallSkillDialog
-          open={uninstallDialogOpen}
-          onOpenChange={setUninstallDialogOpen}
-          workspaceId={workspaceId}
-          workingDirectory={workingDirectory}
-          skill={skill}
-          onComplete={() => navigate(routes.view.skills())}
-        />
+        <>
+          <UninstallSkillDialog
+            open={uninstallDialogOpen}
+            onOpenChange={setUninstallDialogOpen}
+            workspaceId={workspaceId}
+            workingDirectory={workingDirectory}
+            skill={skill}
+            onComplete={() => navigate(routes.view.skills())}
+          />
+          <UpdateSkillDialog
+            open={updateDialogOpen}
+            onOpenChange={setUpdateDialogOpen}
+            workspaceId={workspaceId}
+            workingDirectory={workingDirectory}
+            skill={skill}
+          />
+        </>
       )}
     </Info_Page>
   )

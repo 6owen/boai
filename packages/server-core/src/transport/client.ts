@@ -175,6 +175,10 @@ export class WsRpcClient implements RpcClient {
   // -------------------------------------------------------------------------
 
   async invoke(channel: string, ...args: any[]): Promise<any> {
+    return this.invokeWithTimeout(this.requestTimeout, channel, ...args)
+  }
+
+  async invokeWithTimeout(timeoutMs: number, channel: string, ...args: any[]): Promise<any> {
     await this.ensureConnected(channel)
 
     return await new Promise((resolve, reject) => {
@@ -186,8 +190,8 @@ export class WsRpcClient implements RpcClient {
       const id = crypto.randomUUID()
       const timeout = setTimeout(() => {
         this.pending.delete(id)
-        reject(new Error(`Request timeout: ${channel} (${this.requestTimeout}ms)`))
-      }, this.requestTimeout)
+        reject(new Error(`Request timeout: ${channel} (${timeoutMs}ms)`))
+      }, timeoutMs)
 
       this.pending.set(id, { resolve, reject, timeout })
 

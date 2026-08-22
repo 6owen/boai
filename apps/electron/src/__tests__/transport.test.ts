@@ -149,6 +149,18 @@ describe('RPC', () => {
     expect(result).toBe('Hello, World!')
   })
 
+  test('invokeWithTimeout can outlive the client default timeout', async () => {
+    const { server, client } = await createPair(undefined, { requestTimeout: 10 })
+    server.handle('slow', async () => {
+      await new Promise(resolve => setTimeout(resolve, 30))
+      return 'finished'
+    })
+
+    const result = await client.invokeWithTimeout(100, 'slow')
+
+    expect(result).toBe('finished')
+  })
+
   test('handler receives correct args', async () => {
     const { server, client } = await createPair()
 

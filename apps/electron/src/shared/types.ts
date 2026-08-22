@@ -60,8 +60,8 @@ import type { LoadedSource, FolderSourceConfig, SourceConnectionStatus } from '@
 export type { LoadedSource, FolderSourceConfig, SourceConnectionStatus };
 
 // Skill types
-import type { InstallSkillRequest, LoadedSkill, ManageSkillRequest, SkillManagementResult, SkillMetadata } from '@craft-agent/shared/skills/types';
-export type { InstallSkillRequest, LoadedSkill, ManageSkillRequest, SkillManagementResult, SkillMetadata };
+import type { InstallSkillRequest, LoadedSkill, ManageSkillRequest, SkillManagementResult, SkillMetadata, SkillUpdateCheckResult } from '@craft-agent/shared/skills/types';
+export type { InstallSkillRequest, LoadedSkill, ManageSkillRequest, SkillManagementResult, SkillMetadata, SkillUpdateCheckResult };
 
 // Resource bundle types (cross-workspace export/import)
 import type { ExportResourcesOptions, ExportResult, ResourceImportMode, ResourceBundle, ResourceImportResult } from '@craft-agent/shared/resources';
@@ -501,6 +501,7 @@ export interface ElectronAPI {
   getSkills(workspaceId: string, workingDirectory?: string): Promise<LoadedSkill[]>
   getSkillFiles?(workspaceId: string, skillSlug: string): Promise<SkillFile[]>
   installSkill(workspaceId: string, request: InstallSkillRequest): Promise<SkillManagementResult>
+  checkSkillUpdates(workspaceId: string, request?: ManageSkillRequest): Promise<import('@craft-agent/shared/skills').SkillUpdateCheckResult>
   updateSkill(workspaceId: string, request: ManageSkillRequest): Promise<SkillManagementResult>
   updateAllGlobalSkills(workspaceId: string, workingDirectory?: string): Promise<SkillManagementResult>
   uninstallSkill(workspaceId: string, request: ManageSkillRequest): Promise<SkillManagementResult>

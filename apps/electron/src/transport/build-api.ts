@@ -13,7 +13,7 @@ import type { ElectronAPI } from '../shared/types'
 // ---------------------------------------------------------------------------
 
 export type ChannelMapEntry =
-  | { type: 'invoke'; channel: string; transform?: (result: any) => any }
+  | { type: 'invoke'; channel: string; transform?: (result: any) => any; timeoutMs?: number }
   | { type: 'listener'; channel: string }
 
 export type ChannelMap = Record<string, ChannelMapEntry>
@@ -34,11 +34,16 @@ export function buildClientApi(
     let fn: (...a: any[]) => any
     if (entry.type === 'listener') {
       fn = (cb: (...args: any[]) => void) => client.on(entry.channel, cb)
-    } else if (entry.transform) {
-      const t = entry.transform
-      fn = async (...args: any[]) => t(await client.invoke(entry.channel, ...args))
     } else {
-      fn = (...args: any[]) => client.invoke(entry.channel, ...args)
+      const invoke = (...args: any[]) => entry.timeoutMs && client.invokeWithTimeout
+        ? client.invokeWithTimeout(entry.timeoutMs, entry.channel, ...args)
+        : client.invoke(entry.channel, ...args)
+      if (entry.transform) {
+        const t = entry.transform
+        fn = async (...args: any[]) => t(await invoke(...args))
+      } else {
+        fn = invoke
+      }
     }
 
     // Dotted keys like "browserPane.create" become nested: api.browserPane.create

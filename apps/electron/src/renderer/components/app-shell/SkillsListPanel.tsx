@@ -9,6 +9,7 @@ import { skillSelection } from '@/hooks/useEntitySelection'
 import { SkillMenu } from './SkillMenu'
 import { SendResourceToWorkspaceDialog } from './SendResourceToWorkspaceDialog'
 import { UninstallSkillDialog } from './UninstallSkillDialog'
+import { UpdateSkillDialog } from './UpdateSkillDialog'
 import { EditPopover, getEditConfig } from '@/components/ui/EditPopover'
 import { useActiveWorkspace, useAppShellContext } from '@/context/AppShellContext'
 import { getFileManagerName } from '@/lib/platform'
@@ -46,6 +47,7 @@ export function SkillsListPanel({
   const [sendResourceSlug, setSendResourceSlug] = React.useState<string | null>(null)
   const [sendResourceLabel, setSendResourceLabel] = React.useState('')
   const [uninstallSkill, setUninstallSkill] = React.useState<LoadedSkill | null>(null)
+  const [updateSkill, setUpdateSkill] = React.useState<LoadedSkill | null>(null)
 
   return (
     <>
@@ -108,22 +110,7 @@ export function SkillsListPanel({
             }}
             canShowInFinder={canRevealLocally}
             onUninstall={skill.management ? () => setUninstallSkill(skill) : undefined}
-            onUpdate={skill.management?.canUpdate && workspaceId ? async () => {
-              const toastId = toast.loading(t('skillsManager.updating', { name: skill.metadata.name }))
-              try {
-                await window.electronAPI.updateSkill(workspaceId, {
-                  slug: skill.slug,
-                  scope: skill.management!.scope,
-                  workingDirectory,
-                })
-                toast.success(t('skillsManager.updated', { name: skill.metadata.name }), { id: toastId })
-              } catch (error) {
-                toast.error(t('skillsManager.updateFailed'), {
-                  id: toastId,
-                  description: error instanceof Error ? error.message : String(error),
-                })
-              }
-            } : undefined}
+            onUpdate={skill.management?.canUpdate && workspaceId ? () => setUpdateSkill(skill) : undefined}
             onDelete={skill.source === 'workspace' ? () => onDeleteSkill(skill.slug) : undefined}
             canDelete={skill.source === 'workspace'}
             deleteLabel={skill.source === 'workspace' ? t('skillsList.deleteSkill') : t('skillsList.managedByProject')}
@@ -157,6 +144,16 @@ export function SkillsListPanel({
         workspaceId={workspaceId}
         workingDirectory={workingDirectory}
         skill={uninstallSkill}
+      />
+    )}
+
+    {updateSkill && workspaceId && (
+      <UpdateSkillDialog
+        open
+        onOpenChange={(open) => { if (!open) setUpdateSkill(null) }}
+        workspaceId={workspaceId}
+        workingDirectory={workingDirectory}
+        skill={updateSkill}
       />
     )}
     </>

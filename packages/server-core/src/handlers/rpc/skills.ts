@@ -11,6 +11,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.skills.GET,
   RPC_CHANNELS.skills.GET_FILES,
   RPC_CHANNELS.skills.INSTALL,
+  RPC_CHANNELS.skills.CHECK_UPDATES,
   RPC_CHANNELS.skills.UPDATE,
   RPC_CHANNELS.skills.UPDATE_ALL_GLOBAL,
   RPC_CHANNELS.skills.UNINSTALL,
@@ -141,6 +142,40 @@ export function registerSkillsHandlers(
     await refreshAndBroadcastSkills(workspaceId, workspace.rootPath, viewProjectRoot)
     deps.platform.logger?.info(`Installed ${request.scope} skill: ${request.slug}`)
     return result
+  })
+
+  // Read-only update check. Omitting request checks every tracked global skill.
+  server.handle(RPC_CHANNELS.skills.CHECK_UPDATES, async (_ctx, workspaceId: string, request?: ManageSkillRequest) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    if (!request) {
+      return skillsCli.checkUpdates({ scope: 'global' })
+    }
+
+    const viewProjectRoot = resolveProjectRoot(workspaceId, request.workingDirectory)
+    const projectRoot = request.scope === 'project' ? viewProjectRoot : undefined
+    if (request.scope === 'project' && !projectRoot) {
+      throw new Error('Select a project before checking project skill updates')
+    }
+
+    const { loadAllSkills } = await import('@craft-agent/shared/skills')
+    const currentSkills = annotateManagedSkills(
+      loadAllSkills(workspace.rootPath, viewProjectRoot),
+      viewProjectRoot,
+    )
+    const skill = currentSkills.find(item =>
+      item.slug === request.slug
+      && item.source === request.scope
+      && item.management?.canUpdate,
+    )
+    if (!skill) throw new Error('This skill is not updateable through the skills CLI')
+
+    return skillsCli.checkUpdates({
+      scope: request.scope,
+      slugs: [request.slug],
+      projectRoot,
+    })
   })
 
   // Update one skill only when its matching CLI lock file confirms provenance.

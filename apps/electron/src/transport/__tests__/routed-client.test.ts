@@ -18,6 +18,7 @@ function stubClient(overrides?: Partial<WsRpcClient>): WsRpcClient {
     connect: mock(() => {}),
     destroy: mock(() => {}),
     invoke: mock(async () => undefined),
+    invokeWithTimeout: mock(async () => undefined),
     on: mock((channel: string, cb: (...args: any[]) => void) => {
       let set = listeners.get(channel)
       if (!set) { set = new Set(); listeners.set(channel, set) }
@@ -79,6 +80,18 @@ describe('RoutedClient', () => {
       expect(result).toBe('ws-result')
       expect(workspace.invoke).toHaveBeenCalledWith(REMOTE_CHANNEL)
       expect(local.invoke).not.toHaveBeenCalled()
+    })
+
+    it('preserves a custom timeout when routing a remote invoke', async () => {
+      const local = stubClient()
+      const workspace = stubClient({ invokeWithTimeout: mock(async () => 'long-result') })
+      const routed = new RoutedClient(local, workspace)
+
+      const result = await routed.invokeWithTimeout(180_000, REMOTE_CHANNEL, 'workspace-id')
+
+      expect(result).toBe('long-result')
+      expect(workspace.invokeWithTimeout).toHaveBeenCalledWith(180_000, REMOTE_CHANNEL, 'workspace-id')
+      expect(workspace.invoke).not.toHaveBeenCalled()
     })
 
     it('routes LOCAL_ONLY listeners to localClient', () => {

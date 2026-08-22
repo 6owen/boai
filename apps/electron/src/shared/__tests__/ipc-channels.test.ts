@@ -260,6 +260,7 @@ const EXPECTED_CHANNELS: string[] = [
   'shell:openUrl',
   'shell:showInFolder',
   'skills:changed',
+  'skills:checkUpdates',
   'skills:delete',
   'skills:get',
   'skills:getFiles',

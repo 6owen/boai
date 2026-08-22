@@ -52,6 +52,19 @@ export interface SkillManagementResult {
   stderr: string;
 }
 
+/** One installed skill whose locked source hash differs from the remote source. */
+export interface SkillUpdateCandidate {
+  slug: string;
+  scope: SkillManagementScope;
+}
+
+/** Read-only result returned before the user confirms a skill update. */
+export interface SkillUpdateCheckResult {
+  updates: SkillUpdateCandidate[];
+  checkedCount: number;
+  skippedCount: number;
+}
+
 /** Request for updating or removing one CLI-managed skill. */
 export interface ManageSkillRequest {
   slug: string;

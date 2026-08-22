@@ -75,6 +75,7 @@ import {
 import { SessionList, type ChatGroupingMode } from "./SessionList"
 import { MainContentPanel } from "./MainContentPanel"
 import { InstallSkillDialog } from "./InstallSkillDialog"
+import { UpdateSkillDialog } from "./UpdateSkillDialog"
 import { BoardListToggle } from "./kanban/BoardListToggle"
 import { PanelStackContainer } from "./PanelStackContainer"
 import { CompactSessionListFilter } from "./CompactSessionListFilter"
@@ -1993,6 +1994,7 @@ function AppShellContent({
   // permanent slugs (new-project, new-project-1, …).
   const [createProjectDialogOpen, setCreateProjectDialogOpen] = useState(false)
   const [installSkillDialogOpen, setInstallSkillDialogOpen] = useState(false)
+  const [updateAllGlobalSkillsOpen, setUpdateAllGlobalSkillsOpen] = useState(false)
   const [updatingAllGlobalSkills, setUpdatingAllGlobalSkills] = useState(false)
   const openAddProject = useCallback(() => {
     if (!activeWorkspace?.id) return
@@ -2078,27 +2080,6 @@ function AppShellContent({
       toast.error(t('toast.failedToDeleteSkill'))
     }
   }, [activeWorkspace])
-
-  const handleUpdateAllGlobalSkills = useCallback(async () => {
-    if (!activeWorkspace || updatingAllGlobalSkills) return
-
-    setUpdatingAllGlobalSkills(true)
-    const toastId = toast.loading(t('skillsManager.updatingAllGlobal'))
-    try {
-      await window.electronAPI.updateAllGlobalSkills(
-        activeWorkspace.id,
-        activeSessionWorkingDirectory,
-      )
-      toast.success(t('skillsManager.updatedAllGlobal'), { id: toastId })
-    } catch (error) {
-      toast.error(t('skillsManager.updateFailed'), {
-        id: toastId,
-        description: error instanceof Error ? error.message : String(error),
-      })
-    } finally {
-      setUpdatingAllGlobalSkills(false)
-    }
-  }, [activeSessionWorkingDirectory, activeWorkspace, t, updatingAllGlobalSkills])
 
   // Respond to menu bar "New Chat" trigger
   const menuTriggerRef = useRef(menuNewChatTrigger)
@@ -3455,7 +3436,7 @@ function AppShellContent({
                       <HeaderIconButton
                         icon={<RotateCw className={cn('h-4 w-4', updatingAllGlobalSkills && 'animate-spin')} />}
                         tooltip={t("skillsManager.updateAllGlobal")}
-                        onClick={() => void handleUpdateAllGlobalSkills()}
+                        onClick={() => setUpdateAllGlobalSkillsOpen(true)}
                         disabled={updatingAllGlobalSkills}
                         data-tutorial="update-all-global-skills-button"
                       />
@@ -3926,12 +3907,21 @@ function AppShellContent({
       />
 
       {activeWorkspaceId && (
-        <InstallSkillDialog
-          open={installSkillDialogOpen}
-          onOpenChange={setInstallSkillDialogOpen}
-          workspaceId={activeWorkspaceId}
-          workingDirectory={activeSessionWorkingDirectory}
-        />
+        <>
+          <InstallSkillDialog
+            open={installSkillDialogOpen}
+            onOpenChange={setInstallSkillDialogOpen}
+            workspaceId={activeWorkspaceId}
+            workingDirectory={activeSessionWorkingDirectory}
+          />
+          <UpdateSkillDialog
+            open={updateAllGlobalSkillsOpen}
+            onOpenChange={setUpdateAllGlobalSkillsOpen}
+            workspaceId={activeWorkspaceId}
+            workingDirectory={activeSessionWorkingDirectory}
+            onBusyChange={setUpdatingAllGlobalSkills}
+          />
+        </>
       )}
 
       {/* Messaging dialogs (pairing-code + WA connect) — driven by messagingDialogAtom.

@@ -27,6 +27,7 @@ export interface RpcServer {
 
 export interface RpcClient {
   invoke(channel: string, ...args: any[]): Promise<any>
+  invokeWithTimeout?(timeoutMs: number, channel: string, ...args: any[]): Promise<any>
   on(channel: string, callback: (...args: any[]) => void): () => void
   handleCapability(channel: string, handler: (...args: any[]) => Promise<any> | any): void
 }
