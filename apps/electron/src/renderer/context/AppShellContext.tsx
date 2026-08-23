@@ -23,7 +23,6 @@ import type {
   LoadedSkill,
   NewChatActionParams,
   LlmConnectionWithStatus,
-  TestAutomationResult,
 } from '../../shared/types'
 import type { SessionStatus as SessionStatusConfig } from '@/config/session-status-config'
 import type { SessionOptions, SessionOptionUpdates } from '../hooks/useSessionOptions'

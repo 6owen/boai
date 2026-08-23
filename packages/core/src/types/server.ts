@@ -20,8 +20,6 @@ export interface ServerStatus {
     name: string
     slug: string
     activeSessions: number
-    automationCount: number
-    schedulerRunning: boolean
   }[]
   memory: {
     heapUsed: number          // bytes
@@ -64,4 +62,3 @@ export interface ActiveSessionInfo {
   }
   createdAt: number
 }
-

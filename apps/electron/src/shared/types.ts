@@ -215,8 +215,6 @@ import type {
   PermissionModeState,
   BrowserInstanceInfo,
   DeepLinkNavigation,
-  TestAutomationPayload,
-  TestAutomationResult,
   WindowCloseRequest,
   DirectoryListingResult,
   RemoteSessionTransferPayload,
@@ -675,23 +673,6 @@ export interface ElectronAPI {
   uploadProjectAsset(workspaceId: string, projectSlug: string, input: { filename: string; base64?: string; text?: string; sourcePath?: string }): Promise<import('@craft-agent/shared/projects/types').ProjectAsset>
   deleteProjectAsset(workspaceId: string, projectSlug: string, filename: string): Promise<void>
   onProjectsChanged(callback: (workspaceId: string, projects: unknown) => void): () => void
-
-  // Automations
-  getAutomations(workspaceId: string): Promise<unknown>
-
-  // Automation testing (manual trigger)
-  testAutomation(payload: TestAutomationPayload): Promise<TestAutomationResult>
-
-  // Automation state management
-  setAutomationEnabled(workspaceId: string, eventName: string, matcherIndex: number, enabled: boolean): Promise<void>
-  duplicateAutomation(workspaceId: string, eventName: string, matcherIndex: number): Promise<void>
-  deleteAutomation(workspaceId: string, eventName: string, matcherIndex: number): Promise<void>
-  getAutomationHistory(workspaceId: string, automationId: string, limit?: number): Promise<Array<{ id: string; ts: number; ok: boolean; sessionId?: string; prompt?: string; error?: string; webhook?: { method: string; url: string; statusCode: number; durationMs: number; attempts?: number; error?: string; responseBody?: string } }>>
-  getAutomationLastExecuted(workspaceId: string): Promise<Record<string, number>>
-  replayAutomation(workspaceId: string, automationId: string, eventName: string): Promise<{ results: Array<{ type: string; url: string; statusCode: number; success: boolean; error?: string; duration: number }> }>
-
-  // Automations change listener
-  onAutomationsChanged(callback: (workspaceId: string) => void): () => void
 
   // Language
   changeLanguage(lang: string): Promise<void>

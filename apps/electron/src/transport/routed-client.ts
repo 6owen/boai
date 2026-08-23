@@ -109,7 +109,7 @@ export class RoutedClient implements RpcClient {
     // When routing to a remote server, the renderer's local workspace ID must be replaced
     // with the server's workspace ID so the handler can resolve the workspace.
     // Handles both top-level string args (e.g., getSkills(workspaceId)) and
-    // object args with a workspaceId property (e.g., testAutomation({ workspaceId, ... })).
+    // object args with a workspaceId property.
     const translatedArgs = (!isLocal && this.workspaceIdMapping)
       ? args.map(arg => {
           if (arg === this.workspaceIdMapping!.localId) return this.workspaceIdMapping!.remoteId

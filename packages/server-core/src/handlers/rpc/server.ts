@@ -70,14 +70,11 @@ export function registerServerHandlers(
   server.handle(RPC_CHANNELS.server.GET_STATUS, async () => {
     const workspaces = sessionManager.getWorkspacesInfo()
     const workspaceStatuses = workspaces.map(ws => {
-      const summary = sessionManager.getWorkspaceAutomationSummary(ws.id)
       return {
         id: ws.id,
         name: ws.name,
         slug: ws.slug,
         activeSessions: sessionManager.getActiveSessionCount(ws.id),
-        automationCount: summary.automationCount,
-        schedulerRunning: summary.schedulerRunning,
       }
     })
 

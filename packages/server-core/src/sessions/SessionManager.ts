@@ -1615,8 +1615,6 @@ export class SessionManager implements ISessionManager {
             sessionLog.error(`Failed to reload automations for workspace ${workspaceId}:`, result.errors)
           }
         }
-        // Notify renderer to re-read automations.json
-        this.broadcastAutomationsChanged(workspaceId)
       },
       onLlmConnectionsChange: () => {
         sessionLog.info(`LLM connections changed in ${workspaceId}`)
@@ -1743,12 +1741,6 @@ export class SessionManager implements ISessionManager {
     if (!this.eventSink) return
     sessionLog.info(`Broadcasting labels changed for ${workspaceId}`)
     this.eventSink(RPC_CHANNELS.labels.CHANGED, { to: 'workspace', workspaceId }, workspaceId)
-  }
-
-  private broadcastAutomationsChanged(workspaceId: string): void {
-    if (!this.eventSink) return
-    sessionLog.info(`Broadcasting automations changed for ${workspaceId}`)
-    this.eventSink(RPC_CHANNELS.automations.CHANGED, { to: 'workspace', workspaceId }, workspaceId)
   }
 
   private broadcastAppThemeChanged(theme: import('@craft-agent/shared/config').ThemeOverrides | null): void {
