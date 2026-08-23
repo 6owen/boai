@@ -218,7 +218,7 @@ export interface PlatformAdapter {
 
   /**
    * Telegram-only: create a new forum topic in a supergroup. Used by
-   * automation integrations that auto-spawn topics per session. Other
+   * integrations that auto-spawn topics per session. Other
    * platforms throw or omit the method.
    */
   createForumTopic?(chatId: string, name: string): Promise<{ threadId: number; name: string }>

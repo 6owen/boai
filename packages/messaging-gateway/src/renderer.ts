@@ -83,7 +83,7 @@ interface RenderState {
    * Progress/final_only: the most recent non-empty assistant text seen this
    * run, regardless of `isIntermediate`. Used as a fallback on `complete`
    * when the run never produced a clean non-intermediate final turn (common
-   * for automations whose last action is a tool call) so we still deliver
+   * for runs whose last action is a tool call) so we still deliver
    * the agent's message instead of stranding the user on "thinking…".
    */
   lastAssistantText: string

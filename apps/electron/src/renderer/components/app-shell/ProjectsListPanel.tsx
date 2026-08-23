@@ -3,7 +3,7 @@
  *
  * Workspace-scoped project list shown in the navigator slot when the Projects
  * sidebar item is active. Mirrors the lightweight skeleton of
- * SkillsListPanel / AutomationsListPanel — no multi-select / drag-drop in v1.
+ * SkillsListPanel — no multi-select / drag-drop in v1.
  */
 
 import * as React from 'react'

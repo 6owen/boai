@@ -671,7 +671,7 @@ function PairedSupergroupSection({
 }) {
   const { t } = useTranslation()
   // Default open when there are topics — gives users immediate visibility
-  // into where automations are routing. Empty paired supergroups stay
+  // into the sessions currently routed through the paired supergroup. Empty paired supergroups stay
   // collapsed since there's nothing interesting to show yet.
   const [isExpanded, setIsExpanded] = React.useState(topicBindings.length > 0)
 
@@ -721,7 +721,7 @@ function PairedSupergroupSection({
                   <span>
                     {t('settings.messaging.telegram.supergroup.noTopicsHint', {
                       defaultValue:
-                        'No topics bound yet — automations with `telegramTopic` will create them.',
+                        'No topics are currently bound to sessions.',
                     })}
                   </span>
                 </div>

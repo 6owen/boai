@@ -262,7 +262,7 @@ function UnpairedSupergroupRow() {
       <div className="min-w-0 flex-1">
         <div className="text-sm">Supergroup</div>
         <div className="mt-0.5 truncate text-xs text-foreground/50">
-          Not configured — pair to route automation topics into Telegram.
+          Not configured — pair to bind sessions to Telegram topics.
         </div>
       </div>
       <Button variant="outline" size="sm">
@@ -293,7 +293,7 @@ function PairedSupergroupSection({ topics }: { topics: TopicBinding[] }) {
           </div>
           <div className="mt-0.5 truncate text-xs text-foreground/50">
             {topics.length === 0
-              ? 'No topics bound yet — automations with `telegramTopic` will create them.'
+              ? 'No topics are currently bound to sessions.'
               : `${topics.length} ${topics.length === 1 ? 'topic' : 'topics'} bound`}
           </div>
         </div>
@@ -320,9 +320,7 @@ function PairedSupergroupSection({ topics }: { topics: TopicBinding[] }) {
                 <div className="flex items-start gap-3 px-4 py-3 text-xs text-foreground/50">
                   <IconSpacer />
                   <span>
-                    No bound topics. Set{' '}
-                    <code className="rounded bg-foreground/[0.06] px-1 py-0.5">telegramTopic</code>{' '}
-                    on an automation matcher to create one.
+                    No topics are currently bound to sessions.
                   </span>
                 </div>
               ) : (

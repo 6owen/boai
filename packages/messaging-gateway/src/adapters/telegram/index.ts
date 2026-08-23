@@ -778,7 +778,7 @@ export class TelegramAdapter implements PlatformAdapter {
    *
    * `iconColor` is intentionally omitted from this stub — grammY's typing
    * accepts only the six Telegram-defined palette ints. We'll plumb it
-   * properly in Phase B when the automation feature actually picks colours.
+   * properly when topic-specific colours are introduced.
    */
   async createForumTopic(
     chatId: string,

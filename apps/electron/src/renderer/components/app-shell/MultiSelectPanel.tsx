@@ -26,7 +26,7 @@ import type { SessionStatusId, SessionStatus } from '@/config/session-status-con
 import type { LabelConfig } from '@craft-agent/shared/labels'
 import { LabelMenuItems, StatusMenuItems } from './SessionMenuParts'
 
-type MultiSelectEntityType = 'automation' | 'session' | 'skill' | 'source'
+type MultiSelectEntityType = 'session' | 'skill' | 'source'
 
 export interface MultiSelectPanelProps {
   /** Number of selected items */

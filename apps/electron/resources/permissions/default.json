@@ -114,10 +114,6 @@
       "comment": "craft-agent skill read-only operations"
     },
     {
-      "pattern": "^craft-agent\\s+automation\\s+(list|get|validate|history|last-executed|test|lint)\\b",
-      "comment": "craft-agent automation read-only operations"
-    },
-    {
       "pattern": "^craft-agent\\s+permission\\s+(list|get|validate)\\b",
       "comment": "craft-agent permission read-only operations"
     },
@@ -130,11 +126,11 @@
       "comment": "craft-agent bare invocation (prints help)"
     },
     {
-      "pattern": "^craft-agent\\s+(label|source|skill|automation|permission|theme)\\s*$",
+      "pattern": "^craft-agent\\s+(label|source|skill|permission|theme)\\s*$",
       "comment": "craft-agent entity help"
     },
     {
-      "pattern": "^craft-agent\\s+(label|source|skill|automation|permission|theme)\\s+--help\\b",
+      "pattern": "^craft-agent\\s+(label|source|skill|permission|theme)\\s+--help\\b",
       "comment": "craft-agent entity help flags"
     },
     {

@@ -578,7 +578,7 @@ Multiple commands can be batched with semicolons (e.g., \`fill @e1 x; fill @e2 y
 
 **IMPORTANT:** All browser tool calls are **blocked** until you read \`${DOC_REFS.browserTools}\`. Always read this guide before your first browser tool call in a session.
 
-Use the browser as an **alternative/fallback** path when source setup is fragile, API coverage is limited, or the task is one-off and UI-driven. Keep sources as the default for repeatable integrations and automation.
+Use the browser as an **alternative/fallback** path when source setup is fragile, API coverage is limited, or the task is one-off and UI-driven. Keep sources as the default for repeatable integrations.
 
 **Start here:** Run \`browser_tool --help\` to see all available commands and usage examples. Use it whenever you're unsure what's available or how to call something.
 
@@ -982,18 +982,12 @@ If you get a "Labels rejected" error, the reason is per-entry — common causes 
 - Do NOT call \`list_sessions\` with a high limit just to scan all sessions — filter first.
 
 **Creating tasks:**
-\`create_task\` — creates a Craft Agents Task on the board: title, description (becomes the goal and the initial node prompt), optional acceptance criteria, sources, skills, llmConnection + model, working directory, and project. An explicit project overrides the invoking session's project; when omitted, the current project is inherited. The task is created in "todo" and is NOT run — starting it is the user's (or an automation's) decision. Use it when the user asks to capture or queue work as a task ("add a task for…", "put this on the board"); to execute work right now, stay in this session or use \`spawn_session\`. Returns the task slug + orchestrator session id, plus warnings for unknown source/skill slugs.
+\`create_task\` — creates a Craft Agents Task on the board: title, description (becomes the goal and the initial node prompt), optional acceptance criteria, sources, skills, llmConnection + model, working directory, and project. An explicit project overrides the invoking session's project; when omitted, the current project is inherited. The task is created in "todo" and is NOT run — starting it is the user's decision. Use it when the user asks to capture or queue work as a task ("add a task for…", "put this on the board"); to execute work right now, stay in this session or use \`spawn_session\`. Returns the task slug + orchestrator session id, plus warnings for unknown source/skill slugs.
 
 **Background task status:**
 \`list_background_tasks\` — enumerate the background agents/tasks tracked for a session (running, finished, or orphaned). This is the ONLY reliable way to answer "what is running / what's the status?" — it reads the main-process registry, which tracks tasks across turns. The SDK's in-subprocess task tools cannot see tasks from a prior turn's subprocess. If asked for status, call this and report exactly what it returns — never guess, and never claim "the app restarted." A \`status: 'orphaned'\` task was terminated when the turn that launched it ended.
 
 **Cross-session messaging acks:** \`send_agent_message\` reports whether the message was \`delivered\` (target idle, processing now) or \`queued\` (target mid-turn, will process after its current turn). A queued message has NOT been read yet — wait for a reply or query status before drawing conclusions.
-
-**Automation integration:**
-Setting labels or status triggers the corresponding automation events (\`LabelAdd\`/\`LabelRemove\`, \`SessionStatusChange\`). This enables hand-off workflows:
-1. Scheduled automation creates a session
-2. Agent completes work
-3. Agent calls \`set_session_status\` with "needs-review" → triggers downstream webhook/notification (closing the task into "done"/"cancelled" remains the user's call)
 
 ## Diagrams and Visualization
 

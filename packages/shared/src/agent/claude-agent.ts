@@ -6,6 +6,24 @@ type ContentBlockParam =
   | { type: 'text'; text: string }
   | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } }
   | { type: 'document'; source: { type: 'base64'; media_type: string; data: string } };
+
+/** Minimal structural type for the SDK hook entries assembled below. */
+interface InternalHookInput {
+  hook_event_name: string;
+  tool_name?: string;
+  tool_input?: Record<string, unknown>;
+  tool_use_id?: string;
+}
+
+interface InternalHookCallbackMatcher {
+  matcher?: string;
+  timeout?: number;
+  hooks: Array<(
+    input: InternalHookInput,
+    toolUseId: string,
+    options: { signal?: AbortSignal },
+  ) => Promise<{ continue: boolean; reason?: string }>>;
+}
 import { z } from 'zod';
 import { getSystemPrompt } from '../prompts/system.ts';
 import { BaseAgent, type MiniAgentConfig, MINI_AGENT_TOOLS, MINI_AGENT_MCP_KEYS } from './base-agent.ts';
@@ -45,7 +63,6 @@ import {
   cleanupSessionScopedTools,
   type AuthRequest,
 } from './session-scoped-tools.ts';
-import { type SdkAutomationCallbackMatcher } from '../automations/index.ts';
 import {
   getPermissionMode,
   getPermissionModeDiagnostics,
@@ -1251,7 +1268,7 @@ export class ClaudeAgent extends BaseAgent {
         allowDangerouslySkipPermissions: true,
         // Internal hooks for permissions, lifecycle events, and logging.
         hooks: (() => {
-          const internalHooks: Record<string, SdkAutomationCallbackMatcher[]> = {
+          const internalHooks: Record<string, InternalHookCallbackMatcher[]> = {
           PreToolUse: [{
             hooks: [async (_hookInput) => {
               // Only handle PreToolUse events
