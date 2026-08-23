@@ -8,9 +8,8 @@ import { EntityPanel } from '@/components/ui/entity-panel'
 import { EntityListEmptyScreen } from '@/components/ui/entity-list-empty'
 import { skillSelection } from '@/hooks/useEntitySelection'
 import { SkillMenu } from './SkillMenu'
-import { SendResourceToWorkspaceDialog } from './SendResourceToWorkspaceDialog'
 import { EditPopover, getEditConfig } from '@/components/ui/EditPopover'
-import { useActiveWorkspace, useAppShellContext } from '@/context/AppShellContext'
+import { useActiveWorkspace } from '@/context/AppShellContext'
 import { getFileManagerName } from '@/lib/platform'
 import { cn } from '@/lib/utils'
 import type { LoadedSkill } from '../../../shared/types'
@@ -51,13 +50,6 @@ export function SkillsListPanel({
   const { t } = useTranslation()
   const activeWorkspace = useActiveWorkspace()
   const canRevealLocally = !activeWorkspace?.remoteServer
-  const { workspaces, activeWorkspaceId } = useAppShellContext()
-  const hasOtherWorkspaces = workspaces.length > 1
-
-  // Send to Workspace dialog state
-  const [sendDialogOpen, setSendDialogOpen] = React.useState(false)
-  const [sendResourceSlug, setSendResourceSlug] = React.useState<string | null>(null)
-  const [sendResourceLabel, setSendResourceLabel] = React.useState('')
   const normalizedSearch = searchQuery.trim().toLowerCase()
   const filteredSkills = React.useMemo(() => {
     if (!normalizedSearch) return skills
@@ -95,8 +87,7 @@ export function SkillsListPanel({
   }, [t, workspaceId, workingDirectory])
 
   return (
-    <>
-      <div className={cn('flex min-h-0 flex-1 flex-col', className)}>
+    <div className={cn('flex min-h-0 flex-1 flex-col', className)}>
         <SessionSearchHeader
           searchQuery={searchQuery}
           onSearchChange={onSearchChange}
@@ -201,30 +192,10 @@ export function SkillsListPanel({
                 onToggleFavorite={!isSelfAuthoredSkill(skill) && onToggleFavorite
                   ? () => onToggleFavorite(skill)
                   : undefined}
-                onSendToWorkspace={hasOtherWorkspaces && skill.source === 'workspace' ? () => {
-                  setSendResourceSlug(skill.slug)
-                  setSendResourceLabel(skill.metadata.name)
-                  setSendDialogOpen(true)
-                } : undefined}
               />
             ),
           })}
         />
-      </div>
-
-    {/* Send to Workspace dialog */}
-    {sendResourceSlug && (
-      <SendResourceToWorkspaceDialog
-        open={sendDialogOpen}
-        onOpenChange={setSendDialogOpen}
-        resourceType="skill"
-        resourceIds={[sendResourceSlug]}
-        resourceLabel={sendResourceLabel}
-        workspaces={workspaces}
-        activeWorkspaceId={activeWorkspaceId}
-      />
-    )}
-
-    </>
+    </div>
   )
 }

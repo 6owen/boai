@@ -13,7 +13,6 @@ import type { AgentEvent, Effect } from './event-processor'
 import { AppShell } from '@/components/app-shell/AppShell'
 import type { AppShellContextType } from '@/context/AppShellContext'
 import { OnboardingWizard, ReauthScreen } from '@/components/onboarding'
-import { WorkspacePicker } from '@/components/workspace'
 import { ResetConfirmationDialog } from '@/components/ResetConfirmationDialog'
 import { SplashScreen } from '@/components/SplashScreen'
 import { TooltipProvider } from '@craft-agent/ui'
@@ -85,7 +84,7 @@ import { rendererLog } from '@/lib/logger'
 import { ActionRegistryProvider } from '@/actions'
 import { toast } from 'sonner'
 
-type AppState = 'loading' | 'onboarding' | 'reauth' | 'workspace-picker' | 'ready'
+type AppState = 'loading' | 'onboarding' | 'reauth' | 'ready'
 
 /** Type for the Jotai store returned by useStore() */
 type JotaiStore = ReturnType<typeof getDefaultStore>
@@ -718,13 +717,19 @@ export default function App() {
         setSetupNeeds(needs)
 
         if (needs.isFullyConfigured) {
-          // If no workspace is selected (thin client without CRAFT_WORKSPACE_ID),
-          // show workspace picker before entering the main app
           if (!wsId) {
-            setAppState('workspace-picker')
-          } else {
-            setAppState('ready')
+            // Workspace is an internal storage boundary in BoAI, not a product
+            // concept. Thin clients and recovery windows therefore select the
+            // first server workspace automatically, creating the implicit
+            // default only when the server has none.
+            const serverWorkspaces = await window.electronAPI.getServerWorkspaces()
+            const defaultWorkspace = serverWorkspaces[0]
+              ?? await window.electronAPI.createServerWorkspace('BoAI')
+
+            await window.electronAPI.switchWorkspace(defaultWorkspace.id)
+            setWindowWorkspaceId(defaultWorkspace.id)
           }
+          setAppState('ready')
         } else {
           // New user or needs setup - show onboarding
           setAppState('onboarding')
@@ -737,7 +742,7 @@ export default function App() {
     }
 
     initialize()
-  }, [])
+  }, [setWindowWorkspaceId])
 
   // Session selection state
   const [sessionSelection, setSession] = useSession()
@@ -2011,24 +2016,6 @@ export default function App() {
             onUseGitBashPath={onboarding.handleUseGitBashPath}
             onRecheckGitBash={onboarding.handleRecheckGitBash}
             onClearError={onboarding.handleClearError}
-          />
-        </ModalProvider>
-      </DismissibleLayerProvider>
-    )
-  }
-
-  // Workspace picker — thin client with no workspace selected
-  if (appState === 'workspace-picker') {
-    return (
-      <DismissibleLayerProvider>
-        <ModalProvider>
-          <WindowCloseHandler />
-          <WorkspacePicker
-            onSelectWorkspace={async (id) => {
-              await window.electronAPI.switchWorkspace(id)
-              setWindowWorkspaceId(id)
-              setAppState('ready')
-            }}
           />
         </ModalProvider>
       </DismissibleLayerProvider>

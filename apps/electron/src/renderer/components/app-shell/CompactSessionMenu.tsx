@@ -10,7 +10,7 @@
  * Status submenu in particular falls off the right edge.
  *
  * Pattern matches the other compact pickers (`CompactSessionListFilter`,
- * `CompactWorkspaceSwitcher`, `CompactPermissionModeSelector`) and also
+ * `CompactPermissionModeSelector`) and also
  * follows the iOS-style drill-in behaviour established by `MobileAppMenu`.
  *
  * Side-effect handlers (share / refresh title / copy path / share submenu /
@@ -42,7 +42,6 @@ import {
   MessageSquare,
   Pencil,
   RefreshCw,
-  Send,
   Trash2,
 } from 'lucide-react'
 
@@ -76,7 +75,6 @@ export interface CompactSessionMenuProps {
   item: SessionMeta
   sessionStatuses: SessionStatus[]
   labels?: LabelConfig[]
-  hasTransferTargets?: boolean
 
   // Callbacks — same as SessionMenu
   onLabelsChange?: (labels: string[]) => void
@@ -88,7 +86,6 @@ export interface CompactSessionMenuProps {
   onMarkUnread: () => void
   onSessionStatusChange: (state: SessionStatusId) => void
   onOpenInNewWindow: () => void
-  onSendToWorkspace?: () => void
   onDelete: () => void
 
   // ---------------------------------------------------------------------------
@@ -112,11 +109,9 @@ export function CompactSessionMenu({
   badge,
   isRegeneratingTitle,
   item,
-  hasTransferTargets,
   onRename,
   onMarkUnread,
   onOpenInNewWindow,
-  onSendToWorkspace,
   onDelete,
   open: controlledOpen,
   onOpenChange,
@@ -257,10 +252,8 @@ export function CompactSessionMenu({
               sharedUrl={sharedUrl}
               hasMessages={_hasMessages}
               hasUnread={_hasUnread}
-              hasTransferTargets={hasTransferTargets}
               onShare={closeAfter(actions.share)}
               onOpenShareSub={() => setView('share')}
-              onSendToWorkspace={closeAfter(onSendToWorkspace)}
               onOpenMessagingSub={() => setView('messaging')}
               onMarkUnread={closeAfter(onMarkUnread)}
               onRename={closeAfter(onRename)}
@@ -299,10 +292,8 @@ interface RootPaneProps {
   sharedUrl?: string
   hasMessages: boolean
   hasUnread: boolean
-  hasTransferTargets?: boolean
   onShare?: () => void
   onOpenShareSub: () => void
-  onSendToWorkspace?: () => void
   onOpenMessagingSub: () => void
   onMarkUnread?: () => void
   onRename?: () => void
@@ -318,10 +309,8 @@ function RootPane({
   sharedUrl,
   hasMessages,
   hasUnread,
-  hasTransferTargets,
   onShare,
   onOpenShareSub,
-  onSendToWorkspace,
   onOpenMessagingSub,
   onMarkUnread,
   onRename,
@@ -346,10 +335,6 @@ function RootPane({
           chevron
           onTap={onOpenShareSub}
         />
-      )}
-
-      {hasTransferTargets && onSendToWorkspace && (
-        <Row icon={<Send className="h-4 w-4" />} label={t('sessionMenu.sendToWorkspace')} onTap={onSendToWorkspace} />
       )}
 
       <Row

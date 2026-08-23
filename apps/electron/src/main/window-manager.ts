@@ -4,7 +4,6 @@ import { join, resolve, sep } from 'path'
 import { existsSync } from 'fs'
 import { release } from 'os'
 import { fileURLToPath } from 'url'
-import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
 import { classifyExternalUrl, formatBlockedUrlError } from '@craft-agent/shared/utils/url-safety'
 import { RPC_CHANNELS, type WindowCloseRequestSource } from '../shared/types'
 import type { SavedWindow } from './window-state'
@@ -161,9 +160,8 @@ export class WindowManager {
 
   /**
    * Apply the window-title policy across all managed windows:
-   *   1 window  → app name ("Craft Agents") on the lone window
-   *   ≥2 windows → workspace name on each window, app-name fallback when the
-   *                workspace can't be resolved (e.g. onboarding window).
+   * every window uses the app name. Workspace remains an internal storage
+   * boundary and must not leak into the operating-system window chrome.
    *
    * Called after createWindow() registers a new window and after the closed
    * handler removes one, so titles always reflect the current window count.
@@ -172,19 +170,9 @@ export class WindowManager {
    */
   private refreshWindowTitles(): void {
     const defaultTitle = app.getName()
-    const showWorkspaceName = this.windows.size > 1
-    for (const { window, workspaceId } of this.windows.values()) {
+    for (const { window } of this.windows.values()) {
       if (window.isDestroyed()) continue
-      let title = defaultTitle
-      if (showWorkspaceName && workspaceId) {
-        try {
-          const ws = getWorkspaceByNameOrId(workspaceId)
-          if (ws?.name) title = ws.name
-        } catch (err) {
-          windowLog.warn('refreshWindowTitles: workspace lookup failed', { workspaceId, err })
-        }
-      }
-      window.setTitle(title)
+      window.setTitle(defaultTitle)
     }
   }
 

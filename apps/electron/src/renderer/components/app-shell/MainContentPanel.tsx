@@ -16,7 +16,7 @@
  */
 
 import * as React from 'react'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo } from 'react'
 import { useAtomValue } from 'jotai'
 import { useTranslation } from 'react-i18next'
 import { Panel } from './Panel'
@@ -41,7 +41,6 @@ import SkillInfoPage from '@/pages/SkillInfoPage'
 import { getSettingsPageComponent } from '@/pages/settings/settings-pages'
 import ProjectInfoPage from '@/pages/ProjectInfoPage'
 import { KanbanBoardContainer } from './kanban/KanbanBoardContainer'
-import { SendResourceToWorkspaceDialog, type SendResourceType } from './SendResourceToWorkspaceDialog'
 
 export interface MainContentPanelProps {
   /** Whether both sidebar and navigator are hidden (focus mode / CMD+.) */
@@ -66,7 +65,6 @@ export function MainContentPanel({
   const navState = navStateOverride ?? globalNavState
   const {
     activeWorkspaceId,
-    workspaces,
     onSessionStatusChange,
     onArchiveSession,
     onSessionLabelsChange,
@@ -85,29 +83,12 @@ export function MainContentPanel({
   // Source multi-select state
   const isSourceMultiSelectActive = sourceSelection.useIsMultiSelectActive()
   const sourceSelectionCount = sourceSelection.useSelectionCount()
-  const selectedSourceIds = sourceSelection.useSelectedIds()
   const { clearMultiSelect: clearSourceSelection } = sourceSelection.useSelection()
 
   // Skill multi-select state
   const isSkillMultiSelectActive = skillSelection.useIsMultiSelectActive()
   const skillSelectionCount = skillSelection.useSelectionCount()
-  const selectedSkillIds = skillSelection.useSelectedIds()
   const { clearMultiSelect: clearSkillSelection } = skillSelection.useSelection()
-
-  // Send to Workspace dialog state (shared across resource types)
-  const [sendDialogOpen, setSendDialogOpen] = useState(false)
-  const [sendResourceType, setSendResourceType] = useState<SendResourceType>('source')
-  const [sendResourceIds, setSendResourceIds] = useState<string[]>([])
-  const [sendResourceLabel, setSendResourceLabel] = useState('')
-  const hasOtherWorkspaces = workspaces.length > 1
-
-  const openSendDialog = useCallback((type: SendResourceType, ids: Set<string>) => {
-    const count = ids.size
-    setSendResourceType(type)
-    setSendResourceIds([...ids])
-    setSendResourceLabel(`${count} ${type}${count !== 1 ? 's' : ''}`)
-    setSendDialogOpen(true)
-  }, [])
 
   const selectedMetas = useMemo(() => {
     const metas: SessionMeta[] = []
@@ -171,19 +152,9 @@ export function MainContentPanel({
   }, [selectedMetas, onSessionLabelsChange])
 
   // Wrap content with StoplightProvider so PanelHeaders auto-compensate in focused mode.
-  // Also renders the Send to Workspace dialog (portal-based, so it overlays regardless of position).
   const wrapWithStoplight = (content: React.ReactNode) => (
     <StoplightProvider value={isSidebarAndNavigatorHidden}>
       {content}
-      <SendResourceToWorkspaceDialog
-        open={sendDialogOpen}
-        onOpenChange={setSendDialogOpen}
-        resourceType={sendResourceType}
-        resourceIds={sendResourceIds}
-        resourceLabel={sendResourceLabel}
-        workspaces={workspaces}
-        activeWorkspaceId={activeWorkspaceId || ''}
-      />
     </StoplightProvider>
   )
 
@@ -209,7 +180,6 @@ export function MainContentPanel({
           <MultiSelectPanel
             count={sourceSelectionCount}
             entityType="source"
-            onSendToWorkspace={hasOtherWorkspaces ? () => openSendDialog('source', selectedSourceIds) : undefined}
             onClearSelection={clearSourceSelection}
           />
         </Panel>
@@ -243,7 +213,6 @@ export function MainContentPanel({
           <MultiSelectPanel
             count={skillSelectionCount}
             entityType="skill"
-            onSendToWorkspace={hasOtherWorkspaces ? () => openSendDialog('skill', selectedSkillIds) : undefined}
             onClearSelection={clearSkillSelection}
           />
         </Panel>

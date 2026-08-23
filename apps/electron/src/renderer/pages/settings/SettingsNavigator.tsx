@@ -1,8 +1,8 @@
 /**
  * SettingsNavigator
  *
- * Navigator panel content for settings. Displays a list of settings sections
- * (App, Workspace, Shortcuts, Preferences) that can be selected to show in the details panel.
+ * Navigator panel content for settings. Displays the user-facing settings
+ * sections from the shared menu schema.
  *
  * Styling follows SessionList/SourcesListPanel patterns for visual consistency.
  */

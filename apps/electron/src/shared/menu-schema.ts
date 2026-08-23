@@ -13,7 +13,6 @@
  */
 
 import { RPC_CHANNELS } from './types'
-import { FEATURE_FLAGS } from '@craft-agent/shared/feature-flags'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -393,11 +392,13 @@ const SETTINGS_ICONS: Record<SettingsSubpage, string> = {
 }
 
 /**
- * All settings pages - derived from settings-registry (single source of truth)
- * Order is determined by SETTINGS_PAGES in settings-registry.ts
+ * User-facing settings pages. Workspace and embedded-server configuration
+ * remain registered for backwards-compatible deep links and internal use, but
+ * BoAI intentionally presents a single implicit workspace and does not expose
+ * either surface in normal navigation.
  */
 export const SETTINGS_ITEMS: SettingsMenuItem[] = SETTINGS_PAGES
-  .filter(page => page.id !== 'server' || FEATURE_FLAGS.embeddedServer)
+  .filter(page => page.id !== 'workspace' && page.id !== 'server')
   .map(page => ({
     id: page.id,
     labelKey: page.labelKey,

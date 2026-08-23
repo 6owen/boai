@@ -26,8 +26,9 @@ export interface SettingsPageDefinition {
 }
 
 /**
- * The canonical list of all settings pages.
- * Order here determines display order in the settings navigator.
+ * The canonical list of all supported settings pages. Some pages may remain
+ * registered for backwards-compatible deep links without appearing in the
+ * user-facing settings navigator.
  *
  * ADD NEW PAGES HERE - everything else derives from this list.
  *

@@ -1,8 +1,8 @@
 /**
  * AppearanceSettingsPage
  *
- * Visual customization settings: theme mode, color theme, font,
- * workspace-specific theme overrides, and CLI tool icon mappings.
+ * Visual customization settings: theme mode, color theme, font, and CLI tool
+ * icon mappings.
  */
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
@@ -30,10 +30,7 @@ import {
 } from '@/components/settings'
 import { useAtom } from 'jotai'
 import * as storage from '@/lib/local-storage'
-import { useWorkspaceIcons } from '@/hooks/useWorkspaceIcon'
-import { WorkspaceAvatar } from '@/components/ui/workspace-avatar'
 import { ColorPicker } from '@/components/ui/color-picker'
-import { workspaceAvatarColorsAtom } from '@/atoms/workspace-avatar-colors'
 import { kanbanColumnColorsAtom, kanbanColumnStatusAtom, kanbanLivePulseAtom } from '@/atoms/kanban'
 import { showBackgroundFinishedChipAtom } from '@/atoms/background-finished'
 import { KANBAN_COLUMNS } from '@/components/app-shell/kanban/status-column'
@@ -116,21 +113,13 @@ export default function AppearanceSettingsPage() {
     setColorTheme,
     font,
     setFont,
-    activeWorkspaceId,
-    setWorkspaceColorTheme,
     themeLoadError,
     themeResolvedFrom,
   } = useTheme()
-  const { workspaces, sessionStatuses } = useAppShellContext()
-
-  // Fetch workspace icons as data URLs (file:// URLs don't work in renderer)
-  const workspaceIconMap = useWorkspaceIcons(workspaces)
+  const { sessionStatuses } = useAppShellContext()
 
   // Preset themes for the color theme dropdown
   const [presetThemes, setPresetThemes] = useState<PresetTheme[]>([])
-
-  // Per-workspace theme overrides (workspaceId -> themeId or undefined)
-  const [workspaceThemes, setWorkspaceThemes] = useState<Record<string, string | undefined>>({})
 
   // Tool icon mappings loaded from main process
   const [toolIcons, setToolIcons] = useState<ToolIconMapping[]>([])
@@ -152,19 +141,6 @@ export default function AppearanceSettingsPage() {
   const handleProjectColorTreatmentChange = useCallback((value: string) => {
     setProjectColorTreatment(value as ProjectColorTreatment)
   }, [])
-
-  // Per-workspace avatar color overrides (persisted in localStorage)
-  const [workspaceAvatarColors, setWorkspaceAvatarColors] = useAtom(workspaceAvatarColorsAtom)
-  const setWorkspaceAvatarColor = useCallback((workspaceId: string, hex: string) => {
-    setWorkspaceAvatarColors(prev => ({ ...prev, [workspaceId]: hex }))
-  }, [setWorkspaceAvatarColors])
-  const clearWorkspaceAvatarColor = useCallback((workspaceId: string) => {
-    setWorkspaceAvatarColors(prev => {
-      const next = { ...prev }
-      delete next[workspaceId]
-      return next
-    })
-  }, [setWorkspaceAvatarColors])
 
   // Kanban board appearance (persisted in localStorage via atomWithStorage).
   const [kanbanColumnColors, setKanbanColumnColors] = useAtom(kanbanColumnColorsAtom)
@@ -231,20 +207,6 @@ export default function AppearanceSettingsPage() {
     loadThemes()
   }, [])
 
-  // Load workspace themes on mount
-  useEffect(() => {
-    const loadWorkspaceThemes = async () => {
-      if (!window.electronAPI?.getAllWorkspaceThemes) return
-      try {
-        const themes = await window.electronAPI.getAllWorkspaceThemes()
-        setWorkspaceThemes(themes)
-      } catch (error) {
-        console.error('Failed to load workspace themes:', error)
-      }
-    }
-    loadWorkspaceThemes()
-  }, [])
-
   // Load tool icon mappings and resolve the config file path on mount
   useEffect(() => {
     const load = async () => {
@@ -263,30 +225,6 @@ export default function AppearanceSettingsPage() {
     load()
   }, [])
 
-  // Handler for workspace theme change
-  // Uses ThemeContext for the active workspace (immediate visual update) and IPC for other workspaces
-  const handleWorkspaceThemeChange = useCallback(
-    async (workspaceId: string, value: string) => {
-      // 'default' means inherit from app default (null in storage)
-      const themeId = value === 'default' ? null : value
-
-      // If changing the current workspace, use context for immediate update
-      if (workspaceId === activeWorkspaceId) {
-        setWorkspaceColorTheme(themeId)
-      } else {
-        // For other workspaces, just persist via IPC
-        await window.electronAPI?.setWorkspaceColorTheme?.(workspaceId, themeId)
-      }
-
-      // Update local state for UI
-      setWorkspaceThemes(prev => ({
-        ...prev,
-        [workspaceId]: themeId ?? undefined
-      }))
-    },
-    [activeWorkspaceId, setWorkspaceColorTheme]
-  )
-
   // Theme options for dropdowns
   const themeOptions = useMemo(() => [
     { value: 'default', label: t("settings.appearance.useDefault") },
@@ -297,13 +235,6 @@ export default function AppearanceSettingsPage() {
         label: t.theme.name || t.id,
       })),
   ], [presetThemes, t])
-
-  // Get current app default theme label for display (null when using 'default' to avoid redundant "Use Default (Default)")
-  const appDefaultLabel = useMemo(() => {
-    if (colorTheme === 'default') return null
-    const preset = presetThemes.find(t => t.id === colorTheme)
-    return preset?.theme.name || colorTheme
-  }, [colorTheme, presetThemes])
 
   return (
     <div className="h-full flex flex-col">
@@ -371,67 +302,6 @@ export default function AppearanceSettingsPage() {
                   </p>
                 )}
               </SettingsSection>
-
-              {/* Workspace Themes */}
-              {workspaces.length > 0 && (
-                <SettingsSection
-                  title={t("settings.appearance.workspaceThemes")}
-                  description={t("settings.appearance.workspaceThemesDesc")}
-                >
-                  <SettingsCard>
-                    {workspaces.map((workspace) => {
-                      const wsTheme = workspaceThemes[workspace.id]
-                      const hasCustomTheme = wsTheme !== undefined
-                      return (
-                        <SettingsRow
-                          key={workspace.id}
-                          label={
-                            <div className="flex items-center gap-2">
-                              <ColorPicker
-                                value={workspaceAvatarColors[workspace.id] || ''}
-                                onChange={(hex) => setWorkspaceAvatarColor(workspace.id, hex)}
-                                onClear={() => clearWorkspaceAvatarColor(workspace.id)}
-                                clearLabel={t("settings.appearance.workspaceAvatarReset")}
-                                presets={PROJECT_COLOR_PALETTE}
-                                ariaLabel={t("settings.appearance.workspaceAvatarColor")}
-                                trigger={
-                                  <button
-                                    type="button"
-                                    className="cursor-pointer rounded hover:ring-2 hover:ring-foreground/20 transition-shadow"
-                                    aria-label={t("settings.appearance.workspaceAvatarColor")}
-                                  >
-                                    <WorkspaceAvatar
-                                      workspaceId={workspace.id}
-                                      workspaceName={workspace.name}
-                                      src={workspaceIconMap.get(workspace.id)}
-                                      className="w-4 h-4 rounded"
-                                    />
-                                  </button>
-                                }
-                              />
-                              <span>{workspace.name}</span>
-                            </div>
-                          }
-                        >
-                          <SettingsMenuSelect
-                            value={hasCustomTheme ? wsTheme : 'default'}
-                            onValueChange={(value) => handleWorkspaceThemeChange(workspace.id, value)}
-                            options={[
-                              { value: 'default', label: appDefaultLabel ? t("settings.appearance.useDefaultWithTheme", { theme: appDefaultLabel }) : t("settings.appearance.useDefault") },
-                              ...presetThemes
-                                .filter(t => t.id !== 'default')
-                                .map(t => ({
-                                  value: t.id,
-                                  label: t.theme.name || t.id,
-                                })),
-                            ]}
-                          />
-                        </SettingsRow>
-                      )
-                    })}
-                  </SettingsCard>
-                </SettingsSection>
-              )}
 
               {/* Interface */}
               <SettingsSection title={t("settings.appearance.interface")}>

@@ -193,7 +193,6 @@ function AppShellContent({
     activeWorkspaceId,
     sessionOptions,
     onSelectWorkspace,
-    onRefreshWorkspaces,
     onDeleteSession,
     onFlagSession,
     onUnflagSession,
@@ -796,9 +795,6 @@ function AppShellContent({
     return (pendingPermissions.get(sessionId)?.length ?? 0) > 0
   }, [pendingPermissions])
 
-  // Workspace-level unread indicators (needed for workspace selectors across all workspaces)
-  const [workspaceUnreadMap, setWorkspaceUnreadMap] = useState<Record<string, boolean>>({})
-
   // Reload skills when active session's workingDirectory changes (for project-level skills)
   // Skills are loaded from: global (~/.agents/skills/), workspace, and project ({workingDirectory}/.agents/skills/)
   const activeSessionWorkingDirectory = session.selected
@@ -822,51 +818,6 @@ function AppShellContent({
     const metas = Array.from(sessionMetaMap.values())
     return selectVisibleWorkspaceSessions(metas, activeWorkspaceId, remoteWorkspaceId)
   }, [sessionMetaMap, activeWorkspaceId, remoteWorkspaceId])
-
-  // Active sessions exclude archived - use this for all counts and filters except archived view
-  const activeSessionMetas = useMemo(() => {
-    return workspaceSessionMetas.filter(s => !s.isArchived)
-  }, [workspaceSessionMetas])
-
-  const refreshWorkspaceUnreadMap = useCallback(async () => {
-    try {
-      const summary = await window.electronAPI.getUnreadSummary()
-      const next: Record<string, boolean> = {}
-
-      for (const workspace of workspaces) {
-        next[workspace.id] = !!summary.hasUnreadByWorkspace[workspace.id]
-      }
-
-      setWorkspaceUnreadMap(next)
-    } catch (error) {
-      console.error('[AppShell] Failed to refresh workspace unread indicators:', error)
-    }
-  }, [workspaces])
-
-  // Initial + workspace-list refresh
-  useEffect(() => {
-    void refreshWorkspaceUnreadMap()
-  }, [refreshWorkspaceUnreadMap])
-
-  // Keep active workspace unread indicator in sync with live metadata updates
-  useEffect(() => {
-    if (!activeWorkspaceId) return
-    const activeHasUnread = activeSessionMetas.some((session) => !!session.hasUnread)
-    setWorkspaceUnreadMap((prev) => ({ ...prev, [activeWorkspaceId]: activeHasUnread }))
-  }, [activeWorkspaceId, activeSessionMetas])
-
-  // Keep cross-workspace indicators in sync with global unread updates from main process
-  useEffect(() => {
-    const cleanup = window.electronAPI.onUnreadSummaryChanged((summary) => {
-      const next: Record<string, boolean> = {}
-      for (const workspace of workspaces) {
-        next[workspace.id] = !!summary.hasUnreadByWorkspace[workspace.id]
-      }
-      setWorkspaceUnreadMap(next)
-    })
-
-    return cleanup
-  }, [workspaces])
 
   // Count sources by type for the Sources dropdown subcategories
   const sourceTypeCounts = useMemo(() => {
@@ -1278,12 +1229,6 @@ function AppShellContent({
     <AppShellProvider value={appShellContextValue}>
         {/* === TOP BAR === */}
         <TopBar
-          workspaces={workspaces}
-          activeWorkspaceId={activeWorkspaceId}
-          onSelectWorkspace={onSelectWorkspace}
-          workspaceUnreadMap={workspaceUnreadMap}
-          onWorkspaceCreated={() => onRefreshWorkspaces?.()}
-          onWorkspaceRemoved={() => onRefreshWorkspaces?.()}
           activeSessionId={effectiveSessionId}
           onNewChat={() => handleNewChat()}
           onNewWindow={() => window.electronAPI.menuNewWindow()}

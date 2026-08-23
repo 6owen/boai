@@ -6,7 +6,7 @@
  */
 
 import * as React from 'react'
-import { Archive, Tag, CheckCircle2, Send } from 'lucide-react'
+import { Archive, Tag, CheckCircle2 } from 'lucide-react'
 import { useTranslation, Trans } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { Kbd, KbdGroup } from '@/components/ui/kbd'
@@ -47,8 +47,6 @@ export interface MultiSelectPanelProps {
   onToggleLabel?: (labelId: string) => void
   /** Callback when archiving all selected */
   onArchive?: () => void
-  /** Callback when sending selected to another workspace */
-  onSendToWorkspace?: () => void
   /** Callback when clearing the selection */
   onClearSelection?: () => void
   /** Optional className for the container */
@@ -65,7 +63,6 @@ export function MultiSelectPanel({
   appliedLabelIds = new Set(),
   onToggleLabel,
   onArchive,
-  onSendToWorkspace,
   onClearSelection,
   className,
 }: MultiSelectPanelProps) {
@@ -171,17 +168,6 @@ export function MultiSelectPanel({
               />
             </StyledDropdownMenuContent>
           </DropdownMenu>
-        )}
-        {onSendToWorkspace && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onSendToWorkspace}
-            className="gap-2 bg-background shadow-minimal hover:bg-foreground/[0.03]"
-          >
-            <Send className="w-4 h-4" />
-            {t('sessionMenu.sendToWorkspace')}
-          </Button>
         )}
         {onArchive && (
           <Button

@@ -1,7 +1,7 @@
 /**
  * TopBar - Persistent top bar above all panels (Slack-style)
  *
- * Layout: [Sidebar] [Menu] [Back] [Forward] [Workspace selector] ... [Browser strip] [+] [Help]
+ * Layout: [Sidebar] [Menu] [Back] [Forward] ... [Browser strip] [+] [Help]
  *
  * Fixed at top of window, 48px tall.
  * macOS: offset left to avoid stoplight controls.
@@ -26,9 +26,6 @@ import type { SettingsMenuItem } from "../../../shared/menu-schema"
 import { SquarePenRounded } from "../icons/SquarePenRounded"
 import { useEffect, useRef, useState } from "react"
 import { BrowserTabStrip } from "../browser/BrowserTabStrip"
-import type { Workspace } from "../../../shared/types"
-import { WorkspaceSwitcher } from "./WorkspaceSwitcher"
-import { CompactWorkspaceSwitcher } from "./CompactWorkspaceSwitcher"
 import { getDocUrl } from "@craft-agent/shared/docs/doc-links"
 import { AppMenu } from "../AppMenu"
 
@@ -36,12 +33,6 @@ const RIGHT_SLOT_FULL_BADGES_THRESHOLD = 420
 const RIGHT_SLOT_TWO_BADGES_THRESHOLD = 300
 
 interface TopBarProps {
-  workspaces: Workspace[]
-  activeWorkspaceId: string | null
-  onSelectWorkspace: (workspaceId: string, openInNewWindow?: boolean) => void | Promise<void>
-  workspaceUnreadMap?: Record<string, boolean>
-  onWorkspaceCreated?: (workspace: Workspace) => void
-  onWorkspaceRemoved?: () => void
   activeSessionId?: string | null
   onNewChat: () => void
   onNewWindow?: () => void
@@ -62,12 +53,6 @@ interface TopBarProps {
 }
 
 export function TopBar({
-  workspaces,
-  activeWorkspaceId,
-  onSelectWorkspace,
-  workspaceUnreadMap,
-  onWorkspaceCreated,
-  onWorkspaceRemoved,
   activeSessionId,
   onNewChat,
   onNewWindow,
@@ -122,7 +107,7 @@ export function TopBar({
       if (frame) cancelAnimationFrame(frame)
       observer.disconnect()
     }
-  }, [workspaces.length, activeWorkspaceId])
+  }, [])
 
   // Stoplight padding clears macOS traffic-light controls, which only exist
   // in the Electron desktop window. The webui runs in a regular browser tab
@@ -136,10 +121,8 @@ export function TopBar({
       style={{ height: 'var(--topbar-height)' }}
     >
       <div className="flex h-full w-full items-center justify-between gap-2">
-      {/* === LEFT: Sidebar + Menu + Navigation + Workspace === */}
+      {/* === LEFT: Sidebar + Menu + Navigation === */}
       {/* Keep this container draggable. Only individual interactive controls should use titlebar-no-drag. */}
-      {/* In compact mode the right slot is hidden, so we add right padding here
-          so the workspace pill doesn't run flush against the viewport edge. */}
       <div
         className="pointer-events-auto flex min-w-0 flex-1 items-center gap-0.5"
         style={{ paddingLeft: menuLeftPadding, paddingRight: isCompact ? 12 : 0 }}
@@ -168,12 +151,10 @@ export function TopBar({
         />
         </div>
 
-        {/* Back / Forward / Workspace selector (moved from center).
-            In compact mode the back/forward buttons are dropped — the iOS-style
-            drill-in chevron in PanelHeader plus the browser's native back gesture
-            cover that affordance, and the freed width lets the workspace pill
-            actually fit on phone-width viewports. */}
-        <div className={cn("ml-1 flex min-w-0 items-center gap-1", isCompact ? "flex-1" : "w-[clamp(220px,42vw,640px)]")}>
+        {/* Back / Forward are omitted in compact mode, where the panel-header
+            chevron and native back gesture cover navigation. Workspace remains
+            an internal scope and is intentionally not exposed in the top bar. */}
+        <div className={cn("ml-1 flex min-w-0 items-center gap-1", isCompact && "flex-1")}>
           {!isCompact && (
             <>
               <Tooltip>
@@ -195,29 +176,6 @@ export function TopBar({
               </Tooltip>
             </>
           )}
-
-          <div className="min-w-0 flex-1">
-            {isCompact ? (
-              <CompactWorkspaceSwitcher
-                workspaces={workspaces}
-                activeWorkspaceId={activeWorkspaceId}
-                onSelect={onSelectWorkspace}
-                onWorkspaceCreated={onWorkspaceCreated}
-                onWorkspaceRemoved={onWorkspaceRemoved}
-                workspaceUnreadMap={workspaceUnreadMap}
-              />
-            ) : (
-              <WorkspaceSwitcher
-                variant="topbar"
-                workspaces={workspaces}
-                activeWorkspaceId={activeWorkspaceId}
-                onSelect={onSelectWorkspace}
-                onWorkspaceCreated={onWorkspaceCreated}
-                onWorkspaceRemoved={onWorkspaceRemoved}
-                workspaceUnreadMap={workspaceUnreadMap}
-              />
-            )}
-          </div>
         </div>
       </div>
 

@@ -23,7 +23,6 @@ import {
   Columns2,
   CloudUpload,
   RefreshCw,
-  Send,
 } from 'lucide-react'
 import { useMenuComponents } from '@/components/ui/menu-context'
 import type { SessionStatusId } from '@/config/session-status-config'
@@ -51,8 +50,6 @@ export interface SessionMenuProps {
   labels?: LabelConfig[]
   /** Callback when labels are toggled (receives full updated labels array) */
   onLabelsChange?: (labels: string[]) => void
-  /** Whether multiple workspaces exist (enables "Send to Workspace" item) */
-  hasTransferTargets?: boolean
   /** Workspace projects (omit to hide the submenu) */
   projects?: SessionMenuProjectOption[]
   /** Callback for binding/unbinding the session to a project. `null` = unbind. */
@@ -66,7 +63,6 @@ export interface SessionMenuProps {
   onMarkUnread: () => void
   onSessionStatusChange: (state: SessionStatusId) => void
   onOpenInNewWindow: () => void
-  onSendToWorkspace?: () => void
   onDelete: () => void
 }
 
@@ -79,9 +75,7 @@ export function SessionMenu({
   onRename,
   onMarkUnread,
   onOpenInNewWindow,
-  onSendToWorkspace,
   onDelete,
-  hasTransferTargets,
 }: SessionMenuProps) {
   const { t } = useTranslation()
 
@@ -119,14 +113,6 @@ export function SessionMenu({
             />
           </SubContent>
         </Sub>
-      )}
-
-      {/* Send to Workspace — visible when at least one other workspace exists */}
-      {hasTransferTargets && onSendToWorkspace && (
-        <MenuItem onClick={onSendToWorkspace}>
-          <Send className="h-3.5 w-3.5" />
-          <span className="flex-1">{t("sessionMenu.sendToWorkspace")}</span>
-        </MenuItem>
       )}
 
       {/* Connect to Messaging — pairing code flow */}

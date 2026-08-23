@@ -20,7 +20,6 @@ import {
   Trash2,
   FolderOpen,
   AppWindow,
-  Send,
 } from 'lucide-react'
 import { useMenuComponents } from '@/components/ui/menu-context'
 import { getFileManagerName } from '@/lib/platform'
@@ -34,8 +33,6 @@ export interface SourceMenuProps {
   onOpenInNewWindow: () => void
   onShowInFinder: () => void
   onDelete: () => void
-  /** Send to another workspace (omit to hide the option) */
-  onSendToWorkspace?: () => void
 }
 
 /**
@@ -48,7 +45,6 @@ export function SourceMenu({
   onOpenInNewWindow,
   onShowInFinder,
   onDelete,
-  onSendToWorkspace,
 }: SourceMenuProps) {
   const { t } = useTranslation()
 
@@ -68,14 +64,6 @@ export function SourceMenu({
         <FolderOpen className="h-3.5 w-3.5" />
         <span className="flex-1">{t("sessionMenu.showInFileManager", { fileManager: getFileManagerName() })}</span>
       </MenuItem>
-
-      {/* Send to another workspace */}
-      {onSendToWorkspace && (
-        <MenuItem onClick={onSendToWorkspace}>
-          <Send className="h-3.5 w-3.5" />
-          <span className="flex-1">{t("sessionMenu.sendToWorkspace")}</span>
-        </MenuItem>
-      )}
 
       <Separator />
 
