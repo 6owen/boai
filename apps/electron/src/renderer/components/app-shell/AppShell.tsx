@@ -1405,10 +1405,6 @@ function AppShellContent({
                       expandable: true,
                       expanded: isExpanded('nav:skills'),
                       onToggle: () => toggleExpanded('nav:skills'),
-                      contextMenu: {
-                        type: 'skills',
-                        onAddSkill: openAddSkill,
-                      },
                       items: [
                         {
                           id: "nav:skills:installed",
@@ -1426,7 +1422,6 @@ function AppShellContent({
                           icon: UserRound,
                           variant: skillFilter?.collection === 'own' ? "default" : "ghost",
                           onClick: handleSkillsOwnClick,
-                          contextMenu: { type: 'skills' as const, onAddSkill: openAddSkill },
                         },
                       ],
                     },
@@ -1473,6 +1468,23 @@ function AppShellContent({
               title={isSidebarVisible ? listTitle : undefined}
               centerTitle
               compensateForStoplight={!isSidebarVisible}
+              leftActions={isSkillsNavigation(navState) ? (
+                <>
+                  <HeaderIconButton
+                    icon={<Search className="h-4 w-4" />}
+                    tooltip={t("common.search")}
+                    aria-label={t("common.search")}
+                    onClick={() => setSearchActive(true)}
+                  />
+                  {activeWorkspace && (
+                    <UpdateSkillPopover
+                      workspaceId={activeWorkspace.id}
+                      workingDirectory={activeSessionWorkingDirectory}
+                      align="start"
+                    />
+                  )}
+                </>
+              ) : undefined}
               actions={
                 <>
                   {isSessionsNavigation(navState) && (
@@ -1498,22 +1510,21 @@ function AppShellContent({
                       )}
                     />
                   )}
-                  {/* Add Skill button (only for skills mode) */}
+                  {/* Create-with-AI button (only for skills mode) */}
                   {isSkillsNavigation(navState) && activeWorkspace && (
                     <>
-                      <UpdateSkillPopover
-                        workspaceId={activeWorkspace.id}
-                        workingDirectory={activeSessionWorkingDirectory}
-                      />
-                      <SkillInstallMenu
-                        workspaceId={activeWorkspace.id}
-                        workingDirectory={activeSessionWorkingDirectory}
-                      />
+                      {skillFilter?.collection !== 'own' && (
+                        <SkillInstallMenu
+                          workspaceId={activeWorkspace.id}
+                          workingDirectory={activeSessionWorkingDirectory}
+                        />
+                      )}
                       <EditPopover
                         trigger={
                           <HeaderIconButton
                             icon={<Bot className="h-4 w-4" />}
                             tooltip={t("skillsManager.createWithAi")}
+                            aria-label={t("skillsManager.createWithAi")}
                             data-tutorial="create-skill-button"
                           />
                         }
@@ -1544,9 +1555,13 @@ function AppShellContent({
                 workspaceId={activeWorkspaceId}
                 workspaceRootPath={activeWorkspace?.rootPath}
                 workingDirectory={activeSessionWorkingDirectory}
+                searchActive={searchActive}
                 searchQuery={searchQuery}
                 onSearchChange={setSearchQuery}
-                onSearchClose={() => setSearchQuery('')}
+                onSearchClose={() => {
+                  setSearchActive(false)
+                  setSearchQuery('')
+                }}
                 collection={skillFilter?.collection ?? 'installed'}
                 favoriteSkillKeys={favoriteSkillKeys}
                 onToggleFavorite={handleToggleFavoriteSkill}

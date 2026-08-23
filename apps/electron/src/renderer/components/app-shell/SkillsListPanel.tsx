@@ -23,6 +23,7 @@ export interface SkillsListPanelProps {
   workspaceId?: string
   workspaceRootPath?: string
   workingDirectory?: string
+  searchActive?: boolean
   searchQuery?: string
   onSearchChange?: (query: string) => void
   onSearchClose?: () => void
@@ -39,6 +40,7 @@ export function SkillsListPanel({
   workspaceId,
   workspaceRootPath,
   workingDirectory,
+  searchActive = false,
   searchQuery = '',
   onSearchChange,
   onSearchClose,
@@ -50,6 +52,7 @@ export function SkillsListPanel({
   const { t } = useTranslation()
   const activeWorkspace = useActiveWorkspace()
   const canRevealLocally = !activeWorkspace?.remoteServer
+  const searchInputRef = React.useRef<HTMLInputElement>(null)
   const normalizedSearch = searchQuery.trim().toLowerCase()
   const filteredSkills = React.useMemo(() => {
     if (!normalizedSearch) return skills
@@ -59,6 +62,10 @@ export function SkillsListPanel({
       skill.metadata.description,
     ].some(value => value.toLowerCase().includes(normalizedSearch)))
   }, [normalizedSearch, skills])
+
+  React.useEffect(() => {
+    if (searchActive) searchInputRef.current?.focus()
+  }, [searchActive])
 
   const handleRemoveSkill = React.useCallback(async (skill: LoadedSkill) => {
     if (!workspaceId) return
@@ -88,13 +95,19 @@ export function SkillsListPanel({
 
   return (
     <div className={cn('flex min-h-0 flex-1 flex-col', className)}>
+      {searchActive && (
         <SessionSearchHeader
           searchQuery={searchQuery}
           onSearchChange={onSearchChange}
-          onSearchClose={searchQuery ? onSearchClose : undefined}
+          onSearchClose={onSearchClose}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') searchInputRef.current?.blur()
+          }}
           resultCount={filteredSkills.length}
           placeholder={t('skillsList.searchPlaceholder')}
+          inputRef={searchInputRef}
         />
+      )}
         <EntityPanel<LoadedSkill>
           items={filteredSkills}
           getId={(s) => s.slug}
@@ -116,7 +129,7 @@ export function SkillsListPanel({
                   description={collection === 'own' ? t('skillsList.ownEmptyDescription') : t('skillsList.emptyDescription')}
                   docKey="skills"
                 >
-                  {workspaceRootPath && (
+                  {collection === 'installed' && workspaceRootPath && (
                     <EditPopover
                       align="center"
                       trigger={

@@ -34,6 +34,7 @@ export function SkillInstallMenu({ workspaceId, workingDirectory }: SkillInstall
         <HeaderIconButton
           icon={<Plus className="h-4 w-4" />}
           tooltip={t('skillsManager.addSkill')}
+          aria-label={t('skillsManager.addSkill')}
           data-tutorial="install-skill-button"
         />
       </PopoverTrigger>
@@ -57,7 +58,6 @@ export function SkillInstallMenu({ workspaceId, workingDirectory }: SkillInstall
             workspaceId={workspaceId}
             workingDirectory={workingDirectory}
             variant={panel}
-            onBack={() => setPanel(null)}
             onClose={close}
             onBusyChange={setBusy}
           />

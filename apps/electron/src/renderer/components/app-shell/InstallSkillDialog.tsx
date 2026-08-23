@@ -1,7 +1,6 @@
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import {
-  ArrowLeft,
   Check,
   FileArchive,
   FolderOpen,
@@ -23,7 +22,6 @@ interface InstallSkillPopoverContentProps {
   workspaceId: string
   workingDirectory?: string
   variant: 'local' | 'git'
-  onBack: () => void
   onClose: () => void
   onBusyChange?: (busy: boolean) => void
 }
@@ -51,7 +49,6 @@ export function InstallSkillPopoverContent({
   workspaceId,
   workingDirectory,
   variant,
-  onBack,
   onClose,
   onBusyChange,
 }: InstallSkillPopoverContentProps) {
@@ -157,60 +154,40 @@ export function InstallSkillPopoverContent({
   }
 
   const isUrlMode = kind === 'url' || kind === 'git'
-  const title = variant === 'git' ? t('skillsManager.gitTitle') : t('skillsManager.installTitle')
-  const description = variant === 'git'
-    ? t('skillsManager.gitDescription')
-    : t('skillsManager.chooseInstallMethod')
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex shrink-0 items-center gap-2 border-b border-border/50 p-3">
-        <button
-          type="button"
-          aria-label={t('common.back')}
-          onClick={onBack}
-          disabled={busy}
-          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[7px] text-muted-foreground transition-colors hover:bg-foreground/[0.05] hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40"
-        >
-          <ArrowLeft className="h-4 w-4" />
-        </button>
-        <div className="min-w-0 flex-1">
-          <div className="text-sm font-medium leading-5">{title}</div>
-          <div className="text-xs leading-4 text-muted-foreground">{description}</div>
+      {variant === 'local' && (
+        <div className="shrink-0 border-b border-border/50 p-2">
+          <div className="grid grid-cols-3 rounded-[7px] bg-foreground-2 p-0.5 shadow-minimal" role="tablist">
+            {sourceTabs.map(tab => {
+              const Icon = tab.icon
+              const active = kind === tab.kind
+              return (
+                <button
+                  key={tab.kind}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => changeKind(tab.kind)}
+                  className={cn(
+                    'flex h-7 min-w-0 items-center justify-center gap-1.5 rounded-[5px] px-1.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
+                    active
+                      ? 'bg-background font-medium text-foreground shadow-minimal'
+                      : 'text-muted-foreground hover:bg-foreground/[0.025] hover:text-foreground',
+                  )}
+                >
+                  <Icon className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">{t(tab.labelKey)}</span>
+                </button>
+              )
+            })}
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
         <div className="flex min-h-full flex-col">
-          {variant === 'local' && (
-            <div className="shrink-0 border-b border-border/50 p-3">
-              <div className="grid grid-cols-3 rounded-lg bg-foreground-2 p-0.5 shadow-minimal" role="tablist">
-                {sourceTabs.map(tab => {
-                  const Icon = tab.icon
-                  const active = kind === tab.kind
-                  return (
-                    <button
-                      key={tab.kind}
-                      type="button"
-                      role="tab"
-                      aria-selected={active}
-                      onClick={() => changeKind(tab.kind)}
-                      className={cn(
-                        'flex h-9 items-center justify-center gap-1.5 rounded-[7px] text-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
-                        active
-                          ? 'bg-background font-medium text-foreground shadow-minimal'
-                          : 'text-muted-foreground hover:bg-foreground/[0.025] hover:text-foreground',
-                      )}
-                    >
-                      <Icon className="h-4 w-4" />
-                      {t(tab.labelKey)}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-
           {isUrlMode ? (
             <div className="shrink-0 space-y-1.5 border-b border-border/50 p-3">
               <label htmlFor="skill-install-source" className="block select-none text-xs font-medium text-muted-foreground">
