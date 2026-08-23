@@ -215,6 +215,17 @@ export function sessionMatchesCurrentFilter(
   return true
 }
 
+export function sessionMatchesSearchQuery(
+  session: SessionMeta,
+  query: string,
+  contentResults: ReadonlyMap<string, ContentSearchResult>,
+): boolean {
+  const normalizedQuery = query.trim().toLocaleLowerCase()
+  if (!normalizedQuery) return true
+  return getSessionTitle(session).toLocaleLowerCase().includes(normalizedQuery)
+    || contentResults.has(session.id)
+}
+
 // ---------------------------------------------------------------------------
 // Hook
 // ---------------------------------------------------------------------------
@@ -332,7 +343,7 @@ export function useSessionSearch({
     }
 
     return sortedItems
-      .filter(item => contentSearchResults.has(item.id))
+      .filter(item => sessionMatchesSearchQuery(item, searchQuery, contentSearchResults))
       .sort((a, b) => {
         const aScore = fuzzyScore(getSessionTitle(a), searchQuery)
         const bScore = fuzzyScore(getSessionTitle(b), searchQuery)

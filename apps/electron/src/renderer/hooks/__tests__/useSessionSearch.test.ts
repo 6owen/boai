@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test'
-import { computeCollapsedPagination, sessionMatchesCurrentFilter } from '../useSessionSearch'
+import { computeCollapsedPagination, sessionMatchesCurrentFilter, sessionMatchesSearchQuery } from '../useSessionSearch'
 import type { SessionMeta } from '@/atoms/sessions'
 
 function makeSession(id: string, opts: Partial<SessionMeta> = {}): SessionMeta {
@@ -81,5 +81,20 @@ describe('sessionMatchesCurrentFilter', () => {
     expect(sessionMatchesCurrentFilter(ordinary, { kind: 'flagged' })).toBe(true)
     expect(sessionMatchesCurrentFilter(ordinary, { kind: 'state', stateId: 'done' })).toBe(true)
     expect(sessionMatchesCurrentFilter(ordinary, { kind: 'label', labelId: 'missing' })).toBe(true)
+  })
+})
+
+describe('sessionMatchesSearchQuery', () => {
+  it('matches a session title without waiting for content search', () => {
+    const session = makeSession('skill-session', { name: '新增工作区技能' })
+    expect(sessionMatchesSearchQuery(session, '工作区技能', new Map())).toBe(true)
+  })
+
+  it('also keeps sessions returned by content search', () => {
+    const session = makeSession('content-session', { name: 'Unrelated title' })
+    const contentResults = new Map([
+      [session.id, { matchCount: 1, snippet: '工作区技能' }],
+    ])
+    expect(sessionMatchesSearchQuery(session, '工作区技能', contentResults)).toBe(true)
   })
 })
