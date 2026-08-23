@@ -99,14 +99,11 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
 
   const first = segments[0]
 
-  // Kanban board — standalone route. A view of all sessions in board mode.
-  // Encoded as its own prefix (not `allSessions/board`) so it never collides
-  // with the positional `{filter}/session/{id}` detail parsing below.
+  // Board was removed from BoAI. Keep the old deep link as an all-sessions redirect.
   if (first === 'board') {
     return {
       navigator: 'sessions',
       sessionFilter: { kind: 'allSessions' },
-      viewMode: 'board',
       details: null,
     }
   }
@@ -218,38 +215,31 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
     }
   }
 
-  // Sessions navigator (allSessions, flagged, state)
-  let sessionFilter: SessionFilter
+  // Sessions have one canonical list. Legacy filtered routes remain readable,
+  // and preserve a selected session while discarding their old filter.
+  const sessionFilter: SessionFilter = { kind: 'allSessions' }
   let detailsStartIndex: number
 
   switch (first) {
     case 'allSessions':
-      sessionFilter = { kind: 'allSessions' }
       detailsStartIndex = 1
       break
     case 'flagged':
-      sessionFilter = { kind: 'flagged' }
       detailsStartIndex = 1
       break
     case 'archived':
-      sessionFilter = { kind: 'archived' }
       detailsStartIndex = 1
       break
     case 'state':
       if (!segments[1]) return null
-      // Cast is safe because we're constructing from URL
-      sessionFilter = { kind: 'state', stateId: segments[1] as SessionFilter & { kind: 'state' } extends { stateId: infer T } ? T : never }
       detailsStartIndex = 2
       break
     case 'label':
       if (!segments[1]) return null
-      // Label IDs are URL-decoded (simple slugs, no special characters expected)
-      sessionFilter = { kind: 'label', labelId: decodeURIComponent(segments[1]) }
       detailsStartIndex = 2
       break
     case 'view':
       if (!segments[1]) return null
-      sessionFilter = { kind: 'view', viewId: decodeURIComponent(segments[1]) }
       detailsStartIndex = 2
       break
     default:
@@ -306,39 +296,10 @@ export function buildCompoundRoute(parsed: ParsedCompoundRoute): string {
     return `projects/project/${parsed.details.id}`
   }
 
-  // Sessions navigator
-  // Board is a standalone view of all sessions; emit its own prefix.
-  if (parsed.viewMode === 'board') return 'board'
-
-  let base: string
-  const filter = parsed.sessionFilter
-  if (!filter) return 'allSessions'
-
-  switch (filter.kind) {
-    case 'allSessions':
-      base = 'allSessions'
-      break
-    case 'flagged':
-      base = 'flagged'
-      break
-    case 'archived':
-      base = 'archived'
-      break
-    case 'state':
-      base = `state/${filter.stateId}`
-      break
-    case 'label':
-      base = `label/${encodeURIComponent(filter.labelId)}`
-      break
-    case 'view':
-      base = `view/${encodeURIComponent(filter.viewId)}`
-      break
-    default:
-      base = 'allSessions'
-  }
-
-  if (!parsed.details) return base
-  return `${base}/session/${parsed.details.id}`
+  // Sessions have one canonical route. This also normalizes any legacy
+  // in-memory filter or board state that survived a hot reload.
+  if (!parsed.details) return 'allSessions'
+  return `allSessions/session/${parsed.details.id}`
 }
 
 // =============================================================================
@@ -564,7 +525,7 @@ function convertCompoundToNavigationState(compound: ParsedCompoundRoute): Naviga
   }
 
   // Sessions
-  const filter = compound.sessionFilter || { kind: 'allSessions' as const }
+  const filter = { kind: 'allSessions' as const }
   if (compound.details) {
     return {
       navigator: 'sessions',
@@ -575,7 +536,6 @@ function convertCompoundToNavigationState(compound: ParsedCompoundRoute): Naviga
   return {
     navigator: 'sessions',
     filter,
-    viewMode: compound.viewMode,
     details: null,
   }
 }
@@ -643,21 +603,9 @@ function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationSta
       return { navigator: 'projects', details: null }
     case 'session':
       if (parsed.id) {
-        // Reconstruct filter from params
-        const filterKind = (parsed.params.filter || 'allSessions') as SessionFilter['kind']
-        let filter: SessionFilter
-        if (filterKind === 'state' && parsed.params.stateId) {
-          filter = { kind: 'state', stateId: parsed.params.stateId }
-        } else if (filterKind === 'label' && parsed.params.labelId) {
-          filter = { kind: 'label', labelId: parsed.params.labelId }
-        } else if (filterKind === 'view' && parsed.params.viewId) {
-          filter = { kind: 'view', viewId: parsed.params.viewId }
-        } else {
-          filter = { kind: filterKind as 'allSessions' | 'flagged' | 'archived' }
-        }
         return {
           navigator: 'sessions',
-          filter,
+          filter: { kind: 'allSessions' },
           details: { type: 'session', sessionId: parsed.id },
         }
       }
@@ -669,43 +617,10 @@ function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationSta
         details: null,
       }
     case 'flagged':
-      return {
-        navigator: 'sessions',
-        filter: { kind: 'flagged' },
-        details: null,
-      }
     case 'archived':
-      return {
-        navigator: 'sessions',
-        filter: { kind: 'archived' },
-        details: null,
-      }
     case 'state':
-      if (parsed.id) {
-        return {
-          navigator: 'sessions',
-          filter: { kind: 'state', stateId: parsed.id },
-          details: null,
-        }
-      }
-      return { navigator: 'sessions', filter: { kind: 'allSessions' }, details: null }
     case 'label':
-      if (parsed.id) {
-        return {
-          navigator: 'sessions',
-          filter: { kind: 'label', labelId: parsed.id },
-          details: null,
-        }
-      }
-      return { navigator: 'sessions', filter: { kind: 'allSessions' }, details: null }
     case 'view':
-      if (parsed.id) {
-        return {
-          navigator: 'sessions',
-          filter: { kind: 'view', viewId: parsed.id },
-          details: null,
-        }
-      }
       return { navigator: 'sessions', filter: { kind: 'allSessions' }, details: null }
     default:
       return null

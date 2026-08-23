@@ -938,13 +938,8 @@ export const getNavigationStateKey = (state: NavigationState): string => {
     if (state.subpage === null) return 'settings'
     return `settings:${state.subpage}`
   }
-  // Chats
-  const f = state.filter
-  let base: string
-  if (f.kind === 'state') base = `state:${f.stateId}`
-  else if (f.kind === 'label') base = `label:${f.labelId}`
-  else if (f.kind === 'view') base = `view:${f.viewId}`
-  else base = f.kind
+  // Sessions have one canonical persisted key. Legacy filters are normalized.
+  const base = 'allSessions'
   if (state.details) {
     return `${base}/chat/${state.details.sessionId}`
   }
@@ -1011,34 +1006,21 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
 
   // Handle sessions
   const parseSessionsKey = (filterKey: string, sessionId?: string): NavigationState | null => {
-    let filter: SessionFilter
-    if (filterKey === 'allSessions') filter = { kind: 'allSessions' }
-    else if (filterKey === 'flagged') filter = { kind: 'flagged' }
-    else if (filterKey === 'archived') filter = { kind: 'archived' }
-    else if (filterKey.startsWith('state:')) {
-      const stateId = filterKey.slice(6)
-      if (!stateId) return null
-      filter = { kind: 'state', stateId }
-    } else if (filterKey.startsWith('label:')) {
-      const labelId = filterKey.slice(6)
-      if (!labelId) return null
-      filter = { kind: 'label', labelId }
-    } else if (filterKey.startsWith('view:')) {
-      const viewId = filterKey.slice(5)
-      if (!viewId) return null
-      filter = { kind: 'view', viewId }
-    } else {
-      return null
-    }
+    const isLegacyFilter = filterKey === 'flagged'
+      || filterKey === 'archived'
+      || filterKey.startsWith('state:')
+      || filterKey.startsWith('label:')
+      || filterKey.startsWith('view:')
+    if (filterKey !== 'allSessions' && !isLegacyFilter) return null
     return {
       navigator: 'sessions',
-      filter,
+      filter: { kind: 'allSessions' },
       details: sessionId ? { type: 'session', sessionId } : null,
     }
   }
 
   // Check for session details
-  if (key.includes('/session/')) {
+  if (key.includes('/session/') || key.includes('/chat/')) {
     const [filterPart, , sessionId] = key.split('/')
     return parseSessionsKey(filterPart, sessionId)
   }
