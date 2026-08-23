@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test'
-import { computeCollapsedPagination } from '../useSessionSearch'
+import { computeCollapsedPagination, sessionMatchesCurrentFilter } from '../useSessionSearch'
 import type { SessionMeta } from '@/atoms/sessions'
 
 function makeSession(id: string, opts: Partial<SessionMeta> = {}): SessionMeta {
@@ -65,5 +65,21 @@ describe('computeCollapsedPagination', () => {
 
     expect(result.paginatedItems.map(s => s.id)).toEqual(['a', 'b'])
     expect(result.collapsedGroupsMeta).toEqual([])
+  })
+})
+
+describe('sessionMatchesCurrentFilter', () => {
+  it('keeps legacy archived sessions in the canonical all-sessions list', () => {
+    const archived = makeSession('archived', { isArchived: true })
+
+    expect(sessionMatchesCurrentFilter(archived, { kind: 'allSessions' })).toBe(true)
+  })
+
+  it('treats legacy taxonomy filters as compatibility aliases for all sessions', () => {
+    const ordinary = makeSession('ordinary', { isFlagged: false, sessionStatus: 'todo' })
+
+    expect(sessionMatchesCurrentFilter(ordinary, { kind: 'flagged' })).toBe(true)
+    expect(sessionMatchesCurrentFilter(ordinary, { kind: 'state', stateId: 'done' })).toBe(true)
+    expect(sessionMatchesCurrentFilter(ordinary, { kind: 'label', labelId: 'missing' })).toBe(true)
   })
 })

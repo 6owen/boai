@@ -2,7 +2,6 @@ import { useState, useCallback, useEffect, useRef, useMemo } from "react"
 import { isToday, isYesterday, format, startOfDay } from "date-fns"
 
 import { searchLog } from "@/lib/logger"
-import { parseLabelEntry, matchesLabelFilter } from "@craft-agent/shared/labels"
 import type { LabelConfig } from "@craft-agent/shared/labels"
 import { fuzzyScore } from "@craft-agent/shared/search"
 import { getSessionTitle, getSessionStatus } from "@/utils/session"
@@ -206,79 +205,14 @@ interface FilterMatchOptions {
 }
 
 export function sessionMatchesCurrentFilter(
-  session: SessionMeta,
-  currentFilter: SessionFilter | undefined,
-  options: FilterMatchOptions = {}
+  _session: SessionMeta,
+  _currentFilter: SessionFilter | undefined,
+  _options: FilterMatchOptions = {}
 ): boolean {
-  const { evaluateViews, statusFilter, labelFilterMap, labelConfigs } = options
-
-  const passesStatusFilter = (): boolean => {
-    if (!statusFilter || statusFilter.size === 0) return true
-    const sessionState = (session.sessionStatus || 'todo') as string
-
-    let hasIncludes = false
-    let matchesInclude = false
-    for (const [stateId, mode] of statusFilter) {
-      if (mode === 'exclude' && sessionState === stateId) return false
-      if (mode === 'include') {
-        hasIncludes = true
-        if (sessionState === stateId) matchesInclude = true
-      }
-    }
-    return !hasIncludes || matchesInclude
-  }
-
-  const passesLabelFilter = (): boolean => {
-    if (!labelFilterMap || labelFilterMap.size === 0) return true
-    const sessionLabelIds = session.labels?.map(l => parseLabelEntry(l).id) || []
-
-    let hasIncludes = false
-    let matchesInclude = false
-    for (const [labelId, mode] of labelFilterMap) {
-      if (mode === 'exclude' && sessionLabelIds.includes(labelId)) return false
-      if (mode === 'include') {
-        hasIncludes = true
-        if (sessionLabelIds.includes(labelId)) matchesInclude = true
-      }
-    }
-    return !hasIncludes || matchesInclude
-  }
-
-  if (!passesStatusFilter() || !passesLabelFilter()) return false
-
-  if (!currentFilter) return true
-
-  switch (currentFilter.kind) {
-    case 'allSessions':
-      return session.isArchived !== true
-
-    case 'flagged':
-      return session.isFlagged === true && session.isArchived !== true
-
-    case 'archived':
-      return session.isArchived === true
-
-    case 'state':
-      return (session.sessionStatus || 'todo') === currentFilter.stateId && session.isArchived !== true
-
-    case 'label': {
-      if (session.isArchived === true) return false
-      // Shared predicate (descendant-aware + optional project scope) — keep in
-      // sync with AppShell's filtered set by construction, not by copy.
-      return matchesLabelFilter(session, currentFilter, labelConfigs ?? [])
-    }
-
-    case 'view':
-      if (session.isArchived === true) return false
-      if (!evaluateViews) return true
-      const matched = evaluateViews(session)
-      if (currentFilter.viewId === '__all__') return matched.length > 0
-      return matched.some(v => v.id === currentFilter.viewId)
-
-    default:
-      const _exhaustive: never = currentFilter
-      return true
-  }
+  // Navigation canonicalizes the old flagged/archive/status/label/view routes
+  // to All Sessions. Keep this helper as a compatibility seam for hot-reloaded
+  // renderer state and old callers, but do not resurrect the retired taxonomy.
+  return true
 }
 
 // ---------------------------------------------------------------------------
@@ -290,11 +224,6 @@ export function useSessionSearch({
   searchActive,
   searchQuery,
   workspaceId,
-  currentFilter,
-  evaluateViews,
-  statusFilter,
-  labelFilterMap,
-  labelConfigs,
   collapsedGroups,
   groupingMode,
   scrollViewportRef,
@@ -399,9 +328,7 @@ export function useSessionSearch({
   // Filter items by search query or current filter
   const searchFilteredItems = useMemo(() => {
     if (!isSearchMode) {
-      return sortedItems.filter(item =>
-        sessionMatchesCurrentFilter(item, currentFilter, { evaluateViews, statusFilter, labelFilterMap, labelConfigs })
-      )
+      return sortedItems
     }
 
     return sortedItems
@@ -418,23 +345,13 @@ export function useSessionSearch({
         const countB = contentSearchResults.get(b.id)?.matchCount || 0
         return countB - countA
       })
-  }, [sortedItems, isSearchMode, searchQuery, contentSearchResults, currentFilter, evaluateViews, statusFilter, labelFilterMap, labelConfigs])
+  }, [sortedItems, isSearchMode, searchQuery, contentSearchResults])
 
   // Split search results: matching current filter vs others
   const { matchingFilterItems, otherResultItems, exceededSearchLimit } = useMemo(() => {
-    const hasActiveFilters =
-      (currentFilter && currentFilter.kind !== 'allSessions') ||
-      (statusFilter && statusFilter.size > 0) ||
-      (labelFilterMap && labelFilterMap.size > 0)
-
     if (searchQuery.trim() && searchFilteredItems.length > 0) {
       searchLog.info('search:grouping', {
         searchQuery,
-        currentFilterKind: currentFilter?.kind,
-        currentFilterStateId: currentFilter?.kind === 'state' ? currentFilter.stateId : undefined,
-        hasActiveFilters,
-        statusFilterSize: statusFilter?.size ?? 0,
-        labelFilterSize: labelFilterMap?.size ?? 0,
         itemCount: searchFilteredItems.length,
       })
     }
@@ -442,35 +359,9 @@ export function useSessionSearch({
     const totalCount = searchFilteredItems.length
     const exceeded = totalCount > MAX_SEARCH_RESULTS
 
-    if (!isSearchMode || !hasActiveFilters) {
-      const limitedItems = searchFilteredItems.slice(0, MAX_SEARCH_RESULTS)
-      return { matchingFilterItems: limitedItems, otherResultItems: [] as SessionMeta[], exceededSearchLimit: exceeded }
-    }
-
-    const matching: SessionMeta[] = []
-    const others: SessionMeta[] = []
-
-    for (const item of searchFilteredItems) {
-      if (matching.length + others.length >= MAX_SEARCH_RESULTS) break
-
-      const matches = sessionMatchesCurrentFilter(item, currentFilter, { evaluateViews, statusFilter, labelFilterMap, labelConfigs })
-      if (matches) {
-        matching.push(item)
-      } else {
-        others.push(item)
-      }
-    }
-
-    if (searchFilteredItems.length > 0) {
-      searchLog.info('search:grouping:result', {
-        matchingCount: matching.length,
-        othersCount: others.length,
-        exceeded,
-      })
-    }
-
-    return { matchingFilterItems: matching, otherResultItems: others, exceededSearchLimit: exceeded }
-  }, [searchFilteredItems, currentFilter, evaluateViews, isSearchMode, statusFilter, labelFilterMap, labelConfigs, searchQuery])
+    const limitedItems = searchFilteredItems.slice(0, MAX_SEARCH_RESULTS)
+    return { matchingFilterItems: limitedItems, otherResultItems: [] as SessionMeta[], exceededSearchLimit: exceeded }
+  }, [searchFilteredItems, searchQuery])
 
   // --- Pagination ---
 
