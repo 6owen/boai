@@ -1,4 +1,4 @@
-export type CliDomainNamespace = 'label' | 'source' | 'skill' | 'automation' | 'permission' | 'theme'
+export type CliDomainNamespace = 'label' | 'source' | 'skill' | 'permission' | 'theme'
 
 export interface CliDomainPolicy {
   namespace: CliDomainNamespace
@@ -46,20 +46,6 @@ const POLICIES: Record<CliDomainNamespace, CliDomainPolicy> = {
       'craft-agent skill update <slug> --json "{...}"',
       'craft-agent skill validate <slug>',
     ],
-  },
-  automation: {
-    namespace: 'automation',
-    helpCommand: 'craft-agent automation --help',
-    workspacePathScopes: ['automations.json', 'automations-history.jsonl'],
-    readActions: ['list', 'get', 'validate', 'history', 'last-executed', 'test', 'lint'],
-    quickExamples: [
-      'craft-agent automation list',
-      'craft-agent automation create --event UserPromptSubmit --prompt "Summarize this prompt"',
-      'craft-agent automation update <id> --json "{\"enabled\":false}"',
-      'craft-agent automation history <id> --limit 20',
-      'craft-agent automation validate',
-    ],
-    bashGuardPaths: ['automations.json', 'automations-history.jsonl'],
   },
   permission: {
     namespace: 'permission',

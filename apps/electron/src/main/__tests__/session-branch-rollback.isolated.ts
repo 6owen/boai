@@ -184,20 +184,6 @@ mock.module('@craft-agent/shared/sources', () => ({
   API_OAUTH_PROVIDERS: [],
 }))
 
-mock.module('@craft-agent/shared/automations', () => ({
-  AutomationSystem: class AutomationSystem {
-    constructor(..._args: unknown[]) {}
-    setInitialSessionMetadata() {}
-    reloadConfig() { return { errors: [], automationCount: 0 } }
-    emitLabelConfigChange = async () => {}
-  },
-  validateAutomationsConfig: () => ({ valid: true, errors: [], config: { automations: {} } }),
-  validateAutomationsContent: () => ({ valid: true, errors: [], warnings: [] }),
-  validateAutomations: () => ({ valid: true, errors: [], warnings: [] }),
-  AUTOMATIONS_CONFIG_FILE: 'automations.json',
-  AUTOMATIONS_HISTORY_FILE: 'automations.history.jsonl',
-}))
-
 mock.module('@craft-agent/shared/sessions', () => ({
   listSessions: () => [],
   loadSession: (_root: string, id: string) => storedById.get(id) ?? null,

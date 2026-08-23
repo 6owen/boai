@@ -1,7 +1,7 @@
 /**
  * Resources RPC Handlers
  *
- * Handles workspace resource export/import (sources, skills, automations).
+ * Handles workspace resource export/import (sources and skills).
  */
 
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
@@ -34,8 +34,7 @@ export function registerResourcesHandlers(server: RpcServer, deps: HandlerDeps):
       deps.platform.logger?.info(
         `RESOURCES_EXPORT: Exported from ${workspaceId}: ` +
         `${result.bundle.resources.sources?.length ?? 0} sources, ` +
-        `${result.bundle.resources.skills?.length ?? 0} skills, ` +
-        `${result.bundle.resources.automations?.length ?? 0} automations` +
+        `${result.bundle.resources.skills?.length ?? 0} skills` +
         (result.warnings.length > 0 ? ` (${result.warnings.length} warnings)` : ''),
       )
 
@@ -73,15 +72,12 @@ export function registerResourcesHandlers(server: RpcServer, deps: HandlerDeps):
       deps.platform.logger?.info(
         `RESOURCES_IMPORT: Imported into ${workspaceId} (mode=${mode}): ` +
         `sources=${result.sources.imported.length} imported, ${result.sources.skipped.length} skipped, ${result.sources.failed.length} failed; ` +
-        `skills=${result.skills.imported.length} imported, ${result.skills.skipped.length} skipped, ${result.skills.failed.length} failed; ` +
-        `automations=${result.automations.imported.length} imported, ${result.automations.skipped.length} skipped, ${result.automations.failed.length} failed`,
+        `skills=${result.skills.imported.length} imported, ${result.skills.skipped.length} skipped, ${result.skills.failed.length} failed` +
+        (result.warnings.length > 0 ? `; warnings=${result.warnings.length}` : ''),
       )
 
       // Notify ConfigWatcher of imported files so UI refreshes on Linux
       // (Bun's fs.watch doesn't reliably detect atomic renames)
-      if (result.automations.imported.length > 0 || result.automations.skipped.length === 0 && bundle.resources.automations?.length) {
-        deps.sessionManager.notifyConfigFileChange(workspace.rootPath, 'automations.json')
-      }
       for (const slug of result.sources.imported) {
         deps.sessionManager.notifyConfigFileChange(workspace.rootPath, `sources/${slug}/config.json`)
       }

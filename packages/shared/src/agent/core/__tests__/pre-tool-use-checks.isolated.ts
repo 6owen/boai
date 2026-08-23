@@ -512,21 +512,9 @@ describe('runPreToolUseChecks', () => {
       expect(result.type).toBe('allow');
     });
 
-    it('does not block bash commands touching automations files when feature is disabled', () => {
-      mockCraftAgentsCliFlag = false;
-
-      const result = runPreToolUseChecks(createInput({
-        toolName: 'Bash',
-        input: { command: 'python3 scripts/update.py automations.json' },
-        permissionMode: 'allow-all',
-      }));
-
-      expect(result.type).toBe('allow');
-    });
-
-    it('blocks direct automations config edits and suggests craft-agent automation commands when feature is enabled', () => {
+    it('does not intercept legacy automations config files', () => {
       mockCraftAgentsCliFlag = true;
-      mockDetectConfigFileType.mockImplementation(() => ({ type: 'automations', displayFile: 'automations.json' }));
+      mockDetectConfigFileType.mockImplementation(() => null);
 
       const result = runPreToolUseChecks(createInput({
         toolName: 'Edit',
@@ -537,11 +525,7 @@ describe('runPreToolUseChecks', () => {
         },
       }));
 
-      expect(result.type).toBe('block');
-      if (result.type === 'block') {
-        expect(result.reason).toContain('craft-agent automation');
-        expect(result.reason).toContain('automations.json');
-      }
+      expect(result.type).toBe('allow');
     });
 
     it('blocks direct source config edits and suggests craft-agent source commands when feature is enabled', () => {
@@ -612,44 +596,6 @@ describe('runPreToolUseChecks', () => {
       const result = runPreToolUseChecks(createInput({
         toolName: 'Bash',
         input: { command: 'craft-agent label list' },
-        permissionMode: 'allow-all',
-      }));
-
-      expect(result.type).toBe('allow');
-    });
-
-    it('blocks bash commands touching automations files and points to craft-agent automation --help when feature is enabled', () => {
-      mockCraftAgentsCliFlag = true;
-
-      const result = runPreToolUseChecks(createInput({
-        toolName: 'Bash',
-        input: { command: 'python3 scripts/update.py automations.json' },
-        permissionMode: 'allow-all',
-      }));
-
-      expect(result.type).toBe('block');
-      if (result.type === 'block') {
-        expect(result.reason).toContain('craft-agent automation --help');
-        expect(result.reason).toContain('craft-agent automation');
-      }
-    });
-
-    it('allows bash craft-agent automation commands through config-domain bash guard', () => {
-      const result = runPreToolUseChecks(createInput({
-        toolName: 'Bash',
-        input: { command: 'craft-agent automation list' },
-        permissionMode: 'allow-all',
-      }));
-
-      expect(result.type).toBe('allow');
-    });
-
-    it('does not apply config-domain bash guard when feature is disabled', () => {
-      mockCraftAgentsCliFlag = false;
-
-      const result = runPreToolUseChecks(createInput({
-        toolName: 'Bash',
-        input: { command: 'python3 scripts/update.py automations.json' },
         permissionMode: 'allow-all',
       }));
 

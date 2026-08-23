@@ -2,14 +2,13 @@
  * Resource Bundle Types
  *
  * Portable format for exporting/importing workspace resources
- * (sources, skills, automations) between workspaces.
+ * (sources and skills) between workspaces.
  *
  * Follows the same bundle pattern as session export/import.
  */
 
 import type { BundleFile } from '../utils/bundle-files.ts'
 import type { FolderSourceConfig } from '../sources/types.ts'
-import type { AutomationMatcher } from '../automations/types.ts'
 
 // ============================================================
 // Bundle Format
@@ -30,8 +29,8 @@ export interface ResourceBundle {
   resources: {
     sources?: SourceBundleEntry[]
     skills?: SkillBundleEntry[]
-    /** Per-automation entries (sanitized — webhook auth stripped) */
-    automations?: AutomationBundleEntry[]
+    /** @deprecated Accepted only so old bundles can be ignored safely on import. */
+    automations?: unknown[]
   }
 }
 
@@ -61,21 +60,6 @@ export interface SkillBundleEntry {
   files: BundleFile[]
 }
 
-/**
- * An automation in the bundle.
- * Matcher config is sanitized (webhook auth stripped).
- */
-export interface AutomationBundleEntry {
-  /** Automation ID (6-char hex from automations.json) */
-  id: string
-  /** Display name (denormalized from matcher.name — metadata only, not used for identity) */
-  name?: string
-  /** Event type this automation is registered under */
-  event: string
-  /** The full matcher config (sanitized — webhook auth stripped) */
-  matcher: AutomationMatcher
-}
-
 // ============================================================
 // Import/Export Options & Results
 // ============================================================
@@ -95,7 +79,7 @@ export interface ExportResourcesOptions {
   sources?: string[] | 'all'
   /** Skill slugs to export, or 'all' for every skill */
   skills?: string[] | 'all'
-  /** Automation IDs/names to export, 'all' for every automation, or true (= 'all') */
+  /** @deprecated Ignored. Kept temporarily for source compatibility with older callers. */
   automations?: boolean | string[] | 'all'
 }
 
@@ -112,7 +96,7 @@ export interface ExportResult {
  * Per-resource-type import result with room for partial failures.
  */
 export interface ImportBucketResult {
-  /** Identifiers that were successfully imported (slugs for sources/skills, IDs for automations) */
+  /** Identifiers that were successfully imported. */
   imported: string[]
   /** Identifiers that were skipped (already exist + mode='skip') */
   skipped: string[]
@@ -128,7 +112,8 @@ export interface ImportBucketResult {
 export interface ResourceImportResult {
   sources: ImportBucketResult
   skills: ImportBucketResult
-  automations: ImportBucketResult
+  /** Bundle-level compatibility and migration warnings. */
+  warnings: string[]
 }
 
 // ============================================================

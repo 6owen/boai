@@ -39,7 +39,6 @@ import {
   validateAllPermissions,
   validateToolIcons,
 } from '../config/validators.ts';
-import { validateAutomations } from '../automations/index.ts';
 import {
   validateMcpConnection as validateMcpConnectionImpl,
   validateStdioMcpConnection as validateStdioMcpConnectionImpl,
@@ -127,7 +126,6 @@ export function createClaudeContext(options: ClaudeContextOptions): SessionToolC
       }
       return validateAllPermissions(wsPath);
     },
-    validateAutomations: (wsPath: string) => validateAutomations(wsPath),
     validateToolIcons: () => validateToolIcons(),
     validateAll: (wsPath: string) => validateAll(wsPath),
     validateSkill: (wsPath: string, slug: string) => validateSkill(wsPath, slug),

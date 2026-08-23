@@ -53,7 +53,7 @@ export const SubmitPlanSchema = z.object({
 });
 
 export const ConfigValidateSchema = z.object({
-  target: z.enum(['config', 'sources', 'statuses', 'preferences', 'permissions', 'automations', 'tool-icons', 'all'])
+  target: z.enum(['config', 'sources', 'statuses', 'preferences', 'permissions', 'tool-icons', 'all'])
     .describe('Which config file(s) to validate'),
   sourceSlug: z.string().optional().describe('Validate a specific source by slug'),
 });
@@ -271,7 +271,6 @@ Returns structured validation results with errors, warnings, and suggestions.
 - \`statuses\`: Validates statuses config.json
 - \`preferences\`: Validates preferences.json
 - \`permissions\`: Validates permissions.json files
-- \`automations\`: Validates automations.json configuration
 - \`tool-icons\`: Validates tool-icons.json
 - \`all\`: Validates all configuration files`,
 
@@ -476,12 +475,12 @@ Use this to share anything that would help improve the product — issues you hi
 
   set_session_labels: `Set labels on the current session or a specific session by ID. Replaces all existing labels.
 
-Use this to tag sessions for filtering or to trigger label-based automations (LabelAdd/LabelRemove events).
+Use this to tag sessions for filtering.
 Pass an empty array to clear all labels. Omit sessionId to target the current session.`,
 
   set_session_status: `Set the status of the current session or a specific session by ID (e.g., "todo", "in_progress").
 
-Use this to reflect progress or trigger status-based automations (SessionStatusChange events).
+Use this to reflect progress.
 Omit sessionId to target the current session.
 
 IMPORTANT: never move a task into a closed status (such as "done" or "cancelled") yourself — closing a task is the user's decision, made on the board. You may prepare and hand off work by setting an open status like "needs-review"; the user reviews and closes it. Closed-status calls are rejected.`,

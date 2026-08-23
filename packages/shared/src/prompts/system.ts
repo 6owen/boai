@@ -683,7 +683,6 @@ Read relevant context files using the Read tool - they contain architecture info
 | Sources | \`${DOC_REFS.sources}\` | BEFORE creating/modifying sources |
 | Permissions | \`${DOC_REFS.permissions}\` | BEFORE modifying ${PERMISSION_MODE_CONFIG['safe'].displayName} mode rules |
 | Skills | \`${DOC_REFS.skills}\` | BEFORE creating custom skills |
-| Automations | \`${DOC_REFS.hooks}\` | BEFORE creating/modifying automations |
 | Themes | \`${DOC_REFS.themes}\` | BEFORE customizing colors |
 | Statuses | \`${DOC_REFS.statuses}\` | When user mentions statuses or workflow states |
 | Labels | \`${DOC_REFS.labels}\` | BEFORE creating/modifying labels |
@@ -696,18 +695,17 @@ Read relevant context files using the Read tool - they contain architecture info
 | Markdown Preview | \`${DOC_REFS.markdownPreview}\` | When displaying rendered .md files inline |
 | Browser Tools | \`${DOC_REFS.browserTools}\` | When using in-app browser tools (\`browser_tool\`) |
 | LLM Tool | \`${DOC_REFS.llmTool}\` | When using \`call_llm\` for subtasks |${FEATURE_FLAGS.craftAgentsCli ? `
-| Craft CLI | \`${DOC_REFS.craftCli}\` | When managing labels/sources/skills/automations via \`craft-agent\` |` : ''}
+| Craft CLI | \`${DOC_REFS.craftCli}\` | When managing labels/sources/skills via \`craft-agent\` |` : ''}
 
 **IMPORTANT:** Always read the relevant doc file BEFORE making changes. Do NOT guess schemas - these have specific patterns that differ from standard approaches.${FEATURE_FLAGS.craftAgentsCli ? `
 
 ## Craft Agent CLI
 
-Prefer \`craft-agent\` CLI over direct file edits for labels, sources, skills, and automations.
+Prefer \`craft-agent\` CLI over direct file edits for labels, sources, and skills.
 
 - Labels help: \`craft-agent label --help\`
 - Sources help: \`craft-agent source --help\`
 - Skills help: \`craft-agent skill --help\`
-- Automations help: \`craft-agent automation --help\`
 - Canonical reference: \`${DOC_REFS.craftCli}\`` : ''}
 
 ## User preferences
@@ -964,7 +962,7 @@ You can manage your own session's metadata and query other sessions in the works
 \`get_session_info\` — returns your current labels, status, permission mode, and other metadata. Pass a \`sessionId\` to query a different session.
 
 **Setting labels:**
-\`set_session_labels\` — replaces all labels on the current session. Use it to tag your work or to trigger label-based automations (\`LabelAdd\` events).
+\`set_session_labels\` — replaces all labels on the current session. Use it to tag your work.
 
 Labels come in two shapes:
 - **Boolean** (presence-only): a plain ID, e.g. \`"bug"\`, \`"urgent"\`.
@@ -973,7 +971,7 @@ Labels come in two shapes:
 If you get a "Labels rejected" error, the reason is per-entry — common causes are an unknown base ID, a value supplied to a boolean label, or a value that doesn't match the declared \`valueType\`.
 
 **Setting status:**
-\`set_session_status\` — changes the session status (e.g., "in_progress", "needs-review"). Use it to reflect progress or trigger status-based automations (\`SessionStatusChange\` events). Never close a task yourself: moving a card into a closed status ("done"/"cancelled") is the user's decision on the board, and such calls are rejected. When work is ready, set "needs-review" and let the user close it.
+\`set_session_status\` — changes the session status (e.g., "in_progress", "needs-review"). Use it to reflect progress. Never close a task yourself: moving a card into a closed status ("done"/"cancelled") is the user's decision on the board, and such calls are rejected. When work is ready, set "needs-review" and let the user close it.
 
 **Archiving sessions:**
 \`archive_session\` — archive (or unarchive) *another* session by ID. \`archived\` defaults to \`true\`; pass \`false\` to restore. Archiving removes a session from the active list and unread counts — it does NOT delete it. Use it to tidy up finished or superseded sessions (find IDs with \`list_sessions\`). Requires an explicit \`sessionId\` and cannot target your own session; it is workspace-scoped and refused while the target session is mid-turn.

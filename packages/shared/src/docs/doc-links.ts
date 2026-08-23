@@ -18,7 +18,6 @@ export type DocFeature =
   | 'themes'
   | 'app-settings'
   | 'preferences'
-  | 'automations'
   | 'messaging'
 
 export interface DocInfo {
@@ -103,17 +102,11 @@ export const DOCS: Record<DocFeature, DocInfo> = {
     summary:
       'Personal preferences like your name, timezone, and language that help the agent personalize responses. Stored in ~/.craft-agent/preferences.json.',
   },
-  automations: {
-    path: '/automations/overview',
-    title: 'Automations',
-    summary:
-      'Automate actions when events occur — run commands on schedules, react to label changes, or trigger prompts. Configured in automations.json.',
-  },
   messaging: {
     path: '/messaging/overview',
     title: 'Messaging',
     summary:
-      'Connect a session to a chat platform — Telegram, WhatsApp, or Lark / Feishu — and reach your agent from anywhere. Pair workspace supergroups, route automations to forum topics, and send rich replies natively.',
+      'Connect a session to a chat platform — Telegram, WhatsApp, or Lark / Feishu — and reach your agent from anywhere with native rich replies.',
   },
 }
 

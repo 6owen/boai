@@ -418,7 +418,7 @@ export function validateConfigWrite(
 
 function buildCliDomainBlockMessage(namespace: CliDomainNamespace, context: string): string {
   const policy = CLI_DOMAIN_POLICIES[namespace]
-  const noun = namespace === 'automation' ? 'automation' : namespace
+  const noun = namespace
   const quickExamplesHeading = namespace === 'label' ? 'Quick examples:' : 'Examples:'
 
   return [
@@ -464,7 +464,6 @@ function matchesPathScope(relativePath: string, scope: string): boolean {
 
 function detectCliNamespaceFromConfigDetection(detection: ConfigFileDetection): CliDomainNamespace | null {
   if (detection.type === 'labels') return 'label'
-  if (detection.type === 'automations') return 'automation'
   if (detection.type === 'source') return 'source'
   if (detection.type === 'skill') return 'skill'
   return null
@@ -475,7 +474,6 @@ function detectCliNamespaceFromConfigDetection(detection: ConfigFileDetection): 
  * - labels/**: strict block on Read/Write/Edit
  * - sources/{slug}/config.json: redirect on Write/Edit
  * - skills/{slug}/SKILL.md: redirect on Write/Edit
- * - automations.json: redirect on Write/Edit
  */
 export function getConfigCliRedirect(
   toolName: string,
@@ -532,7 +530,7 @@ export function getConfigDomainBashRedirect(
   const command = typeof input.command === 'string' ? input.command.trim() : '';
   if (!command) return null;
 
-  if (/^craft-agent\s+(label|automation|source|skill)\b/.test(command)) {
+  if (/^craft-agent\s+(label|source|skill)\b/.test(command)) {
     return null;
   }
 
@@ -809,7 +807,7 @@ export function runPreToolUseChecks(ctx: PreToolUseInput): PreToolUseCheckResult
     wasModified = true;
   }
 
-  // 5b. Config-domain Bash guard (block direct labels/automations path operations unless using craft-agent)
+  // 5b. Config-domain Bash guard.
   if (FEATURE_FLAGS.craftAgentsCli && toolName === 'Bash') {
     const configDomainBashRedirect = getConfigDomainBashRedirect(currentInput, workspaceRootPath, workingDirectory);
     if (configDomainBashRedirect) {
@@ -823,7 +821,7 @@ export function runPreToolUseChecks(ctx: PreToolUseInput): PreToolUseCheckResult
     return { type: 'block', reason: configResult.error! };
   }
 
-  // 5d. Config file CLI redirect (labels + automations)
+  // 5d. Config file CLI redirect.
   if (FEATURE_FLAGS.craftAgentsCli) {
     const cliRedirect = getConfigCliRedirect(toolName, currentInput, workspaceRootPath, workingDirectory);
     if (cliRedirect) {

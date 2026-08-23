@@ -51,7 +51,6 @@ import {
 } from '../statuses/storage.ts';
 import { readSessionHeader } from '../sessions/jsonl.ts';
 import type { SessionHeader } from '../sessions/types.ts';
-import { AUTOMATIONS_CONFIG_FILE } from '../automations/constants.ts';
 import { loadAppTheme, loadPresetThemes, loadPresetTheme, getAppThemesDir } from './storage.ts';
 import type { ThemeOverrides, PresetTheme } from './theme.ts';
 
@@ -148,10 +147,6 @@ export interface ConfigWatcherCallbacks {
   // Label callbacks
   /** Called when labels config.json changes */
   onLabelConfigChange?: (workspaceId: string) => void;
-
-  // Automations callbacks
-  /** Called when automations.json changes */
-  onAutomationsConfigChange?: (workspaceId: string) => void;
 
   // Session callbacks
   /** Called when a session's JSONL header is modified externally (labels, name, flags, etc.) */
@@ -419,13 +414,6 @@ export class ConfigWatcher {
     // Workspace-level permissions.json
     if (relativePath === 'permissions.json') {
       this.debounce('workspace-permissions', () => this.handleWorkspacePermissionsChange());
-      return;
-    }
-
-    // Workspace-level automations config file
-    if (relativePath === AUTOMATIONS_CONFIG_FILE) {
-      debug('[ConfigWatcher] automations config change detected:', relativePath);
-      this.debounce('automations-config', () => this.handleAutomationsConfigChange());
       return;
     }
 
@@ -936,14 +924,6 @@ export class ConfigWatcher {
   private handleLabelConfigChange(): void {
     debug('[ConfigWatcher] Labels config.json changed:', this.workspaceId);
     this.callbacks.onLabelConfigChange?.(this.workspaceId);
-  }
-
-  /**
-   * Handle automations config change.
-   */
-  private handleAutomationsConfigChange(): void {
-    debug('[ConfigWatcher] automations config changed:', this.workspaceId);
-    this.callbacks.onAutomationsConfigChange?.(this.workspaceId);
   }
 
   // ============================================================
