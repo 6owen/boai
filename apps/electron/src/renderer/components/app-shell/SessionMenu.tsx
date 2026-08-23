@@ -12,15 +12,10 @@
  * the compact-mode drawer to keep behaviour in one place.
  */
 
-import * as React from 'react'
 import { useTranslation } from "react-i18next"
 import {
-  Archive,
-  ArchiveRestore,
   Trash2,
   Pencil,
-  Flag,
-  FlagOff,
   MailOpen,
   FolderOpen,
   Copy,
@@ -28,19 +23,16 @@ import {
   Columns2,
   CloudUpload,
   RefreshCw,
-  Tag,
   Send,
-  FolderKanban,
-  Check,
 } from 'lucide-react'
 import { useMenuComponents } from '@/components/ui/menu-context'
-import { getStateColor, getStateIcon, type SessionStatusId } from '@/config/session-status-config'
+import type { SessionStatusId } from '@/config/session-status-config'
 import type { SessionStatus } from '@/config/session-status-config'
 import type { LabelConfig } from '@craft-agent/shared/labels'
-import { LabelMenuItems, StatusMenuItems, ShareMenuItems } from './SessionMenuParts'
+import { ShareMenuItems } from './SessionMenuParts'
 import { getFileManagerName } from '@/lib/platform'
 import type { SessionMeta } from '@/atoms/sessions'
-import { getSessionStatus, hasUnreadMeta, hasMessagesMeta } from '@/utils/session'
+import { hasUnreadMeta, hasMessagesMeta } from '@/utils/session'
 import { MessagingSessionMenuItem } from '@/components/messaging/MessagingSessionMenuItem'
 import { useSessionMenuActions } from '@/hooks/useSessionMenuActions'
 
@@ -84,35 +76,21 @@ export interface SessionMenuProps {
  */
 export function SessionMenu({
   item,
-  sessionStatuses,
-  labels = [],
-  onLabelsChange,
   onRename,
-  onFlag,
-  onUnflag,
-  onArchive,
-  onUnarchive,
   onMarkUnread,
-  onSessionStatusChange,
   onOpenInNewWindow,
   onSendToWorkspace,
   onDelete,
   hasTransferTargets,
-  projects = [],
-  onSetProjectId,
 }: SessionMenuProps) {
   const { t } = useTranslation()
 
   const sessionId = item.id
-  const isFlagged = item.isFlagged ?? false
-  const isArchived = item.isArchived ?? false
   const sharedUrl = item.sharedUrl
-  const currentSessionStatus = getSessionStatus(item)
-  const sessionLabels = item.labels ?? []
   const _hasMessages = hasMessagesMeta(item)
   const _hasUnread = hasUnreadMeta(item)
 
-  const actions = useSessionMenuActions({ item, onLabelsChange })
+  const actions = useSessionMenuActions({ item })
 
   // Get menu components from context (works with both DropdownMenu and ContextMenu)
   const { MenuItem, Separator, Sub, SubTrigger, SubContent } = useMenuComponents()
@@ -155,106 +133,6 @@ export function SessionMenu({
       <MessagingSessionMenuItem sessionId={sessionId} />
 
       <Separator />
-
-      {/* Status submenu - includes all statuses plus Flag/Unflag at the bottom */}
-      <Sub>
-        <SubTrigger className="pr-2">
-          <span style={{ color: getStateColor(currentSessionStatus, sessionStatuses) ?? 'var(--foreground)' }}>
-            {(() => {
-              const icon = getStateIcon(currentSessionStatus, sessionStatuses)
-              return React.isValidElement(icon)
-                ? React.cloneElement(icon as React.ReactElement<{ bare?: boolean }>, { bare: true })
-                : icon
-            })()}
-          </span>
-          <span className="flex-1">{t("sessionMenu.status")}</span>
-        </SubTrigger>
-        <SubContent>
-          <StatusMenuItems
-            sessionStatuses={sessionStatuses}
-            activeStateId={currentSessionStatus}
-            onSelect={onSessionStatusChange}
-            menu={{ MenuItem }}
-          />
-        </SubContent>
-      </Sub>
-
-      {/* Labels submenu - hierarchical label tree with nested sub-menus and toggle checkmarks */}
-      {labels.length > 0 && (
-        <Sub>
-          <SubTrigger className="pr-2">
-            <Tag className="h-3.5 w-3.5" />
-            <span className="flex-1">{t("sessionMenu.labels")}</span>
-            {sessionLabels.length > 0 && (
-              <span className="text-[10px] text-muted-foreground tabular-nums -mr-2.5">
-                {sessionLabels.length}
-              </span>
-            )}
-          </SubTrigger>
-          <SubContent>
-            <LabelMenuItems
-              labels={labels}
-              appliedLabelIds={actions.appliedLabelIds}
-              onToggle={actions.toggleLabel}
-              menu={{ MenuItem, Separator, Sub, SubTrigger, SubContent }}
-            />
-          </SubContent>
-        </Sub>
-      )}
-
-      {/* Projects submenu - workspace projects + "No project" to clear binding */}
-      {projects.length > 0 && onSetProjectId && (
-        <Sub>
-          <SubTrigger className="pr-2">
-            <FolderKanban className="h-3.5 w-3.5" />
-            <span className="flex-1">{t("sessionMenu.projects")}</span>
-          </SubTrigger>
-          <SubContent>
-            <MenuItem onClick={() => onSetProjectId(null)}>
-              {!item.projectId && <Check className="h-3.5 w-3.5" />}
-              <span className={item.projectId ? 'flex-1 ml-[18px]' : 'flex-1'}>
-                {t("sessionMenu.noProject")}
-              </span>
-            </MenuItem>
-            <Separator />
-            {projects.map((p) => {
-              const isBound = item.projectId === p.id
-              return (
-                <MenuItem key={p.id} onClick={() => onSetProjectId(p.id)}>
-                  {isBound && <Check className="h-3.5 w-3.5" />}
-                  <span className={isBound ? 'flex-1' : 'flex-1 ml-[18px]'}>{p.name}</span>
-                </MenuItem>
-              )
-            })}
-          </SubContent>
-        </Sub>
-      )}
-
-      {/* Flag/Unflag */}
-      {!isFlagged ? (
-        <MenuItem onClick={onFlag}>
-          <Flag className="h-3.5 w-3.5 text-info" />
-          <span className="flex-1">{t("sessionMenu.flag")}</span>
-        </MenuItem>
-      ) : (
-        <MenuItem onClick={onUnflag}>
-          <FlagOff className="h-3.5 w-3.5" />
-          <span className="flex-1">{t("sessionMenu.unflag")}</span>
-        </MenuItem>
-      )}
-
-      {/* Archive/Unarchive */}
-      {!isArchived ? (
-        <MenuItem onClick={onArchive}>
-          <Archive className="h-3.5 w-3.5" />
-          <span className="flex-1">{t("sessionMenu.archive")}</span>
-        </MenuItem>
-      ) : (
-        <MenuItem onClick={onUnarchive}>
-          <ArchiveRestore className="h-3.5 w-3.5" />
-          <span className="flex-1">{t("sessionMenu.unarchive")}</span>
-        </MenuItem>
-      )}
 
       {/* Mark as Unread - only show if session has been read */}
       {!_hasUnread && _hasMessages && (

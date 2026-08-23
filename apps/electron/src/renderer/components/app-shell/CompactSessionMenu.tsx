@@ -27,8 +27,6 @@ import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { motion } from 'motion/react'
 import {
-  Archive,
-  ArchiveRestore,
   AppWindow,
   Check,
   ChevronDown,
@@ -37,8 +35,6 @@ import {
   CloudUpload,
   Columns2,
   Copy,
-  Flag,
-  FlagOff,
   FolderOpen,
   Globe,
   Link2Off,
@@ -47,7 +43,6 @@ import {
   Pencil,
   RefreshCw,
   Send,
-  Tag,
   Trash2,
 } from 'lucide-react'
 
@@ -59,26 +54,15 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from '@/components/ui/drawer'
-import { LabelIcon } from '@/components/ui/label-icon'
-import {
-  createLabelMenuItems,
-  type LabelMenuItem,
-} from '@/components/ui/label-menu-utils'
 import type { LabelConfig } from '@craft-agent/shared/labels'
-import {
-  getStateColor,
-  getStateIcon,
-  getStatusIconStyle,
-  type SessionStatus,
-  type SessionStatusId,
-} from '@/config/session-status-config'
+import type { SessionStatus, SessionStatusId } from '@/config/session-status-config'
 import type { SessionMeta } from '@/atoms/sessions'
-import { getSessionStatus, hasUnreadMeta, hasMessagesMeta } from '@/utils/session'
+import { hasUnreadMeta, hasMessagesMeta } from '@/utils/session'
 import { getFileManagerName } from '@/lib/platform'
 import { useMessagingConnect, type MessagingPlatform } from '@/components/messaging/MessagingSessionMenuItem'
 import { useSessionMenuActions } from '@/hooks/useSessionMenuActions'
 
-type View = 'root' | 'status' | 'labels' | 'share' | 'messaging'
+type View = 'root' | 'share' | 'messaging'
 
 export interface CompactSessionMenuProps {
   /** Title text shown in the trigger button + drawer header. */
@@ -128,17 +112,9 @@ export function CompactSessionMenu({
   badge,
   isRegeneratingTitle,
   item,
-  sessionStatuses,
-  labels = [],
   hasTransferTargets,
-  onLabelsChange,
   onRename,
-  onFlag,
-  onUnflag,
-  onArchive,
-  onUnarchive,
   onMarkUnread,
-  onSessionStatusChange,
   onOpenInNewWindow,
   onSendToWorkspace,
   onDelete,
@@ -173,20 +149,11 @@ export function CompactSessionMenu({
     setView('root')
   }, [item.id, setOpen])
 
-  const isFlagged = item.isFlagged ?? false
-  const isArchived = item.isArchived ?? false
   const sharedUrl = item.sharedUrl
-  const currentSessionStatus = getSessionStatus(item)
-  const sessionLabels = item.labels ?? []
   const _hasMessages = hasMessagesMeta(item)
   const _hasUnread = hasUnreadMeta(item)
 
-  const actions = useSessionMenuActions({ item, onLabelsChange })
-
-  const flatLabelItems = React.useMemo(
-    (): LabelMenuItem[] => createLabelMenuItems(labels),
-    [labels],
-  )
+  const actions = useSessionMenuActions({ item })
 
   // Wrap a callback so it also closes the drawer. Async callbacks fire
   // their work in the background — the drawer doesn't need to stay open
@@ -214,8 +181,6 @@ export function CompactSessionMenu({
   // ---------------------------------------------------------------------------
   const headerTitle = (() => {
     switch (view) {
-      case 'status':    return t('sessionMenu.status')
-      case 'labels':    return t('sessionMenu.labels')
       case 'share':     return t('sessionMenu.shared')
       case 'messaging': return t('sessionMenu.connectMessaging')
       default:          return title ?? ''
@@ -290,12 +255,6 @@ export function CompactSessionMenu({
           {view === 'root' && (
             <RootPane
               sharedUrl={sharedUrl}
-              sessionStatuses={sessionStatuses}
-              currentSessionStatus={currentSessionStatus}
-              labelsCount={sessionLabels.length}
-              hasLabels={labels.length > 0}
-              isFlagged={isFlagged}
-              isArchived={isArchived}
               hasMessages={_hasMessages}
               hasUnread={_hasUnread}
               hasTransferTargets={hasTransferTargets}
@@ -303,12 +262,6 @@ export function CompactSessionMenu({
               onOpenShareSub={() => setView('share')}
               onSendToWorkspace={closeAfter(onSendToWorkspace)}
               onOpenMessagingSub={() => setView('messaging')}
-              onOpenStatusSub={() => setView('status')}
-              onOpenLabelsSub={() => setView('labels')}
-              onFlag={closeAfter(onFlag)}
-              onUnflag={closeAfter(onUnflag)}
-              onArchive={closeAfter(onArchive)}
-              onUnarchive={closeAfter(onUnarchive)}
               onMarkUnread={closeAfter(onMarkUnread)}
               onRename={closeAfter(onRename)}
               onRefreshTitle={closeAfter(actions.refreshTitle)}
@@ -317,25 +270,6 @@ export function CompactSessionMenu({
               onShowInFinder={closeAfter(actions.showInFinder)}
               onCopyPath={closeAfter(actions.copyPath)}
               onDelete={closeAfter(onDelete)}
-            />
-          )}
-
-          {view === 'status' && (
-            <StatusPane
-              sessionStatuses={sessionStatuses}
-              activeStateId={currentSessionStatus}
-              onSelect={(id) => {
-                onSessionStatusChange(id)
-                setOpen(false)
-              }}
-            />
-          )}
-
-          {view === 'labels' && (
-            <LabelsPane
-              items={flatLabelItems}
-              appliedLabelIds={actions.appliedLabelIds}
-              onToggle={actions.toggleLabel}
             />
           )}
 
@@ -363,12 +297,6 @@ export function CompactSessionMenu({
 
 interface RootPaneProps {
   sharedUrl?: string
-  sessionStatuses: SessionStatus[]
-  currentSessionStatus: SessionStatusId
-  labelsCount: number
-  hasLabels: boolean
-  isFlagged: boolean
-  isArchived: boolean
   hasMessages: boolean
   hasUnread: boolean
   hasTransferTargets?: boolean
@@ -376,12 +304,6 @@ interface RootPaneProps {
   onOpenShareSub: () => void
   onSendToWorkspace?: () => void
   onOpenMessagingSub: () => void
-  onOpenStatusSub: () => void
-  onOpenLabelsSub: () => void
-  onFlag?: () => void
-  onUnflag?: () => void
-  onArchive?: () => void
-  onUnarchive?: () => void
   onMarkUnread?: () => void
   onRename?: () => void
   onRefreshTitle?: () => void
@@ -394,12 +316,6 @@ interface RootPaneProps {
 
 function RootPane({
   sharedUrl,
-  sessionStatuses,
-  currentSessionStatus,
-  labelsCount,
-  hasLabels,
-  isFlagged,
-  isArchived,
   hasMessages,
   hasUnread,
   hasTransferTargets,
@@ -407,12 +323,6 @@ function RootPane({
   onOpenShareSub,
   onSendToWorkspace,
   onOpenMessagingSub,
-  onOpenStatusSub,
-  onOpenLabelsSub,
-  onFlag,
-  onUnflag,
-  onArchive,
-  onUnarchive,
   onMarkUnread,
   onRename,
   onRefreshTitle,
@@ -423,14 +333,6 @@ function RootPane({
   onDelete,
 }: RootPaneProps) {
   const { t } = useTranslation()
-
-  const statusIconNode = (() => {
-    const icon = getStateIcon(currentSessionStatus, sessionStatuses)
-    return React.isValidElement(icon)
-      ? React.cloneElement(icon as React.ReactElement<{ bare?: boolean }>, { bare: true })
-      : icon
-  })()
-  const statusColor = getStateColor(currentSessionStatus, sessionStatuses) ?? undefined
 
   return (
     <div className="flex flex-col">
@@ -458,35 +360,6 @@ function RootPane({
       />
 
       <Separator />
-
-      <Row
-        icon={<span style={statusColor ? { color: statusColor } : undefined}>{statusIconNode}</span>}
-        label={t('sessionMenu.status')}
-        chevron
-        onTap={onOpenStatusSub}
-      />
-
-      {hasLabels && (
-        <Row
-          icon={<Tag className="h-4 w-4" />}
-          label={t('sessionMenu.labels')}
-          trailing={labelsCount > 0 ? <CountBadge count={labelsCount} /> : undefined}
-          chevron
-          onTap={onOpenLabelsSub}
-        />
-      )}
-
-      {!isFlagged ? (
-        <Row icon={<Flag className="h-4 w-4 text-info" />} label={t('sessionMenu.flag')} onTap={onFlag} />
-      ) : (
-        <Row icon={<FlagOff className="h-4 w-4" />} label={t('sessionMenu.unflag')} onTap={onUnflag} />
-      )}
-
-      {!isArchived ? (
-        <Row icon={<Archive className="h-4 w-4" />} label={t('sessionMenu.archive')} onTap={onArchive} />
-      ) : (
-        <Row icon={<ArchiveRestore className="h-4 w-4" />} label={t('sessionMenu.unarchive')} onTap={onUnarchive} />
-      )}
 
       {!hasUnread && hasMessages && (
         <Row icon={<MailOpen className="h-4 w-4" />} label={t('sessionMenu.markAsUnread')} onTap={onMarkUnread} />
@@ -518,69 +391,6 @@ function RootPane({
         destructive
         onTap={onDelete}
       />
-    </div>
-  )
-}
-
-function StatusPane({
-  sessionStatuses,
-  activeStateId,
-  onSelect,
-}: {
-  sessionStatuses: SessionStatus[]
-  activeStateId?: SessionStatusId | null
-  onSelect: (id: SessionStatusId) => void
-}) {
-  return (
-    <div className="flex flex-col">
-      {sessionStatuses.map((state) => {
-        const bareStateIcon = React.isValidElement(state.icon)
-          ? React.cloneElement(state.icon as React.ReactElement<{ bare?: boolean }>, { bare: true })
-          : state.icon
-        return (
-          <Row
-            key={state.id}
-            icon={<span style={getStatusIconStyle(state)}>{bareStateIcon}</span>}
-            label={state.label}
-            radioSelected={activeStateId === state.id}
-            onTap={() => onSelect(state.id)}
-          />
-        )
-      })}
-    </div>
-  )
-}
-
-function LabelsPane({
-  items,
-  appliedLabelIds,
-  onToggle,
-}: {
-  items: LabelMenuItem[]
-  appliedLabelIds: Set<string>
-  onToggle: (id: string) => void
-}) {
-  // The Labels row in RootPane is gated on `hasLabels`, so this pane is only
-  // ever entered when items.length > 0 — no empty-state branch needed.
-  return (
-    <div className="flex flex-col">
-      {items.map((item) => {
-        const isApplied = appliedLabelIds.has(item.id)
-        return (
-          <Row
-            key={item.id}
-            icon={<LabelIcon label={item.config} size="lg" />}
-            label={item.parentPath ? (
-              <>
-                <span className="text-foreground/50">{item.parentPath}</span>
-                {item.label}
-              </>
-            ) : item.label}
-            radioSelected={isApplied}
-            onTap={() => onToggle(item.id)}
-          />
-        )
-      })}
     </div>
   )
 }
@@ -665,12 +475,4 @@ function Row({
 
 function Separator() {
   return <div className="my-1 mx-3 h-px bg-foreground/[0.06]" />
-}
-
-function CountBadge({ count }: { count: number }) {
-  return (
-    <span className="text-[11px] tabular-nums text-foreground/50">
-      {count}
-    </span>
-  )
 }

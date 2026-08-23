@@ -1,6 +1,6 @@
 import { formatDistanceToNowStrict } from "date-fns"
 import type { Locale } from "date-fns"
-import { Flag, ShieldAlert } from "lucide-react"
+import { ShieldAlert } from "lucide-react"
 import { useActionLabel } from "@/actions"
 import { cn } from "@/lib/utils"
 import { rendererPerf } from "@/lib/perf"
@@ -10,11 +10,7 @@ import { EntityListBadge } from "@/components/ui/entity-list-badge"
 import { SessionMenu } from "./SessionMenu"
 import { BatchSessionMenu } from "./BatchSessionMenu"
 import { CompactSessionMenu } from "./CompactSessionMenu"
-import { SessionStatusIcon } from "./SessionStatusIcon"
-import { SessionBadges } from "./SessionBadges"
-import { SessionProjectColorWrapper } from "./SessionProjectColorWrapper"
 import { hasTransferTargets } from "./transfer-targets"
-import { useProjectColorTreatment } from "@/hooks/useProjectColorTreatment"
 import { getSessionTitle, getSessionPreviewText, highlightMatch, hasUnreadMeta, shortTimeLocale } from "@/utils/session"
 import { useSessionListContext } from "@/context/SessionListContext"
 import { useAppShellContext } from "@/context/AppShellContext"
@@ -22,7 +18,6 @@ import { navigate, routes } from "@/lib/navigate"
 import type { SessionMeta } from "@/atoms/sessions"
 import { messagingBindingsBySessionAtom } from "@/atoms/messaging"
 import { useAtomValue } from "jotai"
-import { extractLabelId } from "@craft-agent/shared/labels"
 
 const PLATFORM_PILL: Record<'telegram' | 'whatsapp', { label: string; colorClass: string }> = {
   telegram: {
@@ -69,25 +64,11 @@ export function SessionItem({
   const ripgrepMatchCount = ctx.contentSearchResults.get(item.id)?.matchCount
   const chatMatchCount = isActiveSession ? activeMatch!.count : ripgrepMatchCount
   const hasMatch = chatMatchCount != null && chatMatchCount > 0
-  const hasLabels = !!(item.labels && item.labels.length > 0 && ctx.flatLabels.length > 0 && item.labels.some(entry => {
-    const labelId = extractLabelId(entry)
-    return ctx.flatLabels.some(l => l.id === labelId)
-  }))
   const hasPendingPrompt = ctx.hasPendingPrompt?.(item.id) ?? false
   const previewText = isCompactMode ? getSessionPreviewText(item) : null
   const messagingBindingsBySession = useAtomValue(messagingBindingsBySessionAtom)
   const sessionBindings = messagingBindingsBySession.get(item.id) ?? []
   const hasMessagingBinding = sessionBindings.length > 0
-
-  // Resolve the bound project so the row can show a project-themed stripe /
-  // tint and reveal the project name on hover. Treatment is a user preference
-  // under Appearance.
-  const projectColorTreatment = useProjectColorTreatment()
-  const boundProject = item.projectId
-    ? ctx.projects?.find(p => p.id === item.projectId)
-    : undefined
-  const projectColor = boundProject?.color
-  const projectName = boundProject?.name
 
   const handleClick = (e: React.MouseEvent) => {
     ctx.onFocusZone()
@@ -117,7 +98,6 @@ export function SessionItem({
   }
 
   return (
-    <SessionProjectColorWrapper color={projectColor} treatment={projectColorTreatment}>
     <EntityRow
       className="session-item"
       dataAttributes={{ 'data-session-id': item.id }}
@@ -125,10 +105,6 @@ export function SessionItem({
       separatorClassName="pl-[38px] pr-4"
       isSelected={isSelected}
       isInMultiSelect={isInMultiSelect}
-      // When a project stripe is drawn at the leading edge, suppress EntityRow's
-      // own blue selection bar so they don't stack. The row's background tint
-      // continues to convey "selected".
-      suppressSelectionBar={!!projectColor}
       onMouseDown={handleClick}
       buttonProps={{
         ...itemProps,
@@ -185,7 +161,6 @@ export function SessionItem({
       )}
       icon={
         <>
-          <SessionStatusIcon item={item} />
           <div className={cn(
             "flex items-center justify-center overflow-hidden gap-1",
             "transition-all duration-200 ease-out",
@@ -214,17 +189,8 @@ export function SessionItem({
       titleClassName={cn("text-[13px]", item.isAsyncOperationOngoing && "animate-shimmer-text")}
       subtitle={previewText}
       titleSuffix={
-        (projectName || hasMessagingBinding) ? (
+        hasMessagingBinding ? (
           <div className="flex items-center gap-1">
-            {projectName && (
-              <span
-                className="text-[11px] text-foreground/40 whitespace-nowrap truncate max-w-[120px] opacity-0 group-hover:opacity-100 transition-opacity duration-150"
-                style={projectColor ? { color: projectColor } : undefined}
-                title={projectName}
-              >
-                {projectName}
-              </span>
-            )}
             {hasMessagingBinding && sessionBindings.map((binding) => {
               const pill = PLATFORM_PILL[binding.platform as 'telegram' | 'whatsapp']
               if (!pill) return null
@@ -257,17 +223,11 @@ export function SessionItem({
         >
           {chatMatchCount}
         </span>
-      ) : item.isFlagged ? (
-        <div className="p-1 flex items-center justify-center">
-          <Flag className="h-3.5 w-3.5 text-info" />
-        </div>
       ) : item.lastMessageAt ? (
         <span className="text-[11px] text-foreground/40 whitespace-nowrap">
           {formatDistanceToNowStrict(new Date(item.lastMessageAt), { locale: shortTimeLocale as Locale, roundingMethod: 'floor' })}
         </span>
       ) : undefined}
-      badges={hasLabels ? <SessionBadges item={item} /> : undefined}
     />
-    </SessionProjectColorWrapper>
   )
 }
