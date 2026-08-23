@@ -63,11 +63,21 @@ describe('automation runtime decommissioning', () => {
 
   it('does not create a scheduler for a workspace with legacy automations', () => {
     const script = `
+      import { existsSync, readFileSync } from 'node:fs';
+      import { join } from 'node:path';
       import { SessionManager } from './packages/server-core/src/sessions/SessionManager.ts';
+      const workspaceRoot = ${JSON.stringify(workspaceRoot)};
+      const configPath = join(workspaceRoot, 'automations.json');
+      const before = readFileSync(configPath, 'utf8');
       const manager = new SessionManager();
-      manager.setupConfigWatcher(${JSON.stringify(workspaceRoot)}, 'ws_decommissioned');
-      console.log('${RESULT_PREFIX}' + JSON.stringify(manager.getWorkspaceAutomationSummary('ws_decommissioned')));
+      manager.setupConfigWatcher(workspaceRoot, 'ws_decommissioned');
+      await Bun.sleep(1100);
       manager.cleanup();
+      console.log('${RESULT_PREFIX}' + JSON.stringify({
+        configUnchanged: readFileSync(configPath, 'utf8') === before,
+        historyCreated: existsSync(join(workspaceRoot, 'automations-history.jsonl')),
+        retryQueueCreated: existsSync(join(workspaceRoot, 'automations-retry-queue.jsonl')),
+      }));
       process.exit(0);
     `
     const result = Bun.spawnSync([process.execPath, '--eval', script], {
@@ -84,8 +94,9 @@ describe('automation runtime decommissioning', () => {
       .find((entry) => entry.startsWith(RESULT_PREFIX))
     expect(line).toBeDefined()
     expect(JSON.parse(line!.slice(RESULT_PREFIX.length))).toEqual({
-      automationCount: 0,
-      schedulerRunning: false,
+      configUnchanged: true,
+      historyCreated: false,
+      retryQueueCreated: false,
     })
   }, 15_000)
 })

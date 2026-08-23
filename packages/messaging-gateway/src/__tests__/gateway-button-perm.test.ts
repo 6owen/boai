@@ -129,7 +129,6 @@ function makeStubSessionManager(opts: StubSessionManagerOpts = {}): ISessionMana
     acceptPlan: mock(async () => {}),
     setPendingPlanExecution: mock(async () => {}),
     clearPendingPlanExecution: mock(async () => {}),
-    setAutomationBinder: () => {},
   } as unknown as ISessionManager
 }
 

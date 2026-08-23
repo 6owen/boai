@@ -1154,19 +1154,6 @@ export class PiAgent extends BaseAgent {
         this.resetPrerequisiteState();
       }
 
-      // Fire PostToolUse / PostToolUseFailure hook events (fire-and-forget)
-      if (agentEvent.type === 'tool_result') {
-        const hookEvent = agentEvent.isError ? 'PostToolUseFailure' : 'PostToolUse';
-        this.emitAutomationEvent(hookEvent, {
-          hook_event_name: hookEvent,
-          tool_name: agentEvent.toolName ?? (event.toolName as string) ?? 'unknown',
-          tool_input: agentEvent.input,
-          ...(agentEvent.isError
-            ? { error: typeof agentEvent.result === 'string' ? agentEvent.result : undefined }
-            : { tool_response: typeof agentEvent.result === 'string' ? agentEvent.result : undefined }),
-        });
-      }
-
       this.eventQueue.enqueue(agentEvent);
     }
 
@@ -1207,13 +1194,6 @@ export class PiAgent extends BaseAgent {
       });
       this.debug(`Captured pre-tool metadata for ${toolName} (${toolCallId}, sessionId=${debugSessionId}): intent=${!!preIntent}, displayName=${!!preDisplayName}`);
     }
-
-    // Fire PreToolUse automation event — await so automations run before tool executes
-    await this.emitAutomationEvent('PreToolUse', {
-      hook_event_name: 'PreToolUse',
-      tool_name: toolName,
-      tool_input: input,
-    });
 
     const rootPath = this.config.workspace.rootPath ?? this.workingDirectory;
     const workspaceSlug = extractWorkspaceSlug(rootPath, this.config.workspace.id);
@@ -1965,12 +1945,6 @@ export class PiAgent extends BaseAgent {
     this.currentUserMessage = message;
     this.adapter.startTurn();
 
-    // Fire UserPromptSubmit hook event (fire-and-forget)
-    this.emitAutomationEvent('UserPromptSubmit', {
-      hook_event_name: 'UserPromptSubmit',
-      prompt: message,
-    });
-
     // Refresh session-scoped tool callbacks (for SubmitPlan, source auth, etc.)
     // IMPORTANT: merge (don't replace) so SessionManager-provided browserPaneFns
     // survives across turns.
@@ -2279,9 +2253,6 @@ export class PiAgent extends BaseAgent {
   }
 
   async abort(reason?: string): Promise<void> {
-    // Fire Stop hook event (fire-and-forget)
-    this.emitAutomationEvent('Stop', { hook_event_name: 'Stop' });
-
     // Deny all pending permissions
     for (const [, pending] of this.pendingPermissions) {
       pending.resolve(false);
@@ -2297,9 +2268,6 @@ export class PiAgent extends BaseAgent {
   }
 
   forceAbort(reason: AbortReason): void {
-    // Fire Stop hook event (fire-and-forget)
-    this.emitAutomationEvent('Stop', { hook_event_name: 'Stop' });
-
     this.abortReason = reason;
     this._isProcessing = false;
 

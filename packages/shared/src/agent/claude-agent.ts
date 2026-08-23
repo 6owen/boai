@@ -45,7 +45,7 @@ import {
   cleanupSessionScopedTools,
   type AuthRequest,
 } from './session-scoped-tools.ts';
-import { type AutomationSystem, type SdkAutomationCallbackMatcher } from '../automations/index.ts';
+import { type SdkAutomationCallbackMatcher } from '../automations/index.ts';
 import {
   getPermissionMode,
   getPermissionModeDiagnostics,
@@ -216,8 +216,6 @@ export interface ClaudeAgentConfig {
   };
   /** System prompt preset for mini agents ('default' | 'mini' or custom string) */
   systemPromptPreset?: 'default' | 'mini' | string;
-  /** Workspace-level AutomationSystem instance (shared across all agents in the workspace) */
-  automationSystem?: AutomationSystem;
   /**
    * Per-session environment variable overrides for the SDK subprocess.
    * Used to pass connection-specific config like ANTHROPIC_BASE_URL that
@@ -796,7 +794,6 @@ export class ClaudeAgent extends BaseAgent {
       miniModel: config.miniModel,
       mcpPool: config.mcpPool,
       connectionSlug: config.connectionSlug,
-      automationSystem: config.automationSystem,
     };
 
     // Call BaseAgent constructor - initializes model, thinkingLevel, permissionManager, sourceManager, etc.
@@ -804,7 +801,6 @@ export class ClaudeAgent extends BaseAgent {
     super(backendConfig, DEFAULT_MODEL, CLAUDE_CONTEXT_WINDOW);
 
     this.isHeadless = config.isHeadless ?? false;
-    this.automationSystem = config.automationSystem;
 
     // Initialize event adapter for SDK message → AgentEvent conversion
     this.eventAdapter = new ClaudeEventAdapter({
@@ -1253,15 +1249,8 @@ export class ClaudeAgent extends BaseAgent {
         // This allows Safe Mode to properly allow read-only bash commands without SDK interference
         permissionMode: 'bypassPermissions',
         allowDangerouslySkipPermissions: true,
-        // User hooks from automations.json are merged with internal hooks
+        // Internal hooks for permissions, lifecycle events, and logging.
         hooks: (() => {
-          // Build user-defined hooks from automations.json using the workspace-level AutomationSystem
-          const userHooks: Partial<Record<string, SdkAutomationCallbackMatcher[]>> = this.automationSystem?.buildSdkHooks() ?? {};
-          if (Object.keys(userHooks).length > 0) {
-            debug('[CraftAgent] User SDK hooks loaded:', Object.keys(userHooks).join(', '));
-          }
-
-          // Internal hooks for permission handling and logging
           const internalHooks: Record<string, SdkAutomationCallbackMatcher[]> = {
           PreToolUse: [{
             hooks: [async (_hookInput) => {
@@ -1549,21 +1538,7 @@ export class ClaudeAgent extends BaseAgent {
           }],
           };
 
-          // Merge internal hooks with user hooks from automations.json
-          // Internal hooks run first (permissions), then user hooks
-          const mergedHooks: Record<string, SdkAutomationCallbackMatcher[]> = { ...internalHooks };
-          for (const [event, matchers] of Object.entries(userHooks) as [string, SdkAutomationCallbackMatcher[]][]) {
-            if (!matchers) continue;
-            if (mergedHooks[event]) {
-              // Append user hooks after internal hooks
-              mergedHooks[event] = [...mergedHooks[event]!, ...matchers];
-            } else {
-              // Add new event hooks
-              mergedHooks[event] = matchers;
-            }
-          }
-
-          return mergedHooks;
+          return internalHooks;
         })(),
         // Continue from previous session if we have one (enables conversation history & auto compaction)
         // Skip resume on retry (after session expiry) to start fresh

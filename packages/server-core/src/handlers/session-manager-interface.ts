@@ -253,8 +253,6 @@ export interface ISessionManager {
 
   /** Count of sessions with active backend processes. Pass workspaceId to scope. */
   getActiveSessionCount(workspaceId?: string): number
-  /** Automation summary for a workspace (count of configured automations + scheduler state). */
-  getWorkspaceAutomationSummary(workspaceId: string): { automationCount: number; schedulerRunning: boolean }
   /** Active sessions across all workspaces (sessions with running backend processes). */
   getActiveSessionsInfo(): ActiveSessionInfo[]
 
@@ -270,51 +268,4 @@ export interface ISessionManager {
    */
   refreshConnectionRuntime(connectionSlug: string): Promise<void>
   completeAuthRequest(sessionId: string, result: AuthResult): Promise<void>
-  executePromptAutomation(input: ExecutePromptAutomationInput): Promise<{ sessionId: string }>
-
-  /**
-   * Install a callback invoked from `executePromptAutomation` after a session
-   * is created when the matcher declared `telegramTopic`. Wired by the
-   * messaging-gateway bootstrap so the SessionManager doesn't need to import
-   * the messaging package (avoids a circular package-level import).
-   *
-   * The callback should be best-effort: failures must not block the session.
-   */
-  setAutomationBinder?(
-    fn: (input: { workspaceId: string; sessionId: string; topicName: string }) => Promise<void>,
-  ): void
-}
-
-/**
- * Input for executePromptAutomation. Options-object form replaces the
- * previous positional-args signature once the param list grew past
- * readability — new optional fields (thinkingLevel, future cwd/permissions
- * overrides) can be added without churn at every call site.
- */
-export interface ExecutePromptAutomationInput {
-  workspaceId: string
-  workspaceRootPath: string
-  prompt: string
-  labels?: string[]
-  permissionMode?: PermissionMode
-  mentions?: string[]
-  llmConnection?: string
-  model?: string
-  /** Override the workspace default thinking level for the spawned session. */
-  thinkingLevel?: ThinkingLevel
-  automationName?: string
-  /**
-   * Optional Telegram forum-topic name. When set and the workspace has a
-   * paired supergroup, the new session is bound to a topic of this name
-   * (created on first use). Silently ignored when prerequisites aren't met.
-   */
-  telegramTopic?: string
-  /**
-   * When `false`, `executePromptAutomation` returns as soon as the session is
-   * created and the prompt is dispatched, instead of awaiting the whole turn.
-   * Used by the automation **Test** action so a long run (tools / >30s output)
-   * doesn't trip the RPC client timeout (craft-agents-oss#943). The session
-   * still streams live and run errors are logged. Defaults to awaiting completion.
-   */
-  waitForCompletion?: boolean
 }

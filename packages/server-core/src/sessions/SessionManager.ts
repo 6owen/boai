@@ -1,6 +1,6 @@
 import type { EventSink, RpcServer } from '@craft-agent/server-core/transport'
 import { CLIENT_BROWSER_INVOKE } from '@craft-agent/server-core/transport'
-import type { ISessionManager, IBrowserPaneManager, ExecutePromptAutomationInput } from '@craft-agent/server-core/handlers'
+import type { ISessionManager, IBrowserPaneManager } from '@craft-agent/server-core/handlers'
 import { RemoteBrowserPaneManager } from './RemoteBrowserPaneManager'
 import { validateFilePath, getWorkspaceAllowedDirs } from '@craft-agent/server-core/handlers'
 import { createScopedLogger, CONSOLE_LOGGER, type PlatformServices, type Logger } from '@craft-agent/server-core/runtime'
@@ -96,9 +96,8 @@ import { type ThinkingLevel, DEFAULT_THINKING_LEVEL, normalizeThinkingLevel } fr
 import { evaluateAutoLabels } from '@craft-agent/shared/labels/auto'
 import { listLabels, loadLabelConfig } from '@craft-agent/shared/labels/storage'
 import { extractLabelId, resolveSessionLabels, findTaskItemLabelId } from '@craft-agent/shared/labels'
-import { ensureLabelsExist, ensureTaskItemLabel } from '@craft-agent/shared/labels/crud'
+import { ensureTaskItemLabel } from '@craft-agent/shared/labels/crud'
 import { loadStatusConfig } from '@craft-agent/shared/statuses/storage'
-import type { AutomationSystem, AutomationSystemMetadataSnapshot } from '@craft-agent/shared/automations'
 import { buildBackendRuntimeSignature, buildRestartRequiredSignature, filterAttachmentsForModelInput } from './runtime-config'
 import { validateArchiveTarget } from './archive-guards'
 
@@ -1206,8 +1205,6 @@ export class SessionManager implements ISessionManager {
   private deltaFlushTimers: Map<string, NodeJS.Timeout> = new Map()
   // Config watchers for live updates (sources, etc.) - one per workspace
   private configWatchers: Map<string, ConfigWatcher> = new Map()
-  // Automation systems for workspace event automations - one per workspace (includes scheduler, diffing, and handlers)
-  private automationSystems: Map<string, AutomationSystem> = new Map()
   // Pending credential request resolvers (keyed by requestId)
   private pendingCredentialResolvers: Map<string, (response: import('@craft-agent/shared/protocol').CredentialResponse) => void> = new Map()
   // Permission request metadata tracking (keyed by requestId)
@@ -1260,19 +1257,6 @@ export class SessionManager implements ISessionManager {
   private lastTimestamp = 0
 
   /**
-   * Optional binder installed by the messaging-gateway bootstrap. When set,
-   * `executePromptAutomation` calls it after creating a session whose matcher
-   * declared `telegramTopic`, so the new session is bound to a Telegram forum
-   * topic in the workspace's paired supergroup. Best-effort — failures must
-   * not block the session.
-   */
-  private automationBinder?: (input: {
-    workspaceId: string
-    sessionId: string
-    topicName: string
-  }) => Promise<void>
-
-  /**
    * Centralized setter for session processing state.
    * Automatically notifies the power manager on transitions (true→false, false→true)
    * so callers don't need to remember to call onSessionStarted/onSessionStopped.
@@ -1291,17 +1275,6 @@ export class SessionManager implements ISessionManager {
    *  Resolves immediately if already initialized. */
   waitForInit(): Promise<void> {
     return this.initGate.wait()
-  }
-
-  /**
-   * Install the automation→topic binder. Wired by the messaging-gateway
-   * bootstrap so SessionManager doesn't need to import the messaging
-   * package (avoids a package-level circular dependency).
-   */
-  setAutomationBinder(
-    fn: (input: { workspaceId: string; sessionId: string; topicName: string }) => Promise<void>,
-  ): void {
-    this.automationBinder = fn
   }
 
   private browserPaneManager: IBrowserPaneManager | null = null
@@ -1552,7 +1525,7 @@ export class SessionManager implements ISessionManager {
   /**
    * Set up ConfigWatcher for a workspace to broadcast live updates
    * (sources added/removed, guide.md changes, etc.)
-   * Called eagerly at boot for all workspaces (automations/scheduler) and
+   * Called eagerly at boot for all workspaces and
    * on client connect (GET_WORKSPACE / SWITCH_WORKSPACE).
    * Idempotent — returns immediately if already watching.
    * workspaceId must be the global config ID (what the renderer knows).
@@ -1595,26 +1568,6 @@ export class SessionManager implements ISessionManager {
       onLabelConfigChange: () => {
         sessionLog.info(`Label config changed in ${workspaceId}`)
         this.broadcastLabelsChanged(workspaceId)
-        // Emit LabelConfigChange event via AutomationSystem
-        const automationSystem = this.automationSystems.get(workspaceRootPath)
-        if (automationSystem) {
-          automationSystem.emitLabelConfigChange().catch((error) => {
-            sessionLog.error(`[Automations] Failed to emit LabelConfigChange:`, error)
-          })
-        }
-      },
-      onAutomationsConfigChange: () => {
-        sessionLog.info(`Automations config changed in ${workspaceId}`)
-        // Reload automations config via AutomationSystem
-        const automationSystem = this.automationSystems.get(workspaceRootPath)
-        if (automationSystem) {
-          const result = automationSystem.reloadConfig()
-          if (result.errors.length === 0) {
-            sessionLog.info(`Reloaded ${result.automationCount} automations for workspace ${workspaceId}`)
-          } else {
-            sessionLog.error(`Failed to reload automations for workspace ${workspaceId}:`, result.errors)
-          }
-        }
       },
       onLlmConnectionsChange: () => {
         sessionLog.info(`LLM connections changed in ${workspaceId}`)
@@ -1648,8 +1601,7 @@ export class SessionManager implements ISessionManager {
         if (!managed) return
 
         // Check if this is our own write echoing back via fs.watch().
-        // Self-writes don't need in-memory sync (already up to date), but
-        // still need to notify the automation system for event matching.
+        // Self-writes don't need in-memory sync because state is already up to date.
         const incomingSignature = getHeaderMetadataSignature(header)
         const lastWrittenSignature = sessionPersistenceQueue.getLastWrittenSignature(sessionId)
         const isSelfWrite = !!(lastWrittenSignature && incomingSignature === lastWrittenSignature)
@@ -1674,21 +1626,6 @@ export class SessionManager implements ISessionManager {
             this.applyExternalSessionMetadata(managed, header)
           }
         }
-
-        // Always notify automation system — it does its own diffing and needs
-        // to see both self-writes and external changes for event matching.
-        const automationSystem = this.automationSystems.get(managed.workspace.rootPath)
-        if (automationSystem) {
-          automationSystem.updateSessionMetadata(sessionId, {
-            permissionMode: header.permissionMode,
-            labels: header.labels,
-            isFlagged: header.isFlagged,
-            sessionStatus: header.sessionStatus,
-            sessionName: header.name,
-          }).catch((error) => {
-            sessionLog.error(`[Automations] Failed to update session metadata:`, error)
-          })
-        }
       },
     }
 
@@ -1696,10 +1633,7 @@ export class SessionManager implements ISessionManager {
     watcher.start()
     this.configWatchers.set(workspaceRootPath, watcher)
 
-    // BoAI intentionally keeps legacy automation files inert. The watcher is
-    // still needed for Sources, Skills, themes, and permissions, but no
-    // AutomationSystem (scheduler, handlers, retry queue, or event logger) is
-    // created. The remaining compatibility code is removed in later commits.
+    // Legacy automation files remain inert and are intentionally ignored.
   }
 
   /**
@@ -1939,18 +1873,6 @@ export class SessionManager implements ISessionManager {
           }
 
           this.sessions.set(meta.id, managed)
-
-          // Initialize session metadata in AutomationSystem for diffing
-          const automationSystem = this.automationSystems.get(workspaceRootPath)
-          if (automationSystem) {
-            automationSystem.setInitialSessionMetadata(meta.id, {
-              permissionMode: meta.permissionMode,
-              labels: meta.labels,
-              isFlagged: meta.isFlagged,
-              sessionStatus: meta.sessionStatus,
-              sessionName: managed.name,
-            })
-          }
 
           totalSessions++
         }
@@ -2296,28 +2218,6 @@ export class SessionManager implements ISessionManager {
       if (managed.isProcessing) count++
     }
     return count
-  }
-
-  getWorkspaceAutomationSummary(workspaceId: string): { automationCount: number; schedulerRunning: boolean } {
-    const workspace = getWorkspaceByNameOrId(workspaceId)
-    if (!workspace) return { automationCount: 0, schedulerRunning: false }
-
-    const automationSystem = this.automationSystems.get(workspace.rootPath)
-    if (!automationSystem) return { automationCount: 0, schedulerRunning: false }
-
-    const config = automationSystem.getConfig()
-    let automationCount = 0
-    if (config) {
-      for (const matchers of Object.values(config.automations)) {
-        automationCount += matchers?.length ?? 0
-      }
-    }
-
-    return {
-      automationCount,
-      // SchedulerService is running if the system was created with enableScheduler
-      schedulerRunning: !automationSystem.isDisposed(),
-    }
   }
 
   getActiveSessionsInfo(): ActiveSessionInfo[] {
@@ -2994,18 +2894,6 @@ export class SessionManager implements ISessionManager {
 
     this.sessions.set(storedSession.id, managed)
 
-    // Initialize session metadata in AutomationSystem for diffing
-    const automationSystem = this.automationSystems.get(workspaceRootPath)
-    if (automationSystem) {
-      automationSystem.setInitialSessionMetadata(storedSession.id, {
-        permissionMode: storedSession.permissionMode,
-        labels: storedSession.labels,
-        isFlagged: storedSession.isFlagged,
-        sessionStatus: storedSession.sessionStatus,
-        sessionName: managed.name,
-      })
-    }
-
     // Reserved "Task" label: task flows opt in so the tile (and its subtasks, which inherit the
     // parent's number) are filterable as tasks from the moment they exist. Applied before the
     // created-event so the renderer hydrates the label with the rest of the metadata. Fail-soft:
@@ -3503,7 +3391,6 @@ export class SessionManager implements ISessionManager {
         // Claude-specific
         isHeadless: !AGENT_FLAGS.defaultModesEnabled,
         skipConfigWatcher: true, // Server owns workspace-level ConfigWatcher — don't duplicate in agents
-        automationSystem: this.automationSystems.get(managed.workspace.rootPath),
         systemPromptPreset: managed.systemPromptPreset,
         debugMode: _platform?.isDebugMode ? { enabled: true, logFilePath: _platform.getLogFilePath?.() } : undefined,
         enable1MContext: await (async () => { const { getEnable1MContext } = await import('@craft-agent/shared/config/storage'); return getEnable1MContext(); })(),
@@ -5688,12 +5575,6 @@ export class SessionManager implements ISessionManager {
     managed.autoRetryPending = undefined
 
     this.sessions.delete(sessionId)
-
-    // Clean up session metadata in AutomationSystem (prevents memory leak)
-    const automationSystem = this.automationSystems.get(workspaceRootPath)
-    if (automationSystem) {
-      automationSystem.removeSessionMetadata(sessionId)
-    }
 
     // Delete from disk too
     deleteStoredSession(workspaceRootPath, sessionId)
@@ -8408,141 +8289,6 @@ export class SessionManager implements ISessionManager {
     }
   }
 
-  /**
-   * Execute a prompt automation by creating a new session and sending the prompt.
-   *
-   * The options-object form replaced the previous positional-args signature
-   * once the param list outgrew readability — `thinkingLevel` was the trigger.
-   * When `thinkingLevel` is omitted, `createSession` falls back to the
-   * workspace default (then DEFAULT_THINKING_LEVEL).
-   */
-  async executePromptAutomation(
-    input: ExecutePromptAutomationInput,
-  ): Promise<{ sessionId: string }> {
-    const {
-      workspaceId,
-      workspaceRootPath,
-      prompt,
-      labels,
-      permissionMode,
-      mentions,
-      llmConnection,
-      model,
-      thinkingLevel,
-      automationName,
-      telegramTopic,
-      waitForCompletion,
-    } = input
-
-    // Warn if llmConnection was specified but doesn't resolve
-    if (llmConnection) {
-      const connection = resolveSessionConnection(llmConnection)
-      if (!connection) {
-        sessionLog.warn(`[Automations] llmConnection "${llmConnection}" not found, using default`)
-      }
-    }
-
-    // Resolve @mentions to source/skill slugs
-    const resolved = mentions ? this.resolveAutomationMentions(workspaceRootPath, mentions) : undefined
-
-    // Ensure labels exist in workspace config before assigning to session
-    const resolvedLabels = labels?.length
-      ? ensureLabelsExist(workspaceRootPath, labels)
-      : labels
-
-    // Use automation name if provided, otherwise fall back to prompt snippet
-    const fallback = `Automation: ${prompt.slice(0, 50)}${prompt.length > 50 ? '...' : ''}`
-    const sessionName = automationName || fallback
-
-    // Create a new session for this automation
-    const session = await this.createSession(workspaceId, {
-      name: sessionName,
-      labels: resolvedLabels,
-      permissionMode: permissionMode || 'safe',
-      enabledSourceSlugs: resolved?.sourceSlugs,
-      llmConnection,
-      model,
-      thinkingLevel,
-    })
-
-    // Populate triggeredBy metadata so title generation is explicitly skipped
-    // and the session is identifiable as automation-initiated after reload
-    const managed = this.sessions.get(session.id)
-    if (managed) {
-      managed.triggeredBy = { automationName, timestamp: Date.now() }
-      this.persistSession(managed)
-    }
-
-    // (session_created is emitted by createSession above; triggeredBy is set synchronously
-    // before the renderer's hydrate round-trip resolves, so it is observed.)
-
-    // Bind the new session to its Telegram forum topic if the matcher
-    // declared `telegramTopic`. Done before `sendMessage` so the first
-    // assistant tokens already route through the bound topic. Failure
-    // is logged inside the binder; the session continues unbound.
-    if (this.automationBinder && telegramTopic && telegramTopic.trim().length > 0) {
-      try {
-        await this.automationBinder({
-          workspaceId,
-          sessionId: session.id,
-          topicName: telegramTopic.trim(),
-        })
-      } catch (err) {
-        sessionLog.warn('[Automations] automation binder threw', {
-          sessionId: session.id,
-          telegramTopic,
-          error: err instanceof Error ? err.message : String(err),
-        })
-      }
-    }
-
-    // Send the prompt.
-    // Test runs pass `waitForCompletion: false` so we return as soon as the
-    // session exists and the prompt is dispatched — otherwise the RPC blocks
-    // until the entire turn (including tool calls) finishes and trips the 30s
-    // client timeout (craft-agents-oss#943). The session streams live either
-    // way; a background failure surfaces in the session UI and is logged here.
-    if (waitForCompletion === false) {
-      void this.sendMessage(session.id, prompt, undefined, undefined, {
-        skillSlugs: resolved?.skillSlugs,
-      }).catch((err) => {
-        sessionLog.error('[Automations] background sendMessage failed for test run', {
-          sessionId: session.id,
-          error: err instanceof Error ? err.message : String(err),
-        })
-      })
-      return { sessionId: session.id }
-    }
-
-    await this.sendMessage(session.id, prompt, undefined, undefined, {
-      skillSlugs: resolved?.skillSlugs,
-    })
-
-    return { sessionId: session.id }
-  }
-
-  /**
-   * Resolve @mentions in automation prompts to source and skill slugs
-   */
-  private resolveAutomationMentions(workspaceRootPath: string, mentions: string[]): { sourceSlugs: string[]; skillSlugs: string[] } | undefined {
-    const sources = loadWorkspaceSources(workspaceRootPath)
-    const skills = loadAllSkills(workspaceRootPath)
-    const sourceSlugs: string[] = []
-    const skillSlugs: string[] = []
-
-    for (const mention of mentions) {
-      if (sources.some(s => s.config.slug === mention)) {
-        sourceSlugs.push(mention)
-      } else if (skills.some(s => s.slug === mention)) {
-        skillSlugs.push(mention)
-      } else {
-        sessionLog.warn(`[Automations] Unknown mention: @${mention}`)
-      }
-    }
-
-    return (sourceSlugs.length > 0 || skillSlugs.length > 0) ? { sourceSlugs, skillSlugs } : undefined
-  }
-
   // ============================================
   // Export / Import / Dispatch
   // ============================================
@@ -8884,18 +8630,6 @@ export class SessionManager implements ISessionManager {
 
     this.sessions.set(sessionId, managed)
 
-    // Initialize automation metadata
-    const automationSystem = this.automationSystems.get(workspaceRootPath)
-    if (automationSystem) {
-      automationSystem.setInitialSessionMetadata(sessionId, {
-        permissionMode: storedSession.permissionMode,
-        labels: storedSession.labels,
-        isFlagged: storedSession.isFlagged,
-        sessionStatus: storedSession.sessionStatus,
-        sessionName: managed.name,
-      })
-    }
-
     // Built by hand (not via createSession), so announce it explicitly.
     this.notifySessionCreated(workspaceId, sessionId)
 
@@ -8933,17 +8667,6 @@ export class SessionManager implements ISessionManager {
       sessionLog.info(`Stopped config watcher for ${path}`)
     }
     this.configWatchers.clear()
-
-    // Dispose all AutomationSystems (includes scheduler, handlers, and event loggers)
-    for (const [workspacePath, automationSystem] of this.automationSystems) {
-      try {
-        automationSystem.dispose()
-        sessionLog.info(`Disposed AutomationSystem for ${workspacePath}`)
-      } catch (error) {
-        sessionLog.error(`Failed to dispose AutomationSystem for ${workspacePath}:`, error)
-      }
-    }
-    this.automationSystems.clear()
 
     // Clear all pending delta flush timers
     for (const [sessionId, timer] of this.deltaFlushTimers) {

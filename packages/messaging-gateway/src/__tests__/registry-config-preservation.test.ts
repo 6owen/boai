@@ -32,7 +32,7 @@ afterEach(() => {
 })
 
 function stubSessionManager(): ISessionManager {
-  return { setAutomationBinder: () => {} } as unknown as ISessionManager
+  return {} as ISessionManager
 }
 
 function stubCredentialManager(): CredentialManager {
