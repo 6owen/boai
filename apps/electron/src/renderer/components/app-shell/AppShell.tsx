@@ -26,7 +26,6 @@ import {
   Layers,
   Bot,
   MailOpen,
-  FolderKanban,
   PackageCheck,
   UserRound,
 } from "lucide-react"
@@ -66,7 +65,7 @@ import {
   AnimatedCollapsibleContent,
   springTransition as collapsibleSpring,
 } from "@/components/ui/collapsible"
-import { SessionList, type ChatGroupingMode } from "./SessionList"
+import { SessionList } from "./SessionList"
 import { MainContentPanel } from "./MainContentPanel"
 import { UpdateSkillPopover } from "./UpdateSkillPopover"
 import { SkillInstallMenu } from "./SkillInstallMenu"
@@ -111,18 +110,14 @@ import {
   isSourcesNavigation,
   isSettingsNavigation,
   isSkillsNavigation,
-  isProjectsNavigation,
   type NavigationState,
 } from "@/contexts/NavigationContext"
 import type { SettingsSubpage } from "../../../shared/types"
 import { SourcesListPanel } from "./SourcesListPanel"
 import { SkillsListPanel } from "./SkillsListPanel"
-import { ProjectsListPanel } from "./ProjectsListPanel"
-import { useProjects } from "@/hooks/useProjects"
 import { PanelHeader } from "./PanelHeader"
 import { FabNewChat } from "./FabNewChat"
 import { SendToWorkspaceDialog } from "./SendToWorkspaceDialog"
-import { CreateProjectDialog } from "../projects/CreateProjectDialog"
 import { MessagingDialogHost } from "@/components/messaging/MessagingDialogHost"
 import { EditPopover, getEditConfig, type EditContextKey } from "@/components/ui/EditPopover"
 import SettingsNavigator from "@/pages/settings/SettingsNavigator"
@@ -323,12 +318,6 @@ function AppShellContent({
   // Derive skill collection from navigation state. Legacy bare `skills` routes map to Installed.
   const skillFilter: SkillFilter | null = isSkillsNavigation(navState) ? navState.filter ?? null : null
 
-  // Legacy project/task surfaces can still open a session, but no longer
-  // install hidden list filters as a side effect.
-  const handleJumpToProjectSessions = useCallback((_projectId: string) => {
-    navigate(routes.view.allSessions())
-  }, [])
-
   const handleJumpToTaskSessions = useCallback(
     (sessionId: string, _scope: { labelId: string; projectId?: string }) => {
       navigate(routes.view.allSessions(sessionId))
@@ -431,20 +420,6 @@ function AppShellContent({
   const handleTransferComplete = useCallback((targetWorkspaceId: string, _newSessionIds: string[]) => {
     onSelectWorkspace(targetWorkspaceId)
   }, [onSelectWorkspace])
-  const { projects } = useProjects(activeWorkspaceId)
-  const projectMenuOptions = useMemo(
-    () => projects.map(p => ({ id: p.config.id, slug: p.config.slug, name: p.config.name, color: p.config.color })),
-    [projects],
-  )
-  const handleSessionProjectChange = useCallback(async (sessionId: string, projectId: string | null) => {
-    try {
-      await window.electronAPI.sessionCommand(sessionId, { type: 'setProjectId', projectId })
-    } catch (err) {
-      console.error('[AppShell] Failed to update session project:', err)
-      toast.error(t('toast.failedToUpdateProject'))
-    }
-  }, [t])
-
   // Whether local MCP servers are enabled (affects stdio source status)
   const [localMcpEnabled, setLocalMcpEnabled] = React.useState(true)
 
@@ -1015,11 +990,6 @@ function AppShellContent({
     navigate(routes.view.skillsOwn())
   }, [])
 
-  // Handler for projects view
-  const handleProjectsClick = useCallback(() => {
-    navigate(routes.view.projects())
-  }, [])
-
   // Handler for settings view. With no arg → bare `settings` route (navigator-only
   // in compact mode, App fallback on desktop). With an arg → `settings/<subpage>`.
   const handleSettingsClick = useCallback((subpage?: SettingsSubpage) => {
@@ -1046,7 +1016,7 @@ function AppShellContent({
   // We use controlled popovers instead of deep links so the user can type
   // their request in the popover UI before opening a new chat window.
   // add-source variants: add-source (generic), add-source-api, add-source-mcp, add-source-local
-  const [editPopoverOpen, setEditPopoverOpen] = useState<'add-source' | 'add-source-api' | 'add-source-mcp' | 'add-source-local' | 'add-skill' | 'add-project' | null>(null)
+  const [editPopoverOpen, setEditPopoverOpen] = useState<'add-source' | 'add-source-api' | 'add-source-mcp' | 'add-source-local' | 'add-skill' | null>(null)
 
   // Stores the Y position of the last right-clicked sidebar item so the EditPopover
   // appears near it rather than at a fixed location. Updated synchronously before
@@ -1100,27 +1070,6 @@ function AppShellContent({
     captureContextMenuPosition()
     setTimeout(() => setEditPopoverOpen('add-skill'), 50)
   }, [captureContextMenuPosition])
-
-  // Handler for "Add Project" context menu action — creates a project directly
-  // Open the "Create Project" dialog so the user can provide a name up front.
-  // The previous flow auto-created with the default name and produced ugly
-  // permanent slugs (new-project, new-project-1, …).
-  const [createProjectDialogOpen, setCreateProjectDialogOpen] = useState(false)
-  const openAddProject = useCallback(() => {
-    if (!activeWorkspace?.id) return
-    setCreateProjectDialogOpen(true)
-  }, [activeWorkspace?.id])
-  const handleCreateProjectSubmit = useCallback(async (name: string) => {
-    if (!activeWorkspace?.id) return
-    setCreateProjectDialogOpen(false)
-    try {
-      const project = await window.electronAPI.createProject(activeWorkspace.id, { name })
-      navigate(routes.view.projects(project.slug))
-    } catch (err) {
-      console.error('[AppShell] Failed to create project:', err)
-      toast.error(t('projectsList.createFailed'))
-    }
-  }, [activeWorkspace?.id, navigate, t])
 
   // Create a new chat and select it
   const handleNewChat = useCallback((newPanel: boolean = false) => {
@@ -1301,11 +1250,6 @@ function AppShellContent({
     // Skills navigator
     if (isSkillsNavigation(navState)) {
       return skillFilter?.collection === 'own' ? t("sidebar.ownSkills") : t("sidebar.installedSkills")
-    }
-
-    // Projects navigator
-    if (isProjectsNavigation(navState)) {
-      return t("sidebar.allProjects")
     }
 
     // Settings navigator
@@ -1541,29 +1485,6 @@ function AppShellContent({
                         },
                       ],
                     },
-                    {
-                      id: "nav:projects",
-                      title: t("sidebar.projects"),
-                      label: String(projects.length),
-                      icon: FolderKanban,
-                      // Highlight only when on Projects view itself, not when a child is "active" (jumped-to filter)
-                      variant: isProjectsNavigation(navState) ? "default" : "ghost",
-                      onClick: handleProjectsClick,
-                      expandable: projects.length > 0,
-                      expanded: isExpanded('nav:projects'),
-                      onToggle: () => toggleExpanded('nav:projects'),
-                      contextMenu: {
-                        type: 'projects' as const,
-                        onAddProject: openAddProject,
-                      },
-                      items: projects.map(p => ({
-                        id: `nav:projects:${p.config.id}`,
-                        title: p.config.name,
-                        icon: FolderKanban,
-                        variant: "ghost" as const,
-                        onClick: () => handleJumpToProjectSessions(p.config.id),
-                      })),
-                    },
                     // --- Separator ---
                     { id: "separator:skills-settings", type: "separator" },
                     // --- Settings ---
@@ -1655,14 +1576,6 @@ function AppShellContent({
                       />
                     </>
                   )}
-                  {/* Add Project button (only for projects mode) */}
-                  {isProjectsNavigation(navState) && activeWorkspace && (
-                    <HeaderIconButton
-                      icon={<Plus className="h-4 w-4" />}
-                      tooltip={t("sidebarMenu.addProject")}
-                      onClick={openAddProject}
-                    />
-                  )}
                 </>
               }
             />
@@ -1694,17 +1607,6 @@ function AppShellContent({
                 onToggleFavorite={handleToggleFavoriteSkill}
                 onSkillClick={handleSkillSelect}
                 selectedSkillSlug={isSkillsNavigation(navState) && navState.details?.type === 'skill' ? navState.details.skillSlug : null}
-              />
-            )}
-            {isProjectsNavigation(navState) && activeWorkspaceId && (
-              /* Projects List */
-              <ProjectsListPanel
-                projects={projects}
-                workspaceId={activeWorkspaceId}
-                onProjectClick={(slug) => navigate(routes.view.projects(slug))}
-                onAddProject={openAddProject}
-                onJumpToSessions={handleJumpToProjectSessions}
-                selectedProjectSlug={isProjectsNavigation(navState) ? navState.details?.projectSlug ?? null : null}
               />
             )}
             {isSettingsNavigation(navState) && (
@@ -1760,8 +1662,6 @@ function AppShellContent({
                   evaluateViews={evaluateViews}
                   labels={displayLabelConfigs}
                   onLabelsChange={handleSessionLabelsChange}
-                  projects={projectMenuOptions}
-                  onSetProjectId={handleSessionProjectChange}
                   workspaceId={activeWorkspaceId ?? undefined}
                   focusedSessionId={panelCount === 0 ? null : panelCount > 1 ? focusedSessionId : undefined}
                   onNavigateToSession={panelCount > 1 ? navigateToSessionInPanel : undefined}
@@ -1922,13 +1822,6 @@ function AppShellContent({
         workspaces={workspaces}
         activeWorkspaceId={activeWorkspaceId}
         onTransferComplete={handleTransferComplete}
-      />
-
-      {/* Create Project dialog — prompts for a name so slugs stay meaningful */}
-      <CreateProjectDialog
-        open={createProjectDialogOpen}
-        onCancel={() => setCreateProjectDialogOpen(false)}
-        onSubmit={handleCreateProjectSubmit}
       />
 
       {/* Messaging dialogs (pairing-code + WA connect) — driven by messagingDialogAtom.

@@ -191,18 +191,14 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
     return null
   }
 
-  // Projects navigator
+  // Projects were removed from BoAI's product surface. Recognize legacy deep
+  // links without exposing or mutating their stored project data.
   if (first === 'projects') {
-    if (segments.length === 1) {
-      return { navigator: 'projects', details: null }
+    return {
+      navigator: 'sessions',
+      sessionFilter: { kind: 'allSessions' },
+      details: null,
     }
-    if (segments[1] === 'project' && segments[2]) {
-      return {
-        navigator: 'projects',
-        details: { type: 'project', id: segments[2] },
-      }
-    }
-    return null
   }
 
   // Automations were removed from BoAI. Keep recognizing legacy routes so
@@ -515,12 +511,10 @@ function convertCompoundToNavigationState(compound: ParsedCompoundRoute): Naviga
 
   // Projects
   if (compound.navigator === 'projects') {
-    if (!compound.details) {
-      return { navigator: 'projects', details: null }
-    }
     return {
-      navigator: 'projects',
-      details: { type: 'project', projectSlug: compound.details.id },
+      navigator: 'sessions',
+      filter: { kind: 'allSessions' },
+      details: null,
     }
   }
 
@@ -592,15 +586,8 @@ function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationSta
     case 'automation-info':
       return { navigator: 'sessions', filter: { kind: 'allSessions' }, details: null }
     case 'projects':
-      return { navigator: 'projects', details: null }
     case 'project-info':
-      if (parsed.id) {
-        return {
-          navigator: 'projects',
-          details: { type: 'project', projectSlug: parsed.id },
-        }
-      }
-      return { navigator: 'projects', details: null }
+      return { navigator: 'sessions', filter: { kind: 'allSessions' }, details: null }
     case 'session':
       if (parsed.id) {
         return {
@@ -659,8 +646,9 @@ function navigationStateToCompoundRoute(state: NavigationState): ParsedCompoundR
 
   if (state.navigator === 'projects') {
     return {
-      navigator: 'projects',
-      details: state.details ? { type: 'project', id: state.details.projectSlug } : null,
+      navigator: 'sessions',
+      sessionFilter: { kind: 'allSessions' },
+      details: null,
     }
   }
 

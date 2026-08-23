@@ -66,4 +66,25 @@ describe('canonical session routes', () => {
       details: { type: 'session', sessionId: 'session-1' },
     })
   })
+
+  it('redirects retired project routes and persisted project state to all sessions', () => {
+    for (const route of ['projects', 'projects/project/legacy-project']) {
+      expect(parseCompoundRoute(route)).toEqual({
+        navigator: 'sessions',
+        sessionFilter: { kind: 'allSessions' },
+        details: null,
+      })
+      expect(parseRouteToNavigationState(route)).toEqual({
+        navigator: 'sessions',
+        filter: { kind: 'allSessions' },
+        details: null,
+      })
+    }
+
+    expect(parseNavigationStateKey('projects/project/legacy-project')).toEqual({
+      navigator: 'sessions',
+      filter: { kind: 'allSessions' },
+      details: null,
+    })
+  })
 })

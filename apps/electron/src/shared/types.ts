@@ -985,14 +985,11 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
   // Legacy automation navigation state is no longer representable in BoAI.
   if (key === 'automations' || key.startsWith('automations/')) return DEFAULT_NAVIGATION_STATE
 
-  // Handle projects
-  if (key === 'projects') return { navigator: 'projects', details: null }
+  // Retired Project navigation is a read-only compatibility alias. Stored
+  // project data remains untouched; only its former UI route is flattened.
+  if (key === 'projects') return DEFAULT_NAVIGATION_STATE
   if (key.startsWith('projects/project/')) {
-    const projectSlug = key.slice(17)
-    if (projectSlug) {
-      return { navigator: 'projects', details: { type: 'project', projectSlug } }
-    }
-    return { navigator: 'projects', details: null }
+    return DEFAULT_NAVIGATION_STATE
   }
 
   // Handle settings
