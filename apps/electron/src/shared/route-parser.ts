@@ -211,40 +211,14 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
     return null
   }
 
-  // Automations navigator - supports type filters (scheduled, event, agentic)
+  // Automations were removed from BoAI. Keep recognizing legacy routes so
+  // persisted navigation state and old deep links land somewhere useful.
   if (first === 'automations') {
-    if (segments.length === 1) {
-      return { navigator: 'automations', details: null }
+    return {
+      navigator: 'sessions',
+      sessionFilter: { kind: 'allSessions' },
+      details: null,
     }
-
-    // Check for type filter: automations/scheduled, automations/event, automations/agentic
-    const validAutomationTypes = ['scheduled', 'event', 'agentic']
-    if (validAutomationTypes.includes(segments[1])) {
-      const automationType = segments[1] as 'scheduled' | 'event' | 'agentic'
-      const automationFilter: AutomationFilter = { kind: 'type', automationType }
-
-      // Check for automation selection within filtered view: automations/scheduled/automation/{automationId}
-      if (segments[2] === 'automation' && segments[3]) {
-        return {
-          navigator: 'automations',
-          automationFilter,
-          details: { type: 'automation', id: segments[3] },
-        }
-      }
-
-      // Just the filter, no selection
-      return { navigator: 'automations', automationFilter, details: null }
-    }
-
-    // Unfiltered automation selection: automations/automation/{automationId}
-    if (segments[1] === 'automation' && segments[2]) {
-      return {
-        navigator: 'automations',
-        details: { type: 'automation', id: segments[2] },
-      }
-    }
-
-    return null
   }
 
   // Sessions navigator (allSessions, flagged, state)
