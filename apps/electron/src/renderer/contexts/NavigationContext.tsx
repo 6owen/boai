@@ -715,9 +715,6 @@ export function NavigationProvider({
           if (parsed.params.label) {
             createOptions.labels = [parsed.params.label]
           }
-          if (parsed.params.project) {
-            createOptions.projectId = parsed.params.project
-          }
           const session = await onCreateSession(workspaceId, createOptions)
 
           if (parsed.params.name) {

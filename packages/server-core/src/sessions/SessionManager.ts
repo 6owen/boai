@@ -2504,37 +2504,10 @@ export class SessionManager implements ISessionManager {
       resolvedWorkingDir = options.workingDirectory
     }
 
-    // Resolve project binding. When a projectId is provided and the project has a
-    // workingDirectory configured, inherit it (only when the caller didn't pass an
-    // explicit override). This lets "+ New session in {project}" reuse the project's
-    // bound directory without duplicating logic on the renderer side.
-    // Subtasks inherit the parent's project when the caller didn't bind one explicitly —
-    // a child of a project-bound task belongs to that project (board quick-add passes none),
-    // so project-scoped filtering sees the whole task family.
-    const inheritedProjectId = options?.parentSessionId
-      ? this.sessions.get(options.parentSessionId)?.projectId
-      : undefined
-    const requestedProjectId = options?.projectId ?? inheritedProjectId
-    let resolvedProjectId: string | undefined
-    if (requestedProjectId) {
-      const { loadProjectById } = await import('@craft-agent/shared/projects')
-      const project = loadProjectById(workspaceRootPath, requestedProjectId)
-      if (!project) {
-        // An EXPLICIT binding to a missing project is a caller bug; an inherited one
-        // (parent's project deleted since) just no-ops rather than failing the child.
-        if (options?.projectId) {
-          throw new Error(`Project ${options.projectId} not found in workspace ${workspaceId}`)
-        }
-      } else {
-        resolvedProjectId = project.config.id
-        if (
-          (options?.workingDirectory === undefined || options?.workingDirectory === 'user_default') &&
-          project.config.workingDirectory
-        ) {
-          resolvedWorkingDir = project.config.workingDirectory
-        }
-      }
-    }
+    // Project is a legacy read-only context. New sessions never create or
+    // inherit a project binding; existing persisted sessions still resolve it
+    // when their agents are resumed.
+    const resolvedProjectId: string | undefined = undefined
 
     // Validate branch request up-front so branch metadata is only set for valid branches.
     // This prevents creating sessions that claim to be branched but don't have copied history.
