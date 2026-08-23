@@ -28,7 +28,7 @@ import {
 import { useMenuComponents } from '@/components/ui/menu-context'
 import { getDocUrl, type DocFeature } from '@craft-agent/shared/docs/doc-links'
 
-export type SidebarMenuType = 'allSessions' | 'flagged' | 'status' | 'sources' | 'skills' | 'automations' | 'projects' | 'labels' | 'views' | 'newSession'
+export type SidebarMenuType = 'allSessions' | 'flagged' | 'status' | 'sources' | 'skills' | 'projects' | 'labels' | 'views' | 'newSession'
 
 export interface SidebarMenuProps {
   /** Type of sidebar item (determines available menu items) */
@@ -51,8 +51,6 @@ export interface SidebarMenuProps {
   onAddSource?: () => void
   /** Handler for "Add Skill" action - only for skills type */
   onAddSkill?: () => void
-  /** Handler for "Add Automation" action - only for automations type */
-  onAddAutomation?: () => void
   /** Handler for "Add Project" action - only for projects type */
   onAddProject?: () => void
   /** Source type filter for "Learn More" link - determines which docs page to open */
@@ -80,7 +78,6 @@ export function SidebarMenu({
   onDeleteLabel,
   onAddSource,
   onAddSkill,
-  onAddAutomation,
   onAddProject,
   sourceType,
   onConfigureViews,
@@ -230,25 +227,6 @@ export function SidebarMenu({
             <span className="flex-1">{t("sidebarMenu.addProject")}</span>
           </MenuItem>
         )}
-      </>
-    )
-  }
-
-  // Automations: show "Add Automation" and "Learn More"
-  if (type === 'automations') {
-    return (
-      <>
-        {onAddAutomation && (
-          <MenuItem onClick={onAddAutomation}>
-            <Plus className="h-3.5 w-3.5" />
-            <span className="flex-1">{t("sidebarMenu.addAutomation")}</span>
-          </MenuItem>
-        )}
-        <Separator />
-        <MenuItem onClick={() => window.electronAPI.openUrl(getDocUrl('automations'))}>
-          <ExternalLink className="h-3.5 w-3.5" />
-          <span className="flex-1">{t("sidebarMenu.learnMoreAutomations")}</span>
-        </MenuItem>
       </>
     )
   }

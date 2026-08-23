@@ -14,7 +14,6 @@ import type {
   SessionFilter,
   SourceFilter,
   SkillFilter,
-  AutomationFilter,
   RightSidebarPanel,
 } from './types'
 import { isValidSettingsSubpage, type SettingsSubpage } from './settings-registry'
@@ -36,7 +35,7 @@ export interface ParsedRoute {
 // Compound Route Types (new format)
 // =============================================================================
 
-export type NavigatorType = 'sessions' | 'sources' | 'skills' | 'automations' | 'projects' | 'settings'
+export type NavigatorType = 'sessions' | 'sources' | 'skills' | 'projects' | 'settings'
 
 export interface ParsedCompoundRoute {
   /** The navigator type */
@@ -47,8 +46,6 @@ export interface ParsedCompoundRoute {
   sourceFilter?: SourceFilter
   /** Skill collection filter (only for skills navigator) */
   skillFilter?: SkillFilter
-  /** Automation filter (only for automations navigator) */
-  automationFilter?: AutomationFilter
   /** Sessions presentation mode (only for sessions navigator). 'board' = Kanban view. */
   viewMode?: 'list' | 'board'
   /** Details page info (null for empty state) */
@@ -304,16 +301,6 @@ export function buildCompoundRoute(parsed: ParsedCompoundRoute): string {
     return `${base}/skill/${parsed.details.id}`
   }
 
-  if (parsed.navigator === 'automations') {
-    // Build base from filter (automations, automations/scheduled, automations/event, automations/agentic)
-    let base = 'automations'
-    if (parsed.automationFilter?.kind === 'type') {
-      base = `automations/${parsed.automationFilter.automationType}`
-    }
-    if (!parsed.details) return base
-    return `${base}/automation/${parsed.details.id}`
-  }
-
   if (parsed.navigator === 'projects') {
     if (!parsed.details) return 'projects'
     return `projects/project/${parsed.details.id}`
@@ -435,14 +422,6 @@ function convertCompoundToViewRoute(compound: ParsedCompoundRoute): ParsedRoute 
       return { type: 'view', name: 'skills', params: {} }
     }
     return { type: 'view', name: 'skill-info', id: compound.details.id, params: {} }
-  }
-
-  // Automations
-  if (compound.navigator === 'automations') {
-    if (!compound.details) {
-      return { type: 'view', name: 'automations', params: {} }
-    }
-    return { type: 'view', name: 'automation-info', id: compound.details.id, params: {} }
   }
 
   // Projects
@@ -573,22 +552,6 @@ function convertCompoundToNavigationState(compound: ParsedCompoundRoute): Naviga
     }
   }
 
-  // Automations - include filter if present
-  if (compound.navigator === 'automations') {
-    if (!compound.details) {
-      return {
-        navigator: 'automations',
-        filter: compound.automationFilter,
-        details: null,
-      }
-    }
-    return {
-      navigator: 'automations',
-      filter: compound.automationFilter,
-      details: { type: 'automation', automationId: compound.details.id },
-    }
-  }
-
   // Projects
   if (compound.navigator === 'projects') {
     if (!compound.details) {
@@ -666,18 +629,8 @@ function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationSta
       }
       return { navigator: 'skills', details: null }
     case 'automations':
-      return { navigator: 'automations', details: null }
     case 'automation-info':
-      if (parsed.id) {
-        return {
-          navigator: 'automations',
-          details: {
-            type: 'automation',
-            automationId: parsed.id,
-          },
-        }
-      }
-      return { navigator: 'automations', details: null }
+      return { navigator: 'sessions', filter: { kind: 'allSessions' }, details: null }
     case 'projects':
       return { navigator: 'projects', details: null }
     case 'project-info':
@@ -786,14 +739,6 @@ function navigationStateToCompoundRoute(state: NavigationState): ParsedCompoundR
       navigator: 'skills',
       skillFilter: state.filter ?? undefined,
       details: state.details?.type === 'skill' ? { type: 'skill', id: state.details.skillSlug } : null,
-    }
-  }
-
-  if (state.navigator === 'automations') {
-    return {
-      navigator: 'automations',
-      automationFilter: state.filter ?? undefined,
-      details: state.details ? { type: 'automation', id: state.details.automationId } : null,
     }
   }
 

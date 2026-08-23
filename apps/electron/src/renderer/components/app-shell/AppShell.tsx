@@ -1,5 +1,5 @@
 import * as React from "react"
-import { useTranslation, Trans } from "react-i18next"
+import { useTranslation } from "react-i18next"
 import { useRef, useState, useEffect, useCallback, useMemo } from "react"
 import { useAtomValue, useStore } from "jotai"
 import { motion, AnimatePresence } from "motion/react"
@@ -26,7 +26,6 @@ import {
   Calendar,
   Layers,
   Bot,
-  Info,
   MailOpen,
   FolderKanban,
   PackageCheck,
@@ -90,7 +89,7 @@ import { useFocusContext } from "@/context/FocusContext"
 import { getSessionTitle } from "@/utils/session"
 import { selectVisibleWorkspaceSessions } from "@/utils/visible-sessions"
 import { useSetAtom } from "jotai"
-import type { Session, Workspace, FileAttachment, PermissionRequest, LoadedSource, LoadedSkill, PermissionMode, SourceFilter, SkillFilter, AutomationFilter } from "../../../shared/types"
+import type { Session, Workspace, FileAttachment, PermissionRequest, LoadedSource, LoadedSkill, PermissionMode, SourceFilter, SkillFilter } from "../../../shared/types"
 import { sessionMetaMapAtom, sendToWorkspaceAtom, type SessionMeta } from "@/atoms/sessions"
 import { sourcesAtom } from "@/atoms/sources"
 import { skillsAtom } from "@/atoms/skills"
@@ -116,19 +115,14 @@ import {
   isSourcesNavigation,
   isSettingsNavigation,
   isSkillsNavigation,
-  isAutomationsNavigation,
   isProjectsNavigation,
   type NavigationState,
 } from "@/contexts/NavigationContext"
 import type { SettingsSubpage } from "../../../shared/types"
 import { SourcesListPanel } from "./SourcesListPanel"
 import { SkillsListPanel } from "./SkillsListPanel"
-import { AutomationsListPanel } from "../automations/AutomationsListPanel"
 import { ProjectsListPanel } from "./ProjectsListPanel"
-import { AUTOMATION_TYPE_TO_FILTER_KIND } from "../automations/types"
-import { useAutomations } from "@/hooks/useAutomations"
 import { useProjects } from "@/hooks/useProjects"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { PanelHeader } from "./PanelHeader"
 import { FabNewChat } from "./FabNewChat"
 import { SendToWorkspaceDialog } from "./SendToWorkspaceDialog"
@@ -639,9 +633,6 @@ function AppShellContent({
   // Derive skill collection from navigation state. Legacy bare `skills` routes map to Installed.
   const skillFilter: SkillFilter | null = isSkillsNavigation(navState) ? navState.filter ?? null : null
 
-  // Derive automation filter from navigation state (only when in automations navigator)
-  const automationFilter: AutomationFilter | null = isAutomationsNavigation(navState) ? navState.filter ?? null : null
-
   // Per-view filter storage: each session list view (allSessions, flagged, state:X, label:X, view:X)
   // has its own independent set of status and label filters.
   // Each filter entry stores a mode ('include' or 'exclude') for tri-state filtering.
@@ -929,7 +920,6 @@ function AppShellContent({
   React.useEffect(() => {
     setSkillsAtom(skills)
   }, [skills, setSkillsAtom])
-  // Automations — state, handlers, loading, subscriptions
   const activeWorkspace = workspaces.find(w => w.id === activeWorkspaceId)
 
   // Send to Workspace dialog state (driven by sendToWorkspaceAtom set from SessionMenu/BatchSessionMenu)
@@ -938,13 +928,6 @@ function AppShellContent({
   const handleTransferComplete = useCallback((targetWorkspaceId: string, _newSessionIds: string[]) => {
     onSelectWorkspace(targetWorkspaceId)
   }, [onSelectWorkspace])
-  const {
-    automations, automationTestResults,
-    automationPendingDelete, pendingDeleteAutomation, setAutomationPendingDelete,
-    handleTestAutomation, handleToggleAutomation, handleDuplicateAutomation, handleDeleteAutomation, confirmDeleteAutomation,
-    getAutomationHistory, handleReplayAutomation,
-  } = useAutomations(activeWorkspaceId)
-
   const { projects } = useProjects(activeWorkspaceId)
   const projectMenuOptions = useMemo(
     () => projects.map(p => ({ id: p.config.id, slug: p.config.slug, name: p.config.name, color: p.config.color })),
@@ -1179,13 +1162,6 @@ function AppShellContent({
       navigate(routes.view.skillsOwn())
     }
   }, [favoriteSkillKeys, skillFilter, toggleFavoriteSkill])
-
-  // Handle selecting an automation from the list
-  const handleAutomationSelect = React.useCallback((automationId: string) => {
-    // Preserve current automation filter when selecting an automation
-    const type = isAutomationsNavigation(navState) ? navState.filter?.automationType : undefined
-    navigate(routes.view.automations({ automationId, type }))
-  }, [navState, navigate])
 
   // Focus zone management
   const { focusZone, focusNextZone, focusPreviousZone } = useFocusContext()
@@ -1718,14 +1694,7 @@ function AppShellContent({
     isSearchModeActive: searchActive,
     chatDisplayRef,
     onChatMatchInfoChange: handleChatMatchInfoChange,
-    onTestAutomation: handleTestAutomation,
-    onToggleAutomation: handleToggleAutomation,
-    onDuplicateAutomation: handleDuplicateAutomation,
-    onDeleteAutomation: handleDeleteAutomation,
-    automationTestResults,
-    getAutomationHistory,
-    onReplayAutomation: handleReplayAutomation,
-  }), [contextValue, handleDeleteSession, sources, skills, activeSessionWorkingDirectory, displayLabelConfigs, handleSessionLabelsChange, enabledModes, effectiveSessionStatuses, handleSessionSourcesChange, handleJumpToTaskSessions, isAutoCompact, searchActive, searchQuery, handleChatMatchInfoChange, handleTestAutomation, handleToggleAutomation, handleDuplicateAutomation, handleDeleteAutomation, automationTestResults, getAutomationHistory, handleReplayAutomation])
+  }), [contextValue, handleDeleteSession, sources, skills, activeSessionWorkingDirectory, displayLabelConfigs, handleSessionLabelsChange, enabledModes, effectiveSessionStatuses, handleSessionSourcesChange, handleJumpToTaskSessions, isAutoCompact, searchActive, searchQuery, handleChatMatchInfoChange])
 
   // Persist expanded folders to localStorage (workspace-scoped)
   React.useEffect(() => {
@@ -1867,7 +1836,7 @@ function AppShellContent({
   // We use controlled popovers instead of deep links so the user can type
   // their request in the popover UI before opening a new chat window.
   // add-source variants: add-source (generic), add-source-api, add-source-mcp, add-source-local
-  const [editPopoverOpen, setEditPopoverOpen] = useState<'statuses' | 'labels' | 'views' | 'add-source' | 'add-source-api' | 'add-source-mcp' | 'add-source-local' | 'add-skill' | 'add-label' | 'automation-config' | 'add-project' | null>(null)
+  const [editPopoverOpen, setEditPopoverOpen] = useState<'statuses' | 'labels' | 'views' | 'add-source' | 'add-source-api' | 'add-source-mcp' | 'add-source-local' | 'add-skill' | 'add-label' | 'add-project' | null>(null)
 
   // Stores the Y position of the last right-clicked sidebar item so the EditPopover
   // appears near it rather than at a fixed location. Updated synchronously before
@@ -2230,17 +2199,6 @@ function AppShellContent({
       return t("sidebar.allProjects")
     }
 
-    // Automations navigator
-    if (isAutomationsNavigation(navState)) {
-      if (!automationFilter) return t("sidebar.allAutomations")
-      switch (automationFilter.automationType) {
-        case 'scheduled': return t("sidebar.scheduled")
-        case 'event': return t("sidebar.eventBased")
-        case 'agentic': return t("sidebar.agentic")
-        default: return t("sidebar.allAutomations")
-      }
-    }
-
     // Settings navigator
     if (isSettingsNavigation(navState)) return t("sidebar.settings")
 
@@ -2261,7 +2219,7 @@ function AppShellContent({
       default:
         return t("sidebar.allSessions")
     }
-  }, [navState, t, sessionFilter, skillFilter, automationFilter, labelConfigs, viewConfigs, effectiveSessionStatuses])
+  }, [navState, t, sessionFilter, skillFilter, labelConfigs, viewConfigs, effectiveSessionStatuses])
 
   // Build recursive sidebar items from the shared display-sorted label tree.
   // Each node renders with condensed height (compact: true) since many labels expected.
@@ -2660,18 +2618,6 @@ function AppShellContent({
               title={isSidebarVisible ? listTitle : undefined}
               centerTitle
               compensateForStoplight={!isSidebarVisible}
-              badge={automationFilter?.automationType === 'scheduled' ? (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="text-muted-foreground/50 cursor-default flex items-center titlebar-no-drag">
-                      <Info className="h-3 w-3" />
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" className="max-w-[220px]">
-                    Scheduling requires your machine to be running. It can be locked, but must be powered on.
-                  </TooltipContent>
-                </Tooltip>
-              ) : undefined}
               actions={
                 <>
                   {/* List ⇄ Board view switch (sessions mode, desktop widths only).
@@ -3410,18 +3356,6 @@ function AppShellContent({
                       />
                     </>
                   )}
-                  {/* Add Automation button (only for automations mode) */}
-                  {isAutomationsNavigation(navState) && activeWorkspace && (
-                    <EditPopover
-                      trigger={
-                        <HeaderIconButton
-                          icon={<Plus className="h-4 w-4" />}
-                          tooltip={t("sidebarMenu.addAutomation")}
-                        />
-                      }
-                      {...getEditConfig('automation-config', activeWorkspace.rootPath)}
-                    />
-                  )}
                   {/* Add Project button (only for projects mode) */}
                   {isProjectsNavigation(navState) && activeWorkspace && (
                     <HeaderIconButton
@@ -3472,20 +3406,6 @@ function AppShellContent({
                 onAddProject={openAddProject}
                 onJumpToSessions={handleJumpToProjectSessions}
                 selectedProjectSlug={isProjectsNavigation(navState) ? navState.details?.projectSlug ?? null : null}
-              />
-            )}
-            {isAutomationsNavigation(navState) && (
-              /* Automations List - filtered by type if automationFilter is active */
-              <AutomationsListPanel
-                automations={automations}
-                automationFilter={automationFilter ? { kind: AUTOMATION_TYPE_TO_FILTER_KIND[automationFilter.automationType] ?? 'all' } : undefined}
-                onAutomationClick={handleAutomationSelect}
-                onTestAutomation={handleTestAutomation}
-                onToggleAutomation={handleToggleAutomation}
-                onDuplicateAutomation={handleDuplicateAutomation}
-                onDeleteAutomation={handleDeleteAutomation}
-                selectedAutomationId={isAutomationsNavigation(navState) && navState.details ? navState.details.automationId : null}
-                workspaceRootPath={activeWorkspace?.rootPath}
               />
             )}
             {isSettingsNavigation(navState) && (
@@ -3763,22 +3683,6 @@ function AppShellContent({
             align="start"
             {...getEditConfig('add-skill', activeWorkspace.rootPath)}
           />
-          {/* Add Automation EditPopover - triggered from "Add Automation" context menu in automations */}
-          <EditPopover
-            open={editPopoverOpen === 'automation-config'}
-            onOpenChange={(isOpen) => setEditPopoverOpen(isOpen ? 'automation-config' : null)}
-            modal={true}
-            trigger={
-              <div
-                className="fixed w-0 h-0 pointer-events-none"
-                style={{ left: sidebarWidth + 20, top: editPopoverAnchorY.current }}
-                aria-hidden="true"
-              />
-            }
-            side="bottom"
-            align="start"
-            {...getEditConfig('automation-config', activeWorkspace.rootPath)}
-          />
           {/* Add Label EditPopover - triggered from "Add New Label" context menu on labels */}
           <EditPopover
             open={editPopoverOpen === 'add-label'}
@@ -3825,26 +3729,6 @@ function AppShellContent({
         content={releaseNotesContent}
         onOpenUrl={(url) => window.electronAPI.openUrl(url)}
       />
-
-      {/* Delete automation confirmation dialog */}
-      <Dialog open={!!automationPendingDelete} onOpenChange={(open) => { if (!open) setAutomationPendingDelete(null) }}>
-        <DialogContent showCloseButton={false}>
-          <DialogHeader>
-            <DialogTitle>{t("dialog.deleteAutomation.title")}</DialogTitle>
-            <DialogDescription>
-              <Trans
-                i18nKey="dialog.deleteAutomation.description"
-                values={{ name: pendingDeleteAutomation?.name }}
-                components={{ strong: <strong /> }}
-              />
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAutomationPendingDelete(null)}>{t("common.cancel")}</Button>
-            <Button variant="destructive" onClick={confirmDeleteAutomation}>{t("common.delete")}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Send to Workspace dialog (driven by sendToWorkspaceAtom) */}
       <SendToWorkspaceDialog

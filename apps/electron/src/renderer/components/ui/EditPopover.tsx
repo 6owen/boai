@@ -86,7 +86,6 @@ export type EditContextKey =
   | 'add-label'
   | 'edit-views'
   | 'edit-tool-icons'
-  | 'automation-config'
 
 /**
  * Full edit configuration including context for agent and example for UI.
@@ -535,25 +534,6 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
     model: 'fast',               // Use fast model for quick config edits
     systemPromptPreset: 'mini',   // Use focused mini prompt
     inlineExecution: true,        // Execute inline in popover
-  }),
-
-  'automation-config': (location) => ({
-    context: {
-      label: 'Automation Configuration',
-      filePath: `${location}/automations.json`,
-      context:
-        'The user is editing automations.json which configures automations. ' +
-        'Structure: { version: 2, automations: { EventName: [{ name?, matcher?, cron?, timezone?, permissionMode?, labels?, actions: [...] }] } }. ' +
-        'Each event maps to an array of matcher entries. Each matcher has an actions array ({ type: "prompt", prompt }). ' +
-        'Read ~/.craft-agent/docs/automations.md for full format reference. ' +
-        'After editing, confirm clearly what changed.',
-    },
-    example: 'Change the cron schedule to every 30 minutes',
-    displayLabelKey: 'editPopover.label.automationConfiguration',
-    exampleKey: 'editPopover.example.automationConfig',
-    model: 'default',
-    systemPromptPreset: 'mini',
-    inlineExecution: true,
   }),
 }
 

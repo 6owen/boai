@@ -849,14 +849,6 @@ export interface SourceFilter {
   sourceType: 'api' | 'mcp' | 'local'
 }
 
-/**
- * Automation type filter for automations navigation
- */
-export interface AutomationFilter {
-  kind: 'type'
-  automationType: 'scheduled' | 'event' | 'agentic'
-}
-
 /** Skill collection filter for skills navigation. */
 export interface SkillFilter {
   kind: 'collection'
@@ -878,7 +870,7 @@ export interface SourcesNavigationState {
  *
  * `subpage: null` means the bare `settings` route — navigator-only view in compact
  * mode. On desktop, the content panel falls back to the App page so it isn't empty.
- * Sources/Skills/Automations use `details: null` for the same purpose.
+ * Sources/Skills use `details: null` for the same purpose.
  */
 export interface SettingsNavigationState {
   navigator: 'settings'
@@ -893,16 +885,6 @@ export interface SkillsNavigationState {
   navigator: 'skills'
   filter?: SkillFilter
   details: { type: 'skill'; skillSlug: string } | null
-  rightSidebar?: RightSidebarPanel
-}
-
-/**
- * Automations navigation state
- */
-export interface AutomationsNavigationState {
-  navigator: 'automations'
-  filter?: AutomationFilter
-  details: { type: 'automation'; automationId: string } | null
   rightSidebar?: RightSidebarPanel
 }
 
@@ -923,7 +905,6 @@ export type NavigationState =
   | SourcesNavigationState
   | SettingsNavigationState
   | SkillsNavigationState
-  | AutomationsNavigationState
   | ProjectsNavigationState
 
 export const isSessionsNavigation = (
@@ -941,10 +922,6 @@ export const isSettingsNavigation = (
 export const isSkillsNavigation = (
   state: NavigationState
 ): state is SkillsNavigationState => state.navigator === 'skills'
-
-export const isAutomationsNavigation = (
-  state: NavigationState
-): state is AutomationsNavigationState => state.navigator === 'automations'
 
 export const isProjectsNavigation = (
   state: NavigationState
@@ -969,12 +946,6 @@ export const getNavigationStateKey = (state: NavigationState): string => {
       return `${base}/skill/${state.details.skillSlug}`
     }
     return base
-  }
-  if (state.navigator === 'automations') {
-    if (state.details?.type === 'automation') {
-      return `automations/automation/${state.details.automationId}`
-    }
-    return 'automations'
   }
   if (state.navigator === 'projects') {
     if (state.details?.type === 'project') {
@@ -1035,15 +1006,8 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
     return { navigator: 'skills', details: null }
   }
 
-  // Handle automations
-  if (key === 'automations') return { navigator: 'automations', details: null }
-  if (key.startsWith('automations/automation/')) {
-    const automationId = key.slice(22)
-    if (automationId) {
-      return { navigator: 'automations', details: { type: 'automation', automationId } }
-    }
-    return { navigator: 'automations', details: null }
-  }
+  // Legacy automation navigation state is no longer representable in BoAI.
+  if (key === 'automations' || key.startsWith('automations/')) return DEFAULT_NAVIGATION_STATE
 
   // Handle projects
   if (key === 'projects') return { navigator: 'projects', details: null }
