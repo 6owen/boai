@@ -17,6 +17,8 @@ export interface EntityPanelItem {
   title: React.ReactNode
   badges?: React.ReactNode
   trailing?: React.ReactNode
+  /** A directly accessible row action, rendered outside the main row button. */
+  rowAction?: React.ReactNode
   menu?: React.ReactNode
   dataAttributes?: Record<string, string | undefined>
 }
@@ -85,6 +87,7 @@ export function EntityPanel<T>({
             title={mapped.title}
             badges={mapped.badges}
             trailing={mapped.trailing}
+            rowAction={mapped.rowAction}
             isSelected={selectedId === getId(item)}
             isInMultiSelect={rowProps.isInMultiSelect}
             showSeparator={!isFirst}

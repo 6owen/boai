@@ -302,6 +302,7 @@ export function MainContentPanel({
             skillSlug={navState.details.skillSlug}
             workspaceId={activeWorkspaceId || ''}
             workingDirectory={activeSessionWorkingDirectory}
+            collection={navState.filter?.collection ?? 'installed'}
           />
         </Panel>
       )

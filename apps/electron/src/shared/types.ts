@@ -60,8 +60,8 @@ import type { LoadedSource, FolderSourceConfig, SourceConnectionStatus } from '@
 export type { LoadedSource, FolderSourceConfig, SourceConnectionStatus };
 
 // Skill types
-import type { InstallSkillRequest, LoadedSkill, ManageSkillRequest, SkillManagementResult, SkillMetadata, SkillUpdateCheckResult } from '@craft-agent/shared/skills/types';
-export type { InstallSkillRequest, LoadedSkill, ManageSkillRequest, SkillManagementResult, SkillMetadata, SkillUpdateCheckResult };
+import type { InstallSkillRequest, LoadedSkill, ManageSkillRequest, ScanSkillSourceRequest, SkillAgentPlacement, SkillManagementResult, SkillMetadata, SkillSourceScanResult, SkillUpdateCheckResult } from '@craft-agent/shared/skills/types';
+export type { InstallSkillRequest, LoadedSkill, ManageSkillRequest, ScanSkillSourceRequest, SkillAgentPlacement, SkillManagementResult, SkillMetadata, SkillSourceScanResult, SkillUpdateCheckResult };
 
 // Resource bundle types (cross-workspace export/import)
 import type { ExportResourcesOptions, ExportResult, ResourceImportMode, ResourceBundle, ResourceImportResult } from '@craft-agent/shared/resources';
@@ -500,12 +500,13 @@ export interface ElectronAPI {
   // Skills
   getSkills(workspaceId: string, workingDirectory?: string): Promise<LoadedSkill[]>
   getSkillFiles?(workspaceId: string, skillSlug: string): Promise<SkillFile[]>
+  scanSkillSource(workspaceId: string, request: ScanSkillSourceRequest): Promise<SkillSourceScanResult>
   installSkill(workspaceId: string, request: InstallSkillRequest): Promise<SkillManagementResult>
   checkSkillUpdates(workspaceId: string, request?: ManageSkillRequest): Promise<import('@craft-agent/shared/skills').SkillUpdateCheckResult>
   updateSkill(workspaceId: string, request: ManageSkillRequest): Promise<SkillManagementResult>
   updateAllGlobalSkills(workspaceId: string, workingDirectory?: string): Promise<SkillManagementResult>
   uninstallSkill(workspaceId: string, request: ManageSkillRequest): Promise<SkillManagementResult>
-  deleteSkill(workspaceId: string, skillSlug: string): Promise<void>
+  deleteSkill(workspaceId: string, request: import('@craft-agent/shared/skills').DeleteSkillRequest): Promise<void>
   openSkillInEditor(workspaceId: string, skillSlug: string): Promise<void>
   openSkillInFinder(workspaceId: string, skillSlug: string): Promise<void>
 
@@ -856,6 +857,12 @@ export interface AutomationFilter {
   automationType: 'scheduled' | 'event' | 'agentic'
 }
 
+/** Skill collection filter for skills navigation. */
+export interface SkillFilter {
+  kind: 'collection'
+  collection: 'installed' | 'own'
+}
+
 /**
  * Sources navigation state
  */
@@ -884,6 +891,7 @@ export interface SettingsNavigationState {
  */
 export interface SkillsNavigationState {
   navigator: 'skills'
+  filter?: SkillFilter
   details: { type: 'skill'; skillSlug: string } | null
   rightSidebar?: RightSidebarPanel
 }
@@ -956,10 +964,11 @@ export const getNavigationStateKey = (state: NavigationState): string => {
     return 'sources'
   }
   if (state.navigator === 'skills') {
+    const base = state.filter ? `skills/${state.filter.collection}` : 'skills'
     if (state.details?.type === 'skill') {
-      return `skills/skill/${state.details.skillSlug}`
+      return `${base}/skill/${state.details.skillSlug}`
     }
-    return 'skills'
+    return base
   }
   if (state.navigator === 'automations') {
     if (state.details?.type === 'automation') {
@@ -1003,6 +1012,21 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
 
   // Handle skills
   if (key === 'skills') return { navigator: 'skills', details: null }
+  if (key === 'skills/installed' || key === 'skills/own') {
+    const collection = key.slice(7) as SkillFilter['collection']
+    return { navigator: 'skills', filter: { kind: 'collection', collection }, details: null }
+  }
+  if (key.startsWith('skills/installed/skill/') || key.startsWith('skills/own/skill/')) {
+    const [, collection, , skillSlug] = key.split('/')
+    if (skillSlug && (collection === 'installed' || collection === 'own')) {
+      return {
+        navigator: 'skills',
+        filter: { kind: 'collection', collection },
+        details: { type: 'skill', skillSlug },
+      }
+    }
+    return { navigator: 'skills', details: null }
+  }
   if (key.startsWith('skills/skill/')) {
     const skillSlug = key.slice(13)
     if (skillSlug) {

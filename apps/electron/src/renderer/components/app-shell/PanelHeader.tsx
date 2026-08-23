@@ -94,6 +94,8 @@ export interface PanelHeaderProps {
   paddingLeft?: string
   /** Optional className for additional styling */
   className?: string
+  /** Keep the title centered in the full panel, independent of side actions. */
+  centerTitle?: boolean
   /** Whether title is being regenerated (shows shimmer effect) */
   isRegeneratingTitle?: boolean
 }
@@ -113,6 +115,7 @@ export function PanelHeader({
   compensateForStoplight,
   paddingLeft,
   className,
+  centerTitle = false,
   isRegeneratingTitle,
 }: PanelHeaderProps) {
   // Fall back to AppShellContext.leadingAction so per-panel back buttons (set by
@@ -232,6 +235,20 @@ export function PanelHeader({
         </div>
       </div>
     </>
+  ) : centerTitle ? (
+    <>
+      <div className="flex min-w-0 items-center justify-start">
+        {leadingAction && <div className="titlebar-no-drag shrink-0">{leadingAction}</div>}
+      </div>
+      <div className="min-w-0 overflow-hidden">
+        {titleNode}
+      </div>
+      <div className="flex min-w-0 items-center justify-end gap-1.5">
+        {centerButton && <div className="titlebar-no-drag shrink-0">{centerButton}</div>}
+        {actions && <div className="titlebar-no-drag shrink-0">{actions}</div>}
+        {rightSidebarButton && <div className="titlebar-no-drag shrink-0">{rightSidebarButton}</div>}
+      </div>
+    </>
   ) : (
     <>
       {leadingAction && (
@@ -266,7 +283,11 @@ export function PanelHeader({
   const basePadding = leadingAction ? 8 : 16
 
   const baseClassName = cn(
-    'flex shrink-0 items-center pr-2 min-w-0 gap-1.5 relative z-panel h-[42px]',
+    'shrink-0 items-center min-w-0 gap-1.5 relative z-panel h-[42px]',
+    !isCompactMode && centerTitle ? 'pr-4' : 'pr-2',
+    !isCompactMode && centerTitle
+      ? 'grid grid-cols-[minmax(0,1fr)_minmax(0,auto)_minmax(0,1fr)]'
+      : 'flex',
     // Only use static paddingLeft class when not animating
     !shouldCompensate && (paddingLeft || (leadingAction ? 'pl-2' : 'pl-4')),
     className

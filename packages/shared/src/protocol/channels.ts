@@ -274,6 +274,7 @@ export const RPC_CHANNELS = {
   skills: {
     GET: 'skills:get',
     GET_FILES: 'skills:getFiles',
+    SCAN_SOURCE: 'skills:scanSource',
     INSTALL: 'skills:install',
     CHECK_UPDATES: 'skills:checkUpdates',
     UPDATE: 'skills:update',

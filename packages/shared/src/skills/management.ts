@@ -1,18 +1,24 @@
 import { spawn } from 'child_process'
-import { existsSync, readFileSync } from 'fs'
-import { homedir } from 'os'
+import { existsSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'fs'
+import { homedir, tmpdir } from 'os'
 import { dirname, join } from 'path'
 import { GLOBAL_AGENT_SKILLS_DIR, PROJECT_AGENT_SKILLS_DIR } from './storage.ts'
+import { annotateSkillAgentPlacements } from './agent-placements.ts'
 import type {
   LoadedSkill,
   SkillManagementInfo,
   SkillManagementResult,
   SkillManagementScope,
+  ScanSkillSourceRequest,
+  SkillInstallCandidate,
+  SkillSourceScanResult,
   SkillUpdateCheckResult,
 } from './types.ts'
 
 const DEFAULT_TIMEOUT_MS = 120_000
+const UPDATE_ALL_TIMEOUT_MS = 10 * 60_000
 const MAX_OUTPUT_BYTES = 1024 * 1024
+const MAX_ARCHIVE_BYTES = 100 * 1024 * 1024
 const VALID_SKILL_SLUG = /^[a-z0-9][a-z0-9._-]*$/
 
 export interface InstallManagedSkillInput {
@@ -315,6 +321,7 @@ export class SkillsCliService {
       'universal',
       '--yes',
       '--copy',
+      '--full-depth',
     ]
     if (input.scope === 'global') args.push('--global')
 
@@ -326,6 +333,26 @@ export class SkillsCliService {
       throw new Error(`skills command completed but "${slug}" was not installed`)
     }
     return result
+  }
+
+  async scan(input: ScanSkillSourceRequest, cwd = homedir()): Promise<SkillSourceScanResult> {
+    const source = input.source.trim()
+    if (!source || source.startsWith('-')) throw new Error('Enter a valid skill source')
+
+    const shouldExtractArchive = input.kind === 'zip'
+      || (input.kind === 'url' && /\.zip(?:$|[?#])/i.test(source))
+    const installSource = shouldExtractArchive
+      ? await extractSkillArchive(source)
+      : source
+    const result = await this.runner(
+      ['--yes', 'skills', 'add', installSource, '--list', '--full-depth'],
+      { cwd, timeoutMs: DEFAULT_TIMEOUT_MS },
+    )
+    const candidates = parseSkillListOutput(result.stdout)
+    if (candidates.length === 0) {
+      throw new Error('No valid skills found. Each skill needs a SKILL.md with name and description.')
+    }
+    return { installSource, candidates }
   }
 
   async update(input: UpdateManagedSkillInput): Promise<SkillManagementResult> {
@@ -416,7 +443,7 @@ export class SkillsCliService {
   async updateAllGlobal(cwd = homedir()): Promise<SkillManagementResult> {
     return this.runner(
       ['--yes', 'skills', 'update', '--global', '--yes'],
-      { cwd },
+      { cwd, timeoutMs: UPDATE_ALL_TIMEOUT_MS },
     )
   }
 
@@ -448,6 +475,74 @@ export class SkillsCliService {
     }
     return result
   }
+}
+
+const ANSI_PATTERN = /[\u001B\u009B][[\]()#;?]*(?:(?:(?:[a-zA-Z\d]*(?:;[-a-zA-Z\d/#&.:=?%@~_]+)*)?\u0007)|(?:(?:\d{1,4}(?:[;:]\d{0,4})*)?[\dA-PR-TZcf-nq-uy=><~]))/g
+
+/** Parse the stable list section emitted by `skills add --list`. */
+export function parseSkillListOutput(output: string): SkillInstallCandidate[] {
+  const candidates: SkillInstallCandidate[] = []
+  let current: SkillInstallCandidate | undefined
+  for (const rawLine of output.replace(ANSI_PATTERN, '').split(/\r?\n/)) {
+    const name = rawLine.match(/^│ {4}([a-z0-9][a-z0-9._-]*)\s*$/i)?.[1]
+    if (name) {
+      current = { slug: name }
+      candidates.push(current)
+      continue
+    }
+    const description = rawLine.match(/^│ {6}(.+?)\s*$/)?.[1]
+    if (description && current) {
+      current.description = current.description
+        ? `${current.description} ${description}`
+        : description
+    }
+  }
+  return candidates
+}
+
+async function extractSkillArchive(source: string): Promise<string> {
+  let archive: Uint8Array
+  if (/^https?:\/\//i.test(source)) {
+    const response = await fetch(source, { signal: AbortSignal.timeout(60_000) })
+    if (!response.ok) throw new Error(`Failed to download ZIP (${response.status})`)
+    const declaredSize = Number(response.headers.get('content-length') ?? 0)
+    if (declaredSize > MAX_ARCHIVE_BYTES) throw new Error('ZIP is larger than 100 MB')
+    archive = new Uint8Array(await response.arrayBuffer())
+  } else {
+    if (!existsSync(source) || !statSync(source).isFile()) throw new Error('ZIP file was not found')
+    if (statSync(source).size > MAX_ARCHIVE_BYTES) throw new Error('ZIP is larger than 100 MB')
+    archive = readFileSync(source)
+  }
+  if (archive.byteLength > MAX_ARCHIVE_BYTES) throw new Error('ZIP is larger than 100 MB')
+
+  const destination = mkdtempSync(join(tmpdir(), 'craft-skill-install-'))
+  const archivePath = join(destination, 'source.zip')
+  writeFileSync(archivePath, archive)
+  const listing = await runArchiveCommand(['-tf', archivePath])
+  for (const rawPath of listing.split(/\r?\n/).filter(Boolean)) {
+    const normalized = rawPath.replace(/\\/g, '/').replace(/^\.\//, '')
+    const parts = normalized.split('/').filter(Boolean)
+    if (!parts.length || normalized.startsWith('/') || parts.includes('..')) {
+      throw new Error('ZIP contains an unsafe path')
+    }
+  }
+  await runArchiveCommand(['-xf', archivePath, '-C', destination])
+  return destination
+}
+
+function runArchiveCommand(args: string[]): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const child = spawn('tar', args, { shell: false, stdio: ['ignore', 'pipe', 'pipe'] })
+    let stdout = ''
+    let stderr = ''
+    child.stdout.on('data', chunk => { stdout += String(chunk) })
+    child.stderr.on('data', chunk => { stderr += String(chunk) })
+    child.on('error', reject)
+    child.on('close', code => {
+      if (code === 0) resolve(stdout)
+      else reject(new Error(stderr.trim() || 'Could not extract ZIP'))
+    })
+  })
 }
 
 function normalizeSkillName(name: string): string {
@@ -491,6 +586,7 @@ function toManagementInfo(
     sourceType: entry.sourceType,
     sourceUrl: entry.sourceUrl,
     skillPath: entry.skillPath,
+    revision: entry.skillFolderHash,
     installedAt: entry.installedAt,
     updatedAt: entry.updatedAt,
     canUpdate,
@@ -511,8 +607,8 @@ export function annotateManagedSkills(
     ? readLockEntries(join(projectRoot, 'skills-lock.json'))
     : {}
 
-  return skills.map(skill => {
-    if (skill.source === 'workspace') return skill
+  return annotateSkillAgentPlacements(skills, projectRoot).map(skill => {
+    if (skill.source === 'workspace' || skill.source === 'plugin') return skill
     const entries = skill.source === 'global' ? globalEntries : projectEntries
     const entry = findLockEntry(entries, skill.slug)
     if (!entry) return skill

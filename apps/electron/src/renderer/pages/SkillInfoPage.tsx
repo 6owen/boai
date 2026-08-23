@@ -13,8 +13,7 @@ import { Check, X, Minus } from 'lucide-react'
 import { EditPopover, EditButton, getEditConfig } from '@/components/ui/EditPopover'
 import { toast } from 'sonner'
 import { SkillMenu } from '@/components/app-shell/SkillMenu'
-import { UninstallSkillDialog } from '@/components/app-shell/UninstallSkillDialog'
-import { UpdateSkillDialog } from '@/components/app-shell/UpdateSkillDialog'
+import { UpdateSkillPopover } from '@/components/app-shell/UpdateSkillPopover'
 import { SkillAvatar } from '@/components/ui/skill-avatar'
 import { routes, navigate } from '@/lib/navigate'
 import { useActiveWorkspace } from '@/context/AppShellContext'
@@ -26,22 +25,38 @@ import {
   Info_Markdown,
 } from '@/components/info'
 import type { LoadedSkill } from '../../shared/types'
+import {
+  getSkillCollectionKey,
+  isSelfAuthoredSkill,
+  useSkillFavorites,
+} from '@/hooks/useSkillCollections'
 
 interface SkillInfoPageProps {
   skillSlug: string
   workspaceId: string
   workingDirectory?: string
+  collection?: 'installed' | 'own'
 }
 
-export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory }: SkillInfoPageProps) {
-  const { t } = useTranslation()
+function formatPackageDate(value: string | undefined, locale: string): string | null {
+  if (!value) return null
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return null
+
+  return new Intl.DateTimeFormat(locale, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(date)
+}
+
+export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory, collection = 'installed' }: SkillInfoPageProps) {
+  const { t, i18n } = useTranslation()
   const [skill, setSkill] = useState<LoadedSkill | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [uninstallDialogOpen, setUninstallDialogOpen] = useState(false)
-  const [updateDialogOpen, setUpdateDialogOpen] = useState(false)
   const activeWorkspace = useActiveWorkspace()
   const canRevealLocally = !activeWorkspace?.remoteServer
+  const { favoriteKeys, toggleFavorite } = useSkillFavorites(workspaceId)
 
   // Load skill data
   useEffect(() => {
@@ -85,7 +100,7 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
       isMounted = false
       unsubscribe?.()
     }
-  }, [workspaceId, skillSlug, workingDirectory])
+  }, [workspaceId, skillSlug, workingDirectory, t])
 
   // Handle open in finder
   const handleOpenInFinder = useCallback(async () => {
@@ -105,20 +120,37 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
     if (!skill) return
 
     try {
-      if (skill.source !== 'workspace') return
-      await window.electronAPI.deleteSkill(workspaceId, skillSlug)
-      toast.success(t('skillInfo.deletedSkill', { name: skill.metadata.name }))
-      navigate(routes.view.skills())
+      if (skill.management) {
+        await window.electronAPI.uninstallSkill(workspaceId, {
+          slug: skill.slug,
+          scope: skill.management.scope,
+          workingDirectory,
+        })
+        toast.success(t('skillsManager.uninstalled', { name: skill.metadata.name }))
+      } else if (skill.source !== 'plugin') {
+        await window.electronAPI.deleteSkill(workspaceId, {
+          slug: skill.slug,
+          source: skill.source,
+          workingDirectory,
+        })
+        toast.success(t('skillInfo.deletedSkill', { name: skill.metadata.name }))
+      }
+      navigate(collection === 'own' ? routes.view.skillsOwn() : routes.view.skillsInstalled())
     } catch (err) {
-      toast.error(t('skillInfo.failedToDelete'), {
+      toast.error(skill.management ? t('skillsManager.uninstallFailed') : t('skillInfo.failedToDelete'), {
         description: err instanceof Error ? err.message : undefined,
       })
     }
-  }, [skill, workspaceId, skillSlug])
+  }, [collection, skill, t, workspaceId, workingDirectory])
 
-  const handleUpdate = useCallback(() => {
-    if (skill?.management?.canUpdate) setUpdateDialogOpen(true)
-  }, [skill])
+  const handleToggleFavorite = useCallback(() => {
+    if (!skill || isSelfAuthoredSkill(skill)) return
+    const wasFavorite = favoriteKeys.has(getSkillCollectionKey(skill))
+    toggleFavorite(skill)
+    if (collection === 'own' && wasFavorite) {
+      navigate(routes.view.skillsOwn())
+    }
+  }, [collection, favoriteKeys, skill, toggleFavorite])
 
   // Handle opening in new window
   const handleOpenInNewWindow = useCallback(() => {
@@ -127,7 +159,9 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
 
   // Get skill name for header
   const skillName = skill?.metadata.name || skillSlug
-  const canDeleteSkill = skill?.source === 'workspace'
+  const locale = i18n.resolvedLanguage ?? i18n.language
+  const installedAt = formatPackageDate(skill?.management?.installedAt, locale)
+  const updatedAt = formatPackageDate(skill?.management?.updatedAt, locale)
 
   // Format path to show just the skill-relative portion (skills/{slug}/)
   const formatPath = (path: string) => {
@@ -159,6 +193,7 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
     >
       <Info_Page.Header
         title={skillName}
+        centerTitle
         titleMenu={
           <SkillMenu
             skillSlug={skillSlug}
@@ -166,11 +201,12 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
             onOpenInNewWindow={handleOpenInNewWindow}
             onShowInFinder={handleOpenInFinder}
             canShowInFinder={canRevealLocally}
-            onUninstall={skill?.management ? () => setUninstallDialogOpen(true) : undefined}
-            onUpdate={skill?.management?.canUpdate ? handleUpdate : undefined}
-            onDelete={canDeleteSkill ? handleDelete : undefined}
-            canDelete={canDeleteSkill}
-            deleteLabel={canDeleteSkill ? t('skillInfo.deleteSkill') : t('skillInfo.managedByProject')}
+            onUninstall={skill?.management ? () => void handleDelete() : undefined}
+            onDelete={skill && !skill.management && skill.source !== 'plugin' ? () => void handleDelete() : undefined}
+            canDelete={Boolean(skill && skill.source !== 'plugin')}
+            deleteLabel={t('skillInfo.deleteSkill')}
+            isFavorite={skill ? favoriteKeys.has(getSkillCollectionKey(skill)) : false}
+            onToggleFavorite={skill && !isSelfAuthoredSkill(skill) ? handleToggleFavorite : undefined}
           />
         }
       />
@@ -187,7 +223,7 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
           {/* Metadata */}
           <Info_Section
             title={t('skillInfo.metadata')}
-            actions={
+            actions={skill.source !== 'plugin' ? (
               // EditPopover for AI-assisted metadata editing (name, description in frontmatter)
               <EditPopover
                 trigger={<EditButton />}
@@ -197,7 +233,7 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
                   filePath: `${skill.path}/SKILL.md`,
                 }}
               />
-            }
+            ) : undefined}
           >
             <Info_Table>
               <Info_Table.Row label={t('common.slug')} value={skill.slug} />
@@ -208,6 +244,7 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
               <Info_Table.Row label={t('common.source')}>
                 {skill.source === 'project' ? t('skillInfo.sourceProject') :
                  skill.source === 'global' ? t('skillInfo.sourceGlobal') :
+                 skill.source === 'plugin' ? t('skillInfo.sourcePlugin', { name: skill.pluginName }) :
                  t('skillInfo.sourceWorkspace')}
               </Info_Table.Row>
               <Info_Table.Row label={t('common.location')}>
@@ -225,6 +262,50 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
               )}
             </Info_Table>
           </Info_Section>
+
+          {skill.management && (
+            <Info_Section
+              title={t('skillInfo.packageInfo')}
+              actions={skill.management.canUpdate ? (
+                <UpdateSkillPopover
+                  workspaceId={workspaceId}
+                  workingDirectory={workingDirectory}
+                  skill={skill}
+                />
+              ) : undefined}
+            >
+              <Info_Table labelWidth={136}>
+                {skill.management.source && (
+                  <Info_Table.Row label={t('common.source')} value={skill.management.source} />
+                )}
+                {skill.management.sourceUrl && (
+                  <Info_Table.Row label={t('skillInfo.repository')}>
+                    <button
+                      type="button"
+                      onClick={() => void window.electronAPI.openUrl(skill.management!.sourceUrl!)}
+                      className="block w-full truncate text-left text-foreground hover:underline focus:outline-none focus-visible:underline"
+                      title={skill.management.sourceUrl}
+                    >
+                      {skill.management.sourceUrl}
+                    </button>
+                  </Info_Table.Row>
+                )}
+                {skill.management.revision && (
+                  <Info_Table.Row label={t('skillInfo.revision')}>
+                    <span className="break-all font-mono text-[13px] leading-5">
+                      {skill.management.revision}
+                    </span>
+                  </Info_Table.Row>
+                )}
+                {installedAt && (
+                  <Info_Table.Row label={t('skillInfo.installedAt')} value={installedAt} />
+                )}
+                {updatedAt && (
+                  <Info_Table.Row label={t('skillInfo.updatedAt')} value={updatedAt} />
+                )}
+              </Info_Table>
+            </Info_Section>
+          )}
 
           {/* Permission Modes */}
           {skill.metadata.alwaysAllow && skill.metadata.alwaysAllow.length > 0 && (
@@ -285,26 +366,6 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
           </Info_Section>
 
         </Info_Page.Content>
-      )}
-
-      {skill?.management && (
-        <>
-          <UninstallSkillDialog
-            open={uninstallDialogOpen}
-            onOpenChange={setUninstallDialogOpen}
-            workspaceId={workspaceId}
-            workingDirectory={workingDirectory}
-            skill={skill}
-            onComplete={() => navigate(routes.view.skills())}
-          />
-          <UpdateSkillDialog
-            open={updateDialogOpen}
-            onOpenChange={setUpdateDialogOpen}
-            workspaceId={workspaceId}
-            workingDirectory={workingDirectory}
-            skill={skill}
-          />
-        </>
       )}
     </Info_Page>
   )

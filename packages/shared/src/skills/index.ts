@@ -5,6 +5,7 @@
  */
 
 export * from './types.ts';
+export * from './agent-placements.ts';
 export * from './management.ts';
 export {
   GLOBAL_AGENT_SKILLS_DIR,
@@ -13,8 +14,10 @@ export {
   loadAllSkills,
   invalidateSkillsCache,
   loadSkillBySlug,
+  loadPluginSkills,
   getSkillIconPath,
   deleteSkill,
+  deleteSkillBySource,
   skillExists,
   listSkillSlugs,
   skillNeedsIconDownload,

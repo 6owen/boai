@@ -45,6 +45,7 @@ export function NavigatorPanel({
       <PanelHeader
         title={title}
         actions={headerActions}
+        centerTitle
       />
       {children}
     </Panel>

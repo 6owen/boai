@@ -46,7 +46,7 @@ describe('SkillsCliService.install', () => {
 
     expect(receivedArgs).toEqual([
       '--yes', 'skills', 'add', 'vercel-labs/agent-browser',
-      '--skill', 'agent-browser', '--agent', 'universal', '--yes', '--copy', '--global',
+      '--skill', 'agent-browser', '--agent', 'universal', '--yes', '--copy', '--full-depth', '--global',
     ])
     expect(receivedCwd).toBe(root)
     expect(result.stdout).toBe('installed')
@@ -100,6 +100,44 @@ describe('SkillsCliService.install', () => {
     expect(service.install({ source: '--help', slug: 'valid', scope: 'global' })).rejects.toThrow('valid skill source')
     expect(service.install({ source: 'owner/repo', slug: '../escape', scope: 'global' })).rejects.toThrow('Skill name')
     expect(service.install({ source: 'owner/repo', slug: 'valid', scope: 'project' })).rejects.toThrow('Select a project')
+  })
+})
+
+describe('SkillsCliService.scan', () => {
+  test('lists every discovered skill without installing', async () => {
+    let receivedArgs: string[] = []
+    const service = new SkillsCliService({
+      runner: async args => {
+        receivedArgs = args
+        return {
+          stdout: [
+            '◇  Available Skills',
+            '│',
+            '│    first-skill',
+            '│',
+            '│      First description.',
+            '│',
+            '│    second-skill',
+            '│',
+            '│      Second description.',
+          ].join('\n'),
+          stderr: '',
+        }
+      },
+    })
+
+    const result = await service.scan({ source: 'owner/repo', kind: 'git' })
+
+    expect(receivedArgs).toEqual([
+      '--yes', 'skills', 'add', 'owner/repo', '--list', '--full-depth',
+    ])
+    expect(result).toEqual({
+      installSource: 'owner/repo',
+      candidates: [
+        { slug: 'first-skill', description: 'First description.' },
+        { slug: 'second-skill', description: 'Second description.' },
+      ],
+    })
   })
 })
 
@@ -239,9 +277,11 @@ describe('SkillsCliService.updateAllGlobal', () => {
     const root = makeTempDir()
     let receivedArgs: string[] = []
     let receivedCwd = ''
+    let receivedTimeoutMs = 0
     const runner: SkillsCliRunner = async (args, options) => {
       receivedArgs = args
       receivedCwd = options.cwd
+      receivedTimeoutMs = options.timeoutMs ?? 0
       return { stdout: 'all global skills are up to date', stderr: '' }
     }
     const service = new SkillsCliService({ runner })
@@ -252,6 +292,7 @@ describe('SkillsCliService.updateAllGlobal', () => {
       '--yes', 'skills', 'update', '--global', '--yes',
     ])
     expect(receivedCwd).toBe(root)
+    expect(receivedTimeoutMs).toBe(10 * 60_000)
     expect(result.stdout).toBe('all global skills are up to date')
   })
 })
@@ -343,6 +384,8 @@ describe('annotateManagedSkills', () => {
           sourceUrl: 'https://github.com/vercel-labs/agent-browser.git',
           skillPath: 'skills/agent-browser/SKILL.md',
           skillFolderHash: 'abc',
+          installedAt: '2026-07-06T01:11:00.000Z',
+          updatedAt: '2026-08-23T00:04:00.000Z',
         },
       },
     }))
@@ -364,7 +407,15 @@ describe('annotateManagedSkills', () => {
       skill('agent-browser', 'workspace'),
     ], projectRoot, { globalLockPath })
 
-    expect(result[0]!.management).toMatchObject({ scope: 'global', canUpdate: true })
+    expect(result[0]!.management).toMatchObject({
+      scope: 'global',
+      source: 'vercel-labs/agent-browser',
+      sourceUrl: 'https://github.com/vercel-labs/agent-browser.git',
+      revision: 'abc',
+      installedAt: '2026-07-06T01:11:00.000Z',
+      updatedAt: '2026-08-23T00:04:00.000Z',
+      canUpdate: true,
+    })
     expect(result[1]!.management).toMatchObject({ scope: 'project', canUpdate: true })
     expect(result[2]!.management).toBeUndefined()
     expect(result[3]!.management).toBeUndefined()

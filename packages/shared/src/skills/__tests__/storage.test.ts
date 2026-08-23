@@ -24,6 +24,8 @@ import {
   skillExists,
   listSkillSlugs,
   deleteSkill,
+  deleteSkillBySource,
+  loadPluginSkills,
 } from '../storage.ts';
 
 // ============================================================
@@ -92,7 +94,7 @@ function getExistingGlobalSlugs(): Set<string> {
   try {
     const skills = loadAllSkills(emptyWs);
     // These are all global skills since the workspace is empty
-    return new Set(skills.map(s => s.slug));
+    return new Set(skills.filter(s => s.source === 'global').map(s => s.slug));
   } finally {
     rmSync(emptyWs, { recursive: true, force: true });
   }
@@ -324,6 +326,7 @@ describe('loadAllSkills', () => {
 
   // Use unique slugs that won't collide with real global skills
   const TEST_PREFIX = '_test_storage_';
+  const getPluginCount = () => loadAllSkills(workspaceRoot).filter(skill => skill.source === 'plugin').length;
 
   it('should load workspace and project skills alongside any existing global skills', () => {
     const baselineGlobal = getExistingGlobalSlugs();
@@ -337,7 +340,7 @@ describe('loadAllSkills', () => {
     const skills = loadAllSkills(workspaceRoot, projectRoot);
 
     // Should have baseline global skills + our 2 test skills
-    expect(skills.length).toBe(baselineGlobal.size + 2);
+    expect(skills.length).toBe(baselineGlobal.size + getPluginCount() + 2);
 
     const wsSkill = skills.find(s => s.slug === `${TEST_PREFIX}ws`);
     const projSkill = skills.find(s => s.slug === `${TEST_PREFIX}proj`);
@@ -385,7 +388,7 @@ describe('loadAllSkills', () => {
     expect(overridden!.metadata.name).toBe('Workspace Override');
 
     // Total count should be same as baseline (overridden, not added)
-    expect(skills.length).toBe(baselineGlobal.size);
+    expect(skills.length).toBe(baselineGlobal.size + getPluginCount());
   });
 
   it('should override workspace skills with project skills (same slug)', () => {
@@ -400,7 +403,7 @@ describe('loadAllSkills', () => {
     const skills = loadAllSkills(workspaceRoot, projectRoot);
 
     // Only 1 skill for this slug (project overrides workspace), plus baseline globals
-    expect(skills.length).toBe(baselineGlobal.size + 1);
+    expect(skills.length).toBe(baselineGlobal.size + getPluginCount() + 1);
     const deploy = skills.find(s => s.slug === `${TEST_PREFIX}deploy`);
     expect(deploy).toBeDefined();
     expect(deploy!.source).toBe('project');
@@ -435,7 +438,7 @@ describe('loadAllSkills', () => {
     expect(skills.find(s => s.slug === `${TEST_PREFIX}only_proj`)!.source).toBe('project');
 
     // Total: baseline globals + shared (1, deduplicated) + only_ws + only_proj = baseline + 3
-    expect(skills.length).toBe(baselineGlobal.size + 3);
+    expect(skills.length).toBe(baselineGlobal.size + getPluginCount() + 3);
   });
 
   it('should handle missing project directory gracefully', () => {
@@ -446,7 +449,7 @@ describe('loadAllSkills', () => {
     // Pass a non-existent project root
     const skills = loadAllSkills(workspaceRoot, join(tempDir, 'nonexistent-project'));
 
-    expect(skills.length).toBe(baselineGlobal.size + 1);
+    expect(skills.length).toBe(baselineGlobal.size + getPluginCount() + 1);
     const wsSkill = skills.find(s => s.slug === `${TEST_PREFIX}ws_skill`);
     expect(wsSkill).toBeDefined();
     expect(wsSkill!.source).toBe('workspace');
@@ -468,7 +471,7 @@ describe('loadAllSkills', () => {
     expect(skills.find(s => s.slug === `${TEST_PREFIX}project_only`)).toBeUndefined();
     // Should contain the workspace skill
     expect(skills.find(s => s.slug === `${TEST_PREFIX}ws_skill`)).toBeDefined();
-    expect(skills.length).toBe(baselineGlobal.size + 1);
+    expect(skills.length).toBe(baselineGlobal.size + getPluginCount() + 1);
   });
 
   it('should return only global skills when workspace and project are empty', () => {
@@ -476,9 +479,9 @@ describe('loadAllSkills', () => {
 
     const skills = loadAllSkills(workspaceRoot);
 
-    // With empty workspace and no project, only global skills remain
-    expect(skills.length).toBe(baselineGlobal.size);
-    for (const skill of skills) {
+    // With empty workspace and no project, global and enabled plugin skills remain.
+    expect(skills.length).toBe(baselineGlobal.size + getPluginCount());
+    for (const skill of skills.filter(item => item.source === 'global')) {
       expect(skill.source).toBe('global');
     }
   });
@@ -500,7 +503,7 @@ describe('loadAllSkills', () => {
     expect(testSkills.filter(s => s.source === 'project')).toHaveLength(1);
 
     // Global skills should all have source 'global'
-    const globalSkills = skills.filter(s => !s.slug.startsWith(TEST_PREFIX));
+    const globalSkills = skills.filter(s => s.source === 'global');
     for (const skill of globalSkills) {
       expect(skill.source).toBe('global');
     }
@@ -528,6 +531,39 @@ describe('loadAllSkills', () => {
     const dup = skills.find(s => s.slug === `${TEST_PREFIX}dup`);
     expect(dup!.source).toBe('project');
     expect(dup!.metadata.name).toBe('Proj Dup');
+  });
+});
+
+describe('loadPluginSkills', () => {
+  it('loads skills from enabled plugins-cli packages with qualified slugs', () => {
+    const homeDir = join(tempDir, 'home');
+    const codexHome = join(homeDir, '.codex');
+    const pluginRoot = join(codexHome, 'plugins', 'cache', 'kata-code', '1.0.0');
+    mkdirSync(join(homeDir, '.agents', 'plugins'), { recursive: true });
+    mkdirSync(join(pluginRoot, '.codex-plugin'), { recursive: true });
+    mkdirSync(codexHome, { recursive: true });
+    createSkill(join(pluginRoot, 'skills'), 'starter-react', {
+      name: 'Starter React',
+      description: 'Create a React app',
+    });
+    writeFileSync(join(pluginRoot, '.codex-plugin', 'plugin.json'), JSON.stringify({
+      name: 'kata-code',
+      skills: './skills/',
+    }));
+    writeFileSync(join(homeDir, '.agents', 'plugins', 'marketplace.json'), JSON.stringify({
+      plugins: [{
+        name: 'kata-code',
+        source: { source: 'local', path: './.codex/plugins/cache/kata-code/1.0.0' },
+      }],
+    }));
+    writeFileSync(join(codexHome, 'config.toml'), '[plugins."kata-code@plugins-cli"]\nenabled = true\n');
+
+    const skills = loadPluginSkills({ homeDir, codexHome });
+
+    expect(skills).toHaveLength(1);
+    expect(skills[0]?.slug).toBe('kata-code:starter-react');
+    expect(skills[0]?.source).toBe('plugin');
+    expect(skills[0]?.pluginName).toBe('kata-code');
   });
 });
 
@@ -596,5 +632,27 @@ describe('deleteSkill', () => {
   it('should return false for non-existent skill', () => {
     const result = deleteSkill(workspaceRoot, 'nonexistent');
     expect(result).toBe(false);
+  });
+});
+
+describe('deleteSkillBySource', () => {
+  it('should delete a project skill from the selected project only', () => {
+    const projectSkillsDir = join(projectRoot, '.agents', 'skills');
+    createSkill(projectSkillsDir, 'to-delete');
+
+    const result = deleteSkillBySource(
+      workspaceRoot,
+      'to-delete',
+      'project',
+      projectRoot,
+    );
+
+    expect(result).toBe(true);
+    expect(existsSync(join(projectSkillsDir, 'to-delete'))).toBe(false);
+  });
+
+  it('should reject unsafe skill names', () => {
+    expect(() => deleteSkillBySource(workspaceRoot, '../escape', 'workspace'))
+      .toThrow('Invalid skill name');
   });
 });

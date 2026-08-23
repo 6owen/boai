@@ -65,6 +65,8 @@ export interface EntityRowProps {
   badges?: React.ReactNode
   /** Right-aligned content in the badge row (timestamp, child toggle) */
   trailing?: React.ReactNode
+  /** Direct row-level action rendered outside the main button (avoids nested interactive elements). */
+  rowAction?: React.ReactNode
   /** Content rendered below the main button (e.g. expanded child list) */
   children?: React.ReactNode
   /** Absolutely-positioned overlay (e.g. match count badge) */
@@ -128,6 +130,7 @@ export function EntityRow({
   subtitle,
   badges,
   trailing,
+  rowAction,
   children,
   overlay,
   isSelected = false,
@@ -357,7 +360,10 @@ export function EntityRow({
               </div>
             </div>
           ) : (
-            <div className="flex items-center gap-[10px] w-full pr-6 min-w-0">
+            <div className={cn(
+              "flex items-center gap-[10px] w-full min-w-0",
+              rowAction && menuContent ? "pr-14" : rowAction ? "pr-8" : "pr-6",
+            )}>
               {icon && (
                 <div className="shrink-0 flex items-center gap-[10px] [&>*]:w-3 [&>*]:h-3">
                   {icon}
@@ -419,6 +425,20 @@ export function EntityRow({
 
       {/* Overlay (e.g. match count badge) */}
       {overlay}
+
+      {/* Direct row action — kept outside the main button for valid, accessible markup. */}
+      {rowAction && (
+        <div
+          className={cn(
+            "absolute top-2 z-10 flex h-7 items-center",
+            menuContent || useCompactMenu ? "right-10" : "right-2",
+          )}
+          onMouseDown={(event) => event.stopPropagation()}
+          onClick={(event) => event.stopPropagation()}
+        >
+          {rowAction}
+        </div>
+      )}
 
       {/* More menu button — visible on hover or when menu is open (skipped when titleTrailing handles it inline) */}
       {(menuContent || useCompactMenu) && !hideMoreButton && !titleTrailing && (

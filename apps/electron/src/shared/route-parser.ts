@@ -13,6 +13,7 @@ import type {
   NavigationState,
   SessionFilter,
   SourceFilter,
+  SkillFilter,
   AutomationFilter,
   RightSidebarPanel,
 } from './types'
@@ -44,6 +45,8 @@ export interface ParsedCompoundRoute {
   sessionFilter?: SessionFilter
   /** Source filter (only for sources navigator) */
   sourceFilter?: SourceFilter
+  /** Skill collection filter (only for skills navigator) */
+  skillFilter?: SkillFilter
   /** Automation filter (only for automations navigator) */
   automationFilter?: AutomationFilter
   /** Sessions presentation mode (only for sessions navigator). 'board' = Kanban view. */
@@ -167,7 +170,23 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
       return { navigator: 'skills', details: null }
     }
 
-    // skills/skill/{skillSlug}
+    const collection = segments[1]
+    if (collection === 'installed' || collection === 'own') {
+      const skillFilter: SkillFilter = { kind: 'collection', collection }
+      if (segments[2] === 'skill' && segments[3]) {
+        return {
+          navigator: 'skills',
+          skillFilter,
+          details: { type: 'skill', id: segments[3] },
+        }
+      }
+      if (segments.length === 2) {
+        return { navigator: 'skills', skillFilter, details: null }
+      }
+      return null
+    }
+
+    // Legacy skills/skill/{skillSlug}
     if (segments[1] === 'skill' && segments[2]) {
       return {
         navigator: 'skills',
@@ -306,8 +325,9 @@ export function buildCompoundRoute(parsed: ParsedCompoundRoute): string {
   }
 
   if (parsed.navigator === 'skills') {
-    if (!parsed.details) return 'skills'
-    return `skills/skill/${parsed.details.id}`
+    const base = parsed.skillFilter ? `skills/${parsed.skillFilter.collection}` : 'skills'
+    if (!parsed.details) return base
+    return `${base}/skill/${parsed.details.id}`
   }
 
   if (parsed.navigator === 'automations') {
@@ -570,10 +590,11 @@ function convertCompoundToNavigationState(compound: ParsedCompoundRoute): Naviga
   // Skills
   if (compound.navigator === 'skills') {
     if (!compound.details) {
-      return { navigator: 'skills', details: null }
+      return { navigator: 'skills', filter: compound.skillFilter, details: null }
     }
     return {
       navigator: 'skills',
+      filter: compound.skillFilter,
       details: { type: 'skill', skillSlug: compound.details.id },
     }
   }
@@ -789,6 +810,7 @@ function navigationStateToCompoundRoute(state: NavigationState): ParsedCompoundR
   if (state.navigator === 'skills') {
     return {
       navigator: 'skills',
+      skillFilter: state.filter ?? undefined,
       details: state.details?.type === 'skill' ? { type: 'skill', id: state.details.skillSlug } : null,
     }
   }

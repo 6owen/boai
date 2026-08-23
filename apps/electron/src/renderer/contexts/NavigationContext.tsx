@@ -55,12 +55,14 @@ import { NAVIGATE_EVENT, type NavigateOptions } from '../lib/navigate'
 import { normalizePanelRouteForReconcile } from './navigation-reconcile'
 import { buildSemanticHistoryKey, canRunInitialRestore } from './navigation-history'
 import * as storage from '@/lib/local-storage'
+import { getStoredFavoriteSkillKeys, isSkillInOwnCollection } from '@/hooks/useSkillCollections'
 import type {
   DeepLinkNavigation,
   Session,
   NavigationState,
   SessionFilter,
   SourceFilter,
+  SkillFilter,
   RightSidebarPanel,
   ContentBadge,
 } from '../../shared/types'
@@ -603,10 +605,14 @@ export function NavigationProvider({
   )
 
   const getFirstSkillSlug = useCallback(
-    (): string | null => {
-      return skills[0]?.slug ?? null
+    (filter?: SkillFilter | null): string | null => {
+      if (filter?.collection !== 'own' || !workspaceId) {
+        return skills[0]?.slug ?? null
+      }
+      const favoriteKeys = getStoredFavoriteSkillKeys(workspaceId)
+      return skills.find(skill => isSkillInOwnCollection(skill, favoriteKeys))?.slug ?? null
     },
-    [skills]
+    [skills, workspaceId]
   )
 
   // =========================================================================
@@ -662,7 +668,7 @@ export function NavigationProvider({
 
       // Skills: auto-select first skill
       if (isSkillsNavigation(nextState) && !nextState.details && !options?.skipAutoSelect) {
-        const firstSkillSlug = getFirstSkillSlug()
+        const firstSkillSlug = getFirstSkillSlug(nextState.filter)
         if (firstSkillSlug) {
           return { ...nextState, details: { type: 'skill', skillSlug: firstSkillSlug } }
         }

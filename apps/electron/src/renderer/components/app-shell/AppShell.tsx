@@ -9,7 +9,6 @@ import {
   ChevronRight,
   ChevronDown,
   MoreHorizontal,
-  RotateCw,
   Flag,
   ListFilter,
   Tag,
@@ -33,7 +32,8 @@ import {
   Info,
   MailOpen,
   FolderKanban,
-  PackagePlus,
+  PackageCheck,
+  UserRound,
 } from "lucide-react"
 // SessionStatusIcons no longer used - icons come from dynamic sessionStatuses
 import { SourceAvatar } from "@/components/ui/source-avatar"
@@ -74,8 +74,8 @@ import {
 } from "@/components/ui/collapsible"
 import { SessionList, type ChatGroupingMode } from "./SessionList"
 import { MainContentPanel } from "./MainContentPanel"
-import { InstallSkillDialog } from "./InstallSkillDialog"
-import { UpdateSkillDialog } from "./UpdateSkillDialog"
+import { UpdateSkillPopover } from "./UpdateSkillPopover"
+import { SkillInstallMenu } from "./SkillInstallMenu"
 import { BoardListToggle } from "./kanban/BoardListToggle"
 import { PanelStackContainer } from "./PanelStackContainer"
 import { CompactSessionListFilter } from "./CompactSessionListFilter"
@@ -92,7 +92,7 @@ import { useFocusZone } from "@/hooks/keyboard"
 import { useFocusContext } from "@/context/FocusContext"
 import { getSessionTitle } from "@/utils/session"
 import { useSetAtom } from "jotai"
-import type { Session, Workspace, FileAttachment, PermissionRequest, LoadedSource, LoadedSkill, PermissionMode, SourceFilter, AutomationFilter } from "../../../shared/types"
+import type { Session, Workspace, FileAttachment, PermissionRequest, LoadedSource, LoadedSkill, PermissionMode, SourceFilter, SkillFilter, AutomationFilter } from "../../../shared/types"
 import { sessionMetaMapAtom, sendToWorkspaceAtom, type SessionMeta } from "@/atoms/sessions"
 import { sourcesAtom } from "@/atoms/sources"
 import { skillsAtom } from "@/atoms/skills"
@@ -151,6 +151,7 @@ import {
 import { hasOpenOverlay } from "@/lib/overlay-detection"
 import { clearSourceIconCaches } from "@/lib/icon-cache"
 import { dispatchFocusInputEvent } from "./input/focus-input-events"
+import { getSkillCollectionKey, isSkillInOwnCollection, useSkillFavorites } from "@/hooks/useSkillCollections"
 
 /**
  * AppShellProps - Minimal props interface for AppShell component
@@ -637,6 +638,9 @@ function AppShellContent({
   // Derive source filter from navigation state (only when in sources navigator)
   const sourceFilter: SourceFilter | null = isSourcesNavigation(navState) ? navState.filter ?? null : null
 
+  // Derive skill collection from navigation state. Legacy bare `skills` routes map to Installed.
+  const skillFilter: SkillFilter | null = isSkillsNavigation(navState) ? navState.filter ?? null : null
+
   // Derive automation filter from navigation state (only when in automations navigator)
   const automationFilter: AutomationFilter | null = isAutomationsNavigation(navState) ? navState.filter ?? null : null
 
@@ -868,6 +872,9 @@ function AppShellContent({
       const filter = navState.filter
       return `chats:${filter.kind}:${filter.kind === 'state' ? filter.stateId : ''}`
     }
+    if (isSkillsNavigation(navState)) {
+      return `skills:${navState.filter?.collection ?? 'installed'}`
+    }
     return navState.navigator
   }, [navState])
 
@@ -913,6 +920,12 @@ function AppShellContent({
 
   // Skills state (workspace-scoped)
   const [skills, setSkills] = React.useState<LoadedSkill[]>([])
+  const { favoriteKeys: favoriteSkillKeys, toggleFavorite: toggleFavoriteSkill } = useSkillFavorites(activeWorkspaceId || undefined)
+  const ownSkills = React.useMemo(
+    () => skills.filter(skill => isSkillInOwnCollection(skill, favoriteSkillKeys)),
+    [favoriteSkillKeys, skills],
+  )
+  const visibleSkills = skillFilter?.collection === 'own' ? ownSkills : skills
   // Sync skills to atom for NavigationContext auto-selection
   const setSkillsAtom = useSetAtom(skillsAtom)
   React.useEffect(() => {
@@ -1156,8 +1169,18 @@ function AppShellContent({
   // Handle selecting a skill from the list
   const handleSkillSelect = React.useCallback((skill: LoadedSkill) => {
     if (!activeWorkspaceId) return
-    navigate(routes.view.skills(skill.slug))
-  }, [activeWorkspaceId, navigate])
+    navigate(skillFilter?.collection === 'own'
+      ? routes.view.skillsOwn(skill.slug)
+      : routes.view.skillsInstalled(skill.slug))
+  }, [activeWorkspaceId, navigate, skillFilter])
+
+  const handleToggleFavoriteSkill = React.useCallback((skill: LoadedSkill) => {
+    const wasFavorite = favoriteSkillKeys.has(getSkillCollectionKey(skill))
+    toggleFavoriteSkill(skill)
+    if (skillFilter?.collection === 'own' && wasFavorite) {
+      navigate(routes.view.skillsOwn())
+    }
+  }, [favoriteSkillKeys, skillFilter, toggleFavoriteSkill])
 
   // Handle selecting an automation from the list
   const handleAutomationSelect = React.useCallback((automationId: string) => {
@@ -1818,7 +1841,15 @@ function AppShellContent({
 
   // Handler for skills view
   const handleSkillsClick = useCallback(() => {
-    navigate(routes.view.skills())
+    navigate(routes.view.skillsInstalled())
+  }, [])
+
+  const handleSkillsInstalledClick = useCallback(() => {
+    navigate(routes.view.skillsInstalled())
+  }, [])
+
+  const handleSkillsOwnClick = useCallback(() => {
+    navigate(routes.view.skillsOwn())
   }, [])
 
   // Handlers for automations view
@@ -1993,9 +2024,6 @@ function AppShellContent({
   // The previous flow auto-created with the default name and produced ugly
   // permanent slugs (new-project, new-project-1, …).
   const [createProjectDialogOpen, setCreateProjectDialogOpen] = useState(false)
-  const [installSkillDialogOpen, setInstallSkillDialogOpen] = useState(false)
-  const [updateAllGlobalSkillsOpen, setUpdateAllGlobalSkillsOpen] = useState(false)
-  const [updatingAllGlobalSkills, setUpdatingAllGlobalSkills] = useState(false)
   const openAddProject = useCallback(() => {
     if (!activeWorkspace?.id) return
     setCreateProjectDialogOpen(true)
@@ -2069,18 +2097,6 @@ function AppShellContent({
     }
   }, [activeWorkspace])
 
-  // Delete Skill
-  const handleDeleteSkill = useCallback(async (skillSlug: string) => {
-    if (!activeWorkspace) return
-    try {
-      await window.electronAPI.deleteSkill(activeWorkspace.id, skillSlug)
-      toast.success(t('toast.deletedSkill', { slug: skillSlug }))
-    } catch (error) {
-      console.error('[Chat] Failed to delete skill:', error)
-      toast.error(t('toast.failedToDeleteSkill'))
-    }
-  }, [activeWorkspace])
-
   // Respond to menu bar "New Chat" trigger
   const menuTriggerRef = useRef(menuNewChatTrigger)
   useEffect(() => {
@@ -2124,12 +2140,14 @@ function AppShellContent({
     // 3. Sources, Skills, Settings
     result.push({ id: 'nav:sources', type: 'nav', action: handleSourcesClick })
     result.push({ id: 'nav:skills', type: 'nav', action: handleSkillsClick })
+    result.push({ id: 'nav:skills:installed', type: 'nav', action: handleSkillsInstalledClick })
+    result.push({ id: 'nav:skills:own', type: 'nav', action: handleSkillsOwnClick })
     result.push({ id: 'nav:automations', type: 'nav', action: handleAutomationsClick })
     result.push({ id: 'nav:settings', type: 'nav', action: () => handleSettingsClick() })
     result.push({ id: 'nav:whats-new', type: 'nav', action: handleWhatsNewClick })
 
     return result
-  }, [handleAllSessionsClick, handleFlaggedClick, handleArchivedClick, handleSessionStatusClick, effectiveSessionStatuses, handleLabelClick, labelConfigs, labelTree, viewConfigs, handleViewClick, handleSourcesClick, handleSkillsClick, handleAutomationsClick, handleSettingsClick, handleWhatsNewClick])
+  }, [handleAllSessionsClick, handleFlaggedClick, handleArchivedClick, handleSessionStatusClick, effectiveSessionStatuses, handleLabelClick, labelConfigs, labelTree, viewConfigs, handleViewClick, handleSourcesClick, handleSkillsClick, handleSkillsInstalledClick, handleSkillsOwnClick, handleAutomationsClick, handleSettingsClick, handleWhatsNewClick])
 
   // Toggle folder expanded state
   const handleToggleFolder = React.useCallback((path: string) => {
@@ -2245,7 +2263,7 @@ function AppShellContent({
 
     // Skills navigator
     if (isSkillsNavigation(navState)) {
-      return t("sidebar.allSkills")
+      return skillFilter?.collection === 'own' ? t("sidebar.ownSkills") : t("sidebar.installedSkills")
     }
 
     // Projects navigator
@@ -2284,7 +2302,7 @@ function AppShellContent({
       default:
         return t("sidebar.allSessions")
     }
-  }, [navState, t, sessionFilter, automationFilter, labelConfigs, viewConfigs, effectiveSessionStatuses])
+  }, [navState, t, sessionFilter, skillFilter, automationFilter, labelConfigs, viewConfigs, effectiveSessionStatuses])
 
   // Build recursive sidebar items from the shared display-sorted label tree.
   // Each node renders with condensed height (compact: true) since many labels expected.
@@ -2586,12 +2604,35 @@ function AppShellContent({
                       title: t("sidebar.skills"),
                       label: String(skills.length),
                       icon: Zap,
-                      variant: isSkillsNavigation(navState) ? "default" : "ghost",
+                      variant: "ghost",
                       onClick: handleSkillsClick,
+                      expandable: true,
+                      expanded: isExpanded('nav:skills'),
+                      onToggle: () => toggleExpanded('nav:skills'),
                       contextMenu: {
                         type: 'skills',
                         onAddSkill: openAddSkill,
                       },
+                      items: [
+                        {
+                          id: "nav:skills:installed",
+                          title: t("sidebar.installedSkills"),
+                          label: String(skills.length),
+                          icon: PackageCheck,
+                          variant: (isSkillsNavigation(navState) && skillFilter?.collection !== 'own') ? "default" : "ghost",
+                          onClick: handleSkillsInstalledClick,
+                          contextMenu: { type: 'skills' as const, onAddSkill: openAddSkill },
+                        },
+                        {
+                          id: "nav:skills:own",
+                          title: t("sidebar.ownSkills"),
+                          label: String(ownSkills.length),
+                          icon: UserRound,
+                          variant: skillFilter?.collection === 'own' ? "default" : "ghost",
+                          onClick: handleSkillsOwnClick,
+                          contextMenu: { type: 'skills' as const, onAddSkill: openAddSkill },
+                        },
+                      ],
                     },
                     {
                       id: "nav:projects",
@@ -2702,6 +2743,7 @@ function AppShellContent({
             >
             <PanelHeader
               title={isSidebarVisible ? listTitle : undefined}
+              centerTitle
               compensateForStoplight={!isSidebarVisible}
               badge={automationFilter?.automationType === 'scheduled' ? (
                 <Tooltip>
@@ -3433,25 +3475,20 @@ function AppShellContent({
                   {/* Add Skill button (only for skills mode) */}
                   {isSkillsNavigation(navState) && activeWorkspace && (
                     <>
-                      <HeaderIconButton
-                        icon={<RotateCw className={cn('h-4 w-4', updatingAllGlobalSkills && 'animate-spin')} />}
-                        tooltip={t("skillsManager.updateAllGlobal")}
-                        onClick={() => setUpdateAllGlobalSkillsOpen(true)}
-                        disabled={updatingAllGlobalSkills}
-                        data-tutorial="update-all-global-skills-button"
+                      <UpdateSkillPopover
+                        workspaceId={activeWorkspace.id}
+                        workingDirectory={activeSessionWorkingDirectory}
                       />
-                      <HeaderIconButton
-                        icon={<PackagePlus className="h-4 w-4" />}
-                        tooltip={t("skillsManager.install")}
-                        onClick={() => setInstallSkillDialogOpen(true)}
-                        data-tutorial="install-skill-button"
+                      <SkillInstallMenu
+                        workspaceId={activeWorkspace.id}
+                        workingDirectory={activeSessionWorkingDirectory}
                       />
                       <EditPopover
                         trigger={
                           <HeaderIconButton
-                            icon={<Plus className="h-4 w-4" />}
-                            tooltip={t("sidebarMenu.addSkill")}
-                            data-tutorial="add-skill-button"
+                            icon={<Bot className="h-4 w-4" />}
+                            tooltip={t("skillsManager.createWithAi")}
+                            data-tutorial="create-skill-button"
                           />
                         }
                         {...getEditConfig('add-skill', activeWorkspace.rootPath)}
@@ -3497,12 +3534,17 @@ function AppShellContent({
             {isSkillsNavigation(navState) && activeWorkspaceId && (
               /* Skills List */
               <SkillsListPanel
-                skills={skills}
+                skills={visibleSkills}
                 workspaceId={activeWorkspaceId}
                 workspaceRootPath={activeWorkspace?.rootPath}
                 workingDirectory={activeSessionWorkingDirectory}
+                searchQuery={searchQuery}
+                onSearchChange={setSearchQuery}
+                onSearchClose={() => setSearchQuery('')}
+                collection={skillFilter?.collection ?? 'installed'}
+                favoriteSkillKeys={favoriteSkillKeys}
+                onToggleFavorite={handleToggleFavoriteSkill}
                 onSkillClick={handleSkillSelect}
-                onDeleteSkill={handleDeleteSkill}
                 selectedSkillSlug={isSkillsNavigation(navState) && navState.details?.type === 'skill' ? navState.details.skillSlug : null}
               />
             )}
@@ -3905,24 +3947,6 @@ function AppShellContent({
         onCancel={() => setCreateProjectDialogOpen(false)}
         onSubmit={handleCreateProjectSubmit}
       />
-
-      {activeWorkspaceId && (
-        <>
-          <InstallSkillDialog
-            open={installSkillDialogOpen}
-            onOpenChange={setInstallSkillDialogOpen}
-            workspaceId={activeWorkspaceId}
-            workingDirectory={activeSessionWorkingDirectory}
-          />
-          <UpdateSkillDialog
-            open={updateAllGlobalSkillsOpen}
-            onOpenChange={setUpdateAllGlobalSkillsOpen}
-            workspaceId={activeWorkspaceId}
-            workingDirectory={activeSessionWorkingDirectory}
-            onBusyChange={setUpdatingAllGlobalSkills}
-          />
-        </>
-      )}
 
       {/* Messaging dialogs (pairing-code + WA connect) — driven by messagingDialogAtom.
           Mounted here so they survive context-menu / dropdown close. */}

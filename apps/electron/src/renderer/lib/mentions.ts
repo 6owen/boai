@@ -247,7 +247,11 @@ export function extractBadges(
     let rawText = match.fullMatch
     if (match.type === 'skill') {
       const skill = skillsBySlug.get(match.id)
-      const pluginName = skill?.source === 'workspace' ? workspaceId : AGENTS_PLUGIN_NAME
+      const pluginName = skill?.source === 'workspace'
+        ? workspaceId
+        : skill?.source === 'plugin'
+          ? skill.pluginName ?? AGENTS_PLUGIN_NAME
+          : AGENTS_PLUGIN_NAME
       rawText = `[skill:${pluginName}:${match.id}]`
     }
 

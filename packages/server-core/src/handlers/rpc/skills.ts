@@ -2,7 +2,14 @@ import { join, resolve } from 'path'
 import { existsSync, readdirSync, statSync } from 'fs'
 import { RPC_CHANNELS, type SkillFile } from '@craft-agent/shared/protocol'
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
-import type { InstallSkillRequest, ManageSkillRequest } from '@craft-agent/shared/skills'
+import type {
+  DeleteSkillRequest,
+  InstallSkillRequest,
+  ManageSkillRequest,
+  ScanSkillSourceRequest,
+} from '@craft-agent/shared/skills'
+
+const SKILLS_UPDATE_ALL_TIMEOUT_MS = 10 * 60_000
 import { annotateManagedSkills, SkillsCliService } from '@craft-agent/shared/skills'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
@@ -10,6 +17,7 @@ import type { HandlerDeps } from '../handler-deps'
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.skills.GET,
   RPC_CHANNELS.skills.GET_FILES,
+  RPC_CHANNELS.skills.SCAN_SOURCE,
   RPC_CHANNELS.skills.INSTALL,
   RPC_CHANNELS.skills.CHECK_UPDATES,
   RPC_CHANNELS.skills.UPDATE,
@@ -120,6 +128,13 @@ export function registerSkillsHandlers(
     return scanDirectory(skillDir)
   })
 
+  // Discover every valid SKILL.md before the user chooses what to install.
+  server.handle(RPC_CHANNELS.skills.SCAN_SOURCE, async (_ctx, workspaceId: string, request: ScanSkillSourceRequest) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+    return skillsCli.scan(request, workspace.rootPath)
+  })
+
   // Install a global or active-project skill using the standard skills CLI.
   server.handle(RPC_CHANNELS.skills.INSTALL, async (_ctx, workspaceId: string, request: InstallSkillRequest) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
@@ -228,7 +243,7 @@ export function registerSkillsHandlers(
     await refreshAndBroadcastSkills(workspaceId, workspace.rootPath, viewProjectRoot)
     deps.platform.logger?.info('Updated all global skills')
     return result
-  })
+  }, { timeoutMs: SKILLS_UPDATE_ALL_TIMEOUT_MS })
 
   // Uninstall only skills whose exact scope is tracked by the skills CLI.
   server.handle(RPC_CHANNELS.skills.UNINSTALL, async (_ctx, workspaceId: string, request: ManageSkillRequest) => {
@@ -265,14 +280,34 @@ export function registerSkillsHandlers(
     return result
   })
 
-  // Delete a skill from a workspace
-  server.handle(RPC_CHANNELS.skills.DELETE, async (_ctx, workspaceId: string, skillSlug: string) => {
+  // Permanently delete one unmanaged skill from its exact loaded source.
+  server.handle(RPC_CHANNELS.skills.DELETE, async (_ctx, workspaceId: string, request: DeleteSkillRequest) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error('Workspace not found')
 
-    const { deleteSkill } = await import('@craft-agent/shared/skills')
-    deleteSkill(workspace.rootPath, skillSlug)
-    deps.platform.logger?.info(`Deleted skill: ${skillSlug}`)
+    const projectRoot = resolveProjectRoot(workspaceId, request.workingDirectory)
+    if (request.source === 'project' && !projectRoot) {
+      throw new Error('Select a project before deleting a project skill')
+    }
+
+    const { deleteSkillBySource, loadAllSkills } = await import('@craft-agent/shared/skills')
+    const skill = annotateManagedSkills(
+      loadAllSkills(workspace.rootPath, projectRoot),
+      projectRoot,
+    ).find(item => item.slug === request.slug && item.source === request.source)
+    if (!skill) throw new Error('Skill not found in the selected location')
+    if (skill.management) throw new Error('Managed skills must be removed through uninstall')
+
+    const deleted = deleteSkillBySource(
+      workspace.rootPath,
+      request.slug,
+      request.source,
+      projectRoot,
+    )
+    if (!deleted) throw new Error('Failed to delete skill')
+
+    await refreshAndBroadcastSkills(workspaceId, workspace.rootPath, projectRoot)
+    deps.platform.logger?.info(`Deleted ${request.source} skill: ${request.slug}`)
   })
 
   // Open skill SKILL.md in editor

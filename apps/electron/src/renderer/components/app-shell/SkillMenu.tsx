@@ -23,6 +23,7 @@ import {
   Send,
   RefreshCw,
   PackageMinus,
+  Star,
 } from 'lucide-react'
 import { useMenuComponents } from '@/components/ui/menu-context'
 import { getFileManagerName } from '@/lib/platform'
@@ -38,6 +39,8 @@ export interface SkillMenuProps {
   onDelete?: () => void
   onUpdate?: () => void | Promise<void>
   onUninstall?: () => void
+  isFavorite?: boolean
+  onToggleFavorite?: () => void
   canShowInFinder?: boolean
   canDelete?: boolean
   deleteLabel?: string
@@ -57,6 +60,8 @@ export function SkillMenu({
   onDelete,
   onUpdate,
   onUninstall,
+  isFavorite = false,
+  onToggleFavorite,
   canShowInFinder = true,
   canDelete = true,
   deleteLabel,
@@ -93,6 +98,15 @@ export function SkillMenu({
         <MenuItem onClick={onUpdate}>
           <RefreshCw className="h-3.5 w-3.5" />
           <span className="flex-1">{t('skillsManager.update')}</span>
+        </MenuItem>
+      )}
+
+      {onToggleFavorite && (
+        <MenuItem onClick={onToggleFavorite}>
+          <Star className={isFavorite ? "h-3.5 w-3.5 fill-current" : "h-3.5 w-3.5"} />
+          <span className="flex-1">
+            {isFavorite ? t('skillsList.removeFromOwn') : t('skillsList.addToOwn')}
+          </span>
         </MenuItem>
       )}
 

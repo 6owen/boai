@@ -12,8 +12,13 @@ export interface RequestContext {
 
 export type HandlerFn = (ctx: RequestContext, ...args: any[]) => Promise<any> | any
 
+export interface HandlerOptions {
+  /** Override the server's default execution timeout for long-running handlers. */
+  timeoutMs?: number
+}
+
 export interface RpcServer {
-  handle(channel: string, handler: HandlerFn): void
+  handle(channel: string, handler: HandlerFn, options?: HandlerOptions): void
   push(channel: string, target: PushTarget, ...args: any[]): void
   invokeClient(clientId: string, channel: string, ...args: any[]): Promise<any>
   updateClientWorkspace?(clientId: string, workspaceId: string): void

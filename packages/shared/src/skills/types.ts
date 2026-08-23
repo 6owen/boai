@@ -29,7 +29,26 @@ export interface SkillMetadata {
 }
 
 /** Source of a loaded skill */
-export type SkillSource = 'global' | 'workspace' | 'project';
+export type SkillSource = 'global' | 'workspace' | 'project' | 'plugin';
+
+/** Source shape accepted by the install-source scanner. */
+export type SkillInstallSourceKind = 'folder' | 'zip' | 'url' | 'git';
+
+export interface ScanSkillSourceRequest {
+  source: string;
+  kind: SkillInstallSourceKind;
+}
+
+export interface SkillInstallCandidate {
+  slug: string;
+  description?: string;
+}
+
+export interface SkillSourceScanResult {
+  /** Source that should be passed back to installSkill (ZIPs resolve to a temp folder). */
+  installSource: string;
+  candidates: SkillInstallCandidate[];
+}
 
 /** Scope supported by the skills CLI. */
 export type SkillManagementScope = 'global' | 'project';
@@ -72,6 +91,13 @@ export interface ManageSkillRequest {
   workingDirectory?: string;
 }
 
+/** Request for permanently deleting one unmanaged skill from its exact source. */
+export interface DeleteSkillRequest {
+  slug: string;
+  source: Exclude<SkillSource, 'plugin'>;
+  workingDirectory?: string;
+}
+
 /** Provenance read from the lock file maintained by the skills CLI. */
 export interface SkillManagementInfo {
   manager: 'skills-cli';
@@ -80,9 +106,19 @@ export interface SkillManagementInfo {
   sourceType?: string;
   sourceUrl?: string;
   skillPath?: string;
+  /** Content-tree hash recorded by the skills CLI for the installed skill. */
+  revision?: string;
   installedAt?: string;
   updatedAt?: string;
   canUpdate: boolean;
+}
+
+/** One installed Agent that can read a skill from its direct or inherited location. */
+export interface SkillAgentPlacement {
+  agentId: string;
+  agentName: string;
+  isInherited?: boolean;
+  inheritedFromAgentId?: string;
 }
 
 /**
@@ -110,6 +146,10 @@ export interface LoadedSkill {
   path: string;
   /** Where this skill was loaded from */
   source: SkillSource;
+  /** Owning plugin for plugin-provided skills. */
+  pluginName?: string;
   /** Present only when this exact skill is tracked by the skills CLI. */
   management?: SkillManagementInfo;
+  /** Installed Agents that can currently read this skill. */
+  agentPlacements?: SkillAgentPlacement[];
 }

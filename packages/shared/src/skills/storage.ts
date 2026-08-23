@@ -13,7 +13,7 @@ import {
   statSync,
 } from 'fs';
 import { homedir } from 'os';
-import { join } from 'path';
+import { join, resolve } from 'path';
 import matter from 'gray-matter';
 import type { LoadedSkill, SkillMetadata, SkillSource } from './types.ts';
 import { getWorkspaceSkillsPath } from '../workspaces/storage.ts';
@@ -106,6 +106,15 @@ function parseSkillFile(content: string): { metadata: SkillMetadata; body: strin
  */
 function loadSkillFromDir(skillsDir: string, slug: string, source: SkillSource): LoadedSkill | null {
   const skillDir = join(skillsDir, slug);
+  return loadSkillAtPath(skillDir, slug, source);
+}
+
+function loadSkillAtPath(
+  skillDir: string,
+  slug: string,
+  source: SkillSource,
+  pluginName?: string,
+): LoadedSkill | null {
   const skillFile = join(skillDir, 'SKILL.md');
 
   // Check directory exists
@@ -138,6 +147,7 @@ function loadSkillFromDir(skillsDir: string, slug: string, source: SkillSource):
     iconPath: findIconFile(skillDir),
     path: skillDir,
     source,
+    pluginName,
   };
 }
 
@@ -168,6 +178,72 @@ function loadSkillsFromDir(skillsDir: string, source: SkillSource): LoadedSkill[
   }
 
   return skills;
+}
+
+interface PluginMarketplaceFile {
+  plugins?: Array<{
+    name?: string;
+    source?: { source?: string; path?: string };
+  }>;
+}
+
+interface PluginManifest {
+  name?: string;
+  skills?: string | string[];
+}
+
+export interface PluginSkillLoadOptions {
+  homeDir?: string;
+  codexHome?: string;
+}
+
+/** Discover skills provided by enabled packages installed through `npx plugins`. */
+export function loadPluginSkills(options: PluginSkillLoadOptions = {}): LoadedSkill[] {
+  const homeDir = options.homeDir ?? homedir();
+  const marketplacePath = join(homeDir, '.agents', 'plugins', 'marketplace.json');
+  const codexHome = options.codexHome ?? process.env.CODEX_HOME?.trim() ?? join(homeDir, '.codex');
+  const configPath = join(codexHome, 'config.toml');
+  if (!existsSync(marketplacePath) || !existsSync(configPath)) return [];
+
+  try {
+    const marketplace = JSON.parse(readFileSync(marketplacePath, 'utf8')) as PluginMarketplaceFile;
+    const config = readFileSync(configPath, 'utf8');
+    const enabledPlugins = new Set(
+      [...config.matchAll(/^\[plugins\."([^"\n]+)"\]\s*\nenabled\s*=\s*true\s*$/gm)]
+        .map(match => match[1]),
+    );
+    const result: LoadedSkill[] = [];
+
+    for (const entry of marketplace.plugins ?? []) {
+      const pluginName = entry.name?.trim();
+      const rawPluginPath = entry.source?.path?.trim();
+      if (!pluginName || !rawPluginPath || !enabledPlugins.has(`${pluginName}@plugins-cli`)) continue;
+
+      const pluginRoot = resolve(homeDir, rawPluginPath);
+      const manifestPath = join(pluginRoot, '.codex-plugin', 'plugin.json');
+      if (!existsSync(manifestPath)) continue;
+      const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as PluginManifest;
+      const skillRoots = Array.isArray(manifest.skills) ? manifest.skills : [manifest.skills ?? './skills/'];
+
+      for (const rawSkillsRoot of skillRoots) {
+        const skillsRoot = resolve(pluginRoot, rawSkillsRoot);
+        if (!existsSync(skillsRoot)) continue;
+        for (const skillEntry of readdirSync(skillsRoot, { withFileTypes: true })) {
+          if (!skillEntry.isDirectory()) continue;
+          const skill = loadSkillAtPath(
+            join(skillsRoot, skillEntry.name),
+            `${pluginName}:${skillEntry.name}`,
+            'plugin',
+            manifest.name || pluginName,
+          );
+          if (skill) result.push(skill);
+        }
+      }
+    }
+    return result;
+  } catch {
+    return [];
+  }
 }
 
 /**
@@ -241,6 +317,11 @@ export function loadAllSkills(workspaceRoot: string, projectRoot?: string): Load
     }
   }
 
+  // 4. Enabled plugins installed through `npx plugins` (qualified slugs avoid collisions).
+  for (const skill of loadPluginSkills()) {
+    skillsBySlug.set(skill.slug, skill);
+  }
+
   const result = Array.from(skillsBySlug.values());
   skillsCache.set(cacheKey, { skills: result, ts: now });
   return result;
@@ -255,6 +336,10 @@ export function loadAllSkills(workspaceRoot: string, projectRoot?: string): Load
  * @param projectRoot - Optional project root for project-level skills
  */
 export function loadSkillBySlug(workspaceRoot: string, slug: string, projectRoot?: string): LoadedSkill | null {
+  if (slug.includes(':')) {
+    const pluginSkill = loadPluginSkills().find(skill => skill.slug === slug);
+    if (pluginSkill) return pluginSkill;
+  }
   // Highest priority: project-level
   if (projectRoot) {
     const projectSkillsDir = join(projectRoot, PROJECT_AGENT_SKILLS_DIR);
@@ -305,6 +390,40 @@ export function deleteSkill(workspaceRoot: string, slug: string): boolean {
 
   try {
     rmSync(skillDir, { recursive: true });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Delete an unmanaged skill from its exact loaded source.
+ * The caller must separately handle skills tracked by a package manager.
+ */
+export function deleteSkillBySource(
+  workspaceRoot: string,
+  slug: string,
+  source: Exclude<SkillSource, 'plugin'>,
+  projectRoot?: string,
+): boolean {
+  if (!/^[a-z0-9][a-z0-9._-]*$/i.test(slug)) {
+    throw new Error('Invalid skill name');
+  }
+
+  const skillsDir = source === 'global'
+    ? GLOBAL_AGENT_SKILLS_DIR
+    : source === 'project'
+      ? projectRoot && join(projectRoot, PROJECT_AGENT_SKILLS_DIR)
+      : getWorkspaceSkillsPath(workspaceRoot);
+
+  if (!skillsDir) throw new Error('Select a project before deleting a project skill');
+
+  const skillDir = join(skillsDir, slug);
+  if (!existsSync(skillDir)) return false;
+
+  try {
+    rmSync(skillDir, { recursive: true });
+    invalidateSkillsCache();
     return true;
   } catch {
     return false;
