@@ -88,7 +88,8 @@ jobs:
 
       - name: Build macOS arm64 package
         if: matrix.platform == 'mac'
-        run: bun run --cwd apps/electron dist:mac
+        working-directory: apps/electron
+        run: bun run dist:mac
         env:
           CSC_LINK: ${{ secrets.MACOS_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.MACOS_CSC_KEY_PASSWORD }}
@@ -98,12 +99,14 @@ jobs:
 
       - name: Build Windows x64 package
         if: matrix.platform == 'win'
+        working-directory: apps/electron
         shell: pwsh
-        run: bun run --cwd apps/electron dist:win
+        run: bun run dist:win
 
       - name: Build Linux x64 package
         if: matrix.platform == 'linux'
-        run: bun run --cwd apps/electron dist:linux
+        working-directory: apps/electron
+        run: bun run dist:linux
 
       - name: Upload release assets
         shell: bash
