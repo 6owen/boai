@@ -294,6 +294,9 @@ export const mockElectronAPI = {
   checkForUpdates: () => {
     console.log('[Playground] checkForUpdates called')
   },
+  downloadUpdate: () => {
+    console.log('[Playground] downloadUpdate called')
+  },
   installUpdate: () => {
     console.log('[Playground] installUpdate called')
   },

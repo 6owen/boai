@@ -726,6 +726,8 @@ export interface UpdateInfo {
   latestVersion: string | null
   downloadState: 'idle' | 'downloading' | 'ready' | 'installing' | 'error'
   downloadProgress: number
+  /** Local installer path after a user-triggered download completes. */
+  downloadPath?: string
   error?: string
 }
 

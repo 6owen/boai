@@ -315,6 +315,7 @@ const EXPECTED_CHANNELS: string[] = [
   'update:available',
   'update:check',
   'update:dismiss',
+  'update:download',
   'update:downloadProgress',
   'update:getDismissed',
   'update:getInfo',

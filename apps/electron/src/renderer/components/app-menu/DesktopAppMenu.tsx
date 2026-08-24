@@ -263,7 +263,7 @@ export function DesktopAppMenu({
 
 /**
  * Renders the Debug submenu by mapping over `DEBUG_MENU.items`. The three actions
- * that drive it (`checkForUpdates`, `installUpdate`, `toggleDevTools`) all live on
+ * that drive it (`checkForUpdates`, `downloadUpdate`, `toggleDevTools`) all live on
  * `window.electronAPI` directly and never traverse the menu IPC channels.
  */
 function renderDebugSubmenu(t: (key: string) => string): React.ReactNode {
@@ -302,6 +302,6 @@ function renderDebugSubmenu(t: (key: string) => string): React.ReactNode {
 
 const debugHandlers: Record<string, () => void> = {
   checkForUpdates: () => window.electronAPI.checkForUpdates(),
-  installUpdate: () => window.electronAPI.installUpdate(),
+  downloadUpdate: () => window.electronAPI.downloadUpdate(),
   toggleDevTools: () => window.electronAPI.menuToggleDevTools(),
 }

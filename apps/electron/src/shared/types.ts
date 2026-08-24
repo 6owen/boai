@@ -371,6 +371,7 @@ export interface ElectronAPI {
 
   // Auto-update
   checkForUpdates(): Promise<UpdateInfo>
+  downloadUpdate(): Promise<UpdateInfo>
   getUpdateInfo(): Promise<UpdateInfo>
   installUpdate(): Promise<void>
   dismissUpdate(version: string): Promise<void>

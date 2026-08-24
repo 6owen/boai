@@ -35,6 +35,7 @@ export const CORE_HANDLED_CHANNELS = [
 
 export const GUI_HANDLED_CHANNELS = [
   RPC_CHANNELS.update.CHECK,
+  RPC_CHANNELS.update.DOWNLOAD,
   RPC_CHANNELS.update.GET_INFO,
   RPC_CHANNELS.update.INSTALL,
   RPC_CHANNELS.update.DISMISS,
@@ -271,7 +272,12 @@ export function registerSystemGuiHandlers(server: RpcServer, deps: HandlerDeps):
   // Auto-update handlers
   server.handle(RPC_CHANNELS.update.CHECK, async () => {
     const { checkForUpdates } = await import('../auto-update')
-    return checkForUpdates({ autoDownload: true })
+    return checkForUpdates({ autoDownload: false })
+  })
+
+  server.handle(RPC_CHANNELS.update.DOWNLOAD, async () => {
+    const { downloadUpdate } = await import('../auto-update')
+    return downloadUpdate()
   })
 
   server.handle(RPC_CHANNELS.update.GET_INFO, async () => {

@@ -103,6 +103,7 @@ export const CHANNEL_MAP = {
 
   // Auto-update
   checkForUpdates: invoke(RPC_CHANNELS.update.CHECK),
+  downloadUpdate: invoke(RPC_CHANNELS.update.DOWNLOAD),
   getUpdateInfo: invoke(RPC_CHANNELS.update.GET_INFO),
   installUpdate: invoke(RPC_CHANNELS.update.INSTALL),
   dismissUpdate: invoke(RPC_CHANNELS.update.DISMISS),

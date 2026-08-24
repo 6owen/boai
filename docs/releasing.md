@@ -28,10 +28,24 @@ If a build fails, the release stays in draft form so it is never offered by the
 automatic updater. A failed or skipped tag build can be restarted from Actions
 with **Run workflow** and the existing version tag.
 
+## Manual update installation
+
+Packaged apps check the public GitHub Release feed on launch, but never download
+or install an update automatically. When a new version is available, the user
+can click **Download Update**. BoAI downloads and SHA-512 verifies the platform
+installer in the system Downloads folder:
+
+- macOS: `BoAI-arm64-vX.Y.Z.dmg`
+- Windows: `BoAI-x64-vX.Y.Z.exe`
+
+After the download completes, **Open Installer** opens the DMG/EXE and the user
+finishes installation through the operating system. Quitting BoAI does not
+apply a pending update.
+
 ## macOS signing
 
-macOS auto-installation requires a Developer ID signed application. Configure
-these Actions secrets before shipping signed builds:
+Unsigned macOS builds may show Gatekeeper warnings even with manual
+installation. Configure these Actions secrets before shipping signed builds:
 
 - `MACOS_CSC_LINK`: base64-encoded `.p12` certificate or a secure certificate URL
 - `MACOS_CSC_KEY_PASSWORD`: certificate password
@@ -39,11 +53,10 @@ these Actions secrets before shipping signed builds:
 - `APPLE_APP_SPECIFIC_PASSWORD`
 - `APPLE_TEAM_ID`
 
-Without them, CI can still produce an unsigned DMG, but macOS users must install
-updates manually and may see Gatekeeper warnings.
+Without them, CI still produces an unsigned DMG and users install it manually.
 
 ## Update source
 
-Packaged apps use the GitHub Release provider embedded by electron-builder. A
-custom build can override it by setting `BOAI_UPDATE_URL` to an
-electron-updater-compatible generic feed.
+Packaged apps use the GitHub Release provider embedded by electron-builder for
+version checks and installer metadata. A custom build can override it by setting
+`BOAI_UPDATE_URL` to an electron-updater-compatible generic feed.

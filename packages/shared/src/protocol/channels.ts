@@ -134,6 +134,7 @@ export const RPC_CHANNELS = {
   },
   update: {
     CHECK: 'update:check',
+    DOWNLOAD: 'update:download',
     GET_INFO: 'update:getInfo',
     INSTALL: 'update:install',
     DISMISS: 'update:dismiss',

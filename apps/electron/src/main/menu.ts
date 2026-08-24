@@ -59,22 +59,30 @@ export async function rebuildMenu(): Promise<void> {
   }
 
   // Get current update state
-  const { getUpdateInfo, installUpdate, checkForUpdates, isAutoUpdateConfigured } = await import('./auto-update')
+  const { getUpdateInfo, installUpdate, downloadUpdate, checkForUpdates, isAutoUpdateConfigured } = await import('./auto-update')
   const updateInfo = getUpdateInfo()
   const updateReady = updateInfo.available && updateInfo.downloadState === 'ready'
+  const updateAvailable = updateInfo.available && updateInfo.downloadState !== 'downloading'
 
   // Build the update menu item based on state
   const updateMenuItem: Electron.MenuItemConstructorOptions = updateReady
     ? {
-        label: i18n.t("menu.installUpdateVersion", { version: updateInfo.latestVersion }),
+        label: i18n.t("menu.openUpdateInstallerVersion", { version: updateInfo.latestVersion }),
         click: async () => {
           await installUpdate()
         }
       }
+    : updateAvailable
+      ? {
+          label: i18n.t("menu.downloadUpdateVersion", { version: updateInfo.latestVersion }),
+          click: async () => {
+            await downloadUpdate()
+          }
+        }
     : {
         label: i18n.t("menu.checkForUpdatesEllipsis"),
         click: async () => {
-          await checkForUpdates({ autoDownload: true })
+          await checkForUpdates({ autoDownload: false })
         }
       }
 
@@ -200,18 +208,18 @@ export async function rebuildMenu(): Promise<void> {
           label: i18n.t("menu.checkForUpdates"),
           click: async () => {
             const { checkForUpdates } = await import('./auto-update')
-            const info = await checkForUpdates({ autoDownload: true })
+            const info = await checkForUpdates({ autoDownload: false })
             mainLog.info('[debug-menu] Update check result:', info)
           }
         },
         {
-          label: i18n.t("menu.installUpdate"),
+          label: i18n.t("menu.openUpdateInstaller"),
           click: async () => {
             const { installUpdate } = await import('./auto-update')
             try {
               await installUpdate()
             } catch (err) {
-              mainLog.error('[debug-menu] Install failed:', err)
+              mainLog.error('[debug-menu] Failed to open installer:', err)
             }
           }
         },
