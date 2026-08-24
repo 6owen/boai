@@ -63,9 +63,9 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Configuration
-BUN_VERSION="bun-v1.3.9"  # Pinned version for reproducible builds
+BUN_VERSION="bun-v1.3.10"  # Pinned version for reproducible builds
 
-echo "=== Building Craft Agents AppImage (${ARCH}) using electron-builder ==="
+echo "=== Building BoAI AppImage (${ARCH}) using electron-builder ==="
 if [ "$UPLOAD" = true ]; then
     echo "Will upload to S3 after build"
 fi
@@ -82,8 +82,8 @@ echo "Installing dependencies..."
 cd "$ROOT_DIR"
 bun install
 
-# 3. Download Bun binary with checksum verification
-echo "Downloading Bun ${BUN_VERSION} for linux-${ARCH}..."
+# 3. Stage the pinned Bun runtime. Reuse the host binary for native builds;
+# cross-architecture builds download and verify the matching release artifact.
 mkdir -p "$ELECTRON_DIR/vendor/bun"
 
 # Map architecture names (electron uses x64/arm64, bun uses x64/aarch64)
@@ -93,24 +93,26 @@ else
     BUN_DOWNLOAD="bun-linux-x64-baseline"
 fi
 
-# Create temp directory to avoid race conditions
-TEMP_DIR=$(mktemp -d)
-trap "rm -rf $TEMP_DIR" EXIT
+HOST_ARCH=$(uname -m)
+EXPECTED_HOST_ARCH=$([ "$ARCH" = "arm64" ] && echo "aarch64" || echo "x86_64")
+SYSTEM_BUN_VERSION=$(bun --version 2>/dev/null || true)
 
-# Download binary and checksums
-curl -fSL "https://github.com/oven-sh/bun/releases/download/${BUN_VERSION}/${BUN_DOWNLOAD}.zip" -o "$TEMP_DIR/${BUN_DOWNLOAD}.zip"
-curl -fSL "https://github.com/oven-sh/bun/releases/download/${BUN_VERSION}/SHASUMS256.txt" -o "$TEMP_DIR/SHASUMS256.txt"
-
-# Verify checksum
-echo "Verifying checksum..."
-cd "$TEMP_DIR"
-# Use sha256sum on Linux (not shasum)
-grep "${BUN_DOWNLOAD}.zip" SHASUMS256.txt | sha256sum -c -
-cd - > /dev/null
-
-# Extract and install
-unzip -o "$TEMP_DIR/${BUN_DOWNLOAD}.zip" -d "$TEMP_DIR"
-cp "$TEMP_DIR/${BUN_DOWNLOAD}/bun" "$ELECTRON_DIR/vendor/bun/"
+if [ "$HOST_ARCH" = "$EXPECTED_HOST_ARCH" ] && [ "$SYSTEM_BUN_VERSION" = "${BUN_VERSION#bun-v}" ]; then
+    echo "Using host Bun ${SYSTEM_BUN_VERSION} for linux-${ARCH}"
+    cp "$(command -v bun)" "$ELECTRON_DIR/vendor/bun/bun"
+else
+    echo "Downloading Bun ${BUN_VERSION} for linux-${ARCH}..."
+    TEMP_DIR=$(mktemp -d)
+    trap 'rm -rf "$TEMP_DIR"' EXIT
+    curl -fSL "https://github.com/oven-sh/bun/releases/download/${BUN_VERSION}/${BUN_DOWNLOAD}.zip" -o "$TEMP_DIR/${BUN_DOWNLOAD}.zip"
+    curl -fSL "https://github.com/oven-sh/bun/releases/download/${BUN_VERSION}/SHASUMS256.txt" -o "$TEMP_DIR/SHASUMS256.txt"
+    (
+        cd "$TEMP_DIR"
+        grep "${BUN_DOWNLOAD}.zip" SHASUMS256.txt | sha256sum -c -
+    )
+    unzip -o "$TEMP_DIR/${BUN_DOWNLOAD}.zip" -d "$TEMP_DIR"
+    cp "$TEMP_DIR/${BUN_DOWNLOAD}/bun" "$ELECTRON_DIR/vendor/bun/bun"
+fi
 chmod +x "$ELECTRON_DIR/vendor/bun/bun"
 
 # 4. Copy SDK from root node_modules (monorepo hoisting).
@@ -191,7 +193,7 @@ cd "$ELECTRON_DIR"
 
 # Run electron-builder
 # Note: electron-builder may build both archs due to config, but we only use the requested one
-npx electron-builder --linux --${ARCH}
+npx electron-builder --linux --${ARCH} --publish never
 
 # 8. Verify the AppImage was built
 # electron-builder uses Linux-style arch names: x86_64 for x64, aarch64 for arm64
@@ -201,8 +203,8 @@ else
     LINUX_ARCH="aarch64"
 fi
 
-# electron-builder outputs: Craft-Agents-x86_64.AppImage or Craft-Agents-aarch64.AppImage
-BUILT_APPIMAGE_NAME="Craft-Agents-${LINUX_ARCH}.AppImage"
+# electron-builder outputs: BoAI-x86_64.AppImage or BoAI-aarch64.AppImage
+BUILT_APPIMAGE_NAME="BoAI-${LINUX_ARCH}.AppImage"
 BUILT_APPIMAGE_PATH="$ELECTRON_DIR/release/$BUILT_APPIMAGE_NAME"
 
 if [ ! -f "$BUILT_APPIMAGE_PATH" ]; then
@@ -212,16 +214,10 @@ if [ ! -f "$BUILT_APPIMAGE_PATH" ]; then
     exit 1
 fi
 
-# Rename to our standard naming convention: Craft-Agents-x64.AppImage, Craft-Agents-arm64.AppImage
-APPIMAGE_NAME="Craft-Agents-${ARCH}.AppImage"
-APPIMAGE_PATH="$ELECTRON_DIR/release/$APPIMAGE_NAME"
-mv "$BUILT_APPIMAGE_PATH" "$APPIMAGE_PATH"
-echo "Renamed $BUILT_APPIMAGE_NAME -> $APPIMAGE_NAME"
-
 echo ""
 echo "=== Build Complete ==="
-echo "AppImage: $ELECTRON_DIR/release/${APPIMAGE_NAME}"
-echo "Size: $(du -h "$ELECTRON_DIR/release/${APPIMAGE_NAME}" | cut -f1)"
+echo "AppImage: $BUILT_APPIMAGE_PATH"
+echo "Size: $(du -h "$BUILT_APPIMAGE_PATH" | cut -f1)"
 
 # 9. Create manifest.json for upload script
 # Read version from package.json

@@ -3,6 +3,11 @@
   "version": "0.12.0",
   "license": "Apache-2.0",
   "description": "Claude Code-like agent for Craft documents",
+  "homepage": "https://github.com/6owen/boai",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/6owen/boai.git"
+  },
   "type": "module",
   "private": true,
   "trustedDependencies": [
@@ -97,7 +102,7 @@
     "docs:build": "cd apps/docs-site && bun run build",
     "docs:preview": "cd apps/docs-site && bun run preview",
     "build": "bun run scripts/build.ts",
-    "release": "bun run scripts/release.ts",
+    "release": "bumpp",
     "check-version": "bun run scripts/check-version.ts",
     "oss:sync": "bun run scripts/oss-sync.ts",
     "prepare": "husky"
@@ -122,6 +127,7 @@
     "@typescript-eslint/parser": "^8.52.0",
     "@vitejs/plugin-react": "^5.1.2",
     "autoprefixer": "^10.4.23",
+    "bumpp": "^12.2.1",
     "concurrently": "^9.2.1",
     "electron": "^39.2.7",
     "electron-builder": "^26.0.12",

@@ -8,9 +8,9 @@ $ElectronDir = Split-Path -Parent $ScriptDir
 $RootDir = Split-Path -Parent (Split-Path -Parent $ElectronDir)
 
 # Configuration
-$BunVersion = "bun-v1.3.9"  # Pinned version for reproducible builds
+$BunVersion = "bun-v1.3.10"  # Pinned version for reproducible builds
 
-Write-Host "=== Building Craft Agents Windows Installer using electron-builder ===" -ForegroundColor Cyan
+Write-Host "=== Building BoAI Windows Installer using electron-builder ===" -ForegroundColor Cyan
 
 # Debug: System information
 Write-Host ""
@@ -428,7 +428,7 @@ while (-not $builderSuccess -and $builderRetry -lt $maxBuilderRetries) {
         Start-Sleep -Seconds 1
     }
 
-    npx electron-builder --win --x64 2>&1 | Tee-Object -Variable builderOutput
+    npx electron-builder --win --x64 --publish never 2>&1 | Tee-Object -Variable builderOutput
 
     if ($LASTEXITCODE -eq 0) {
         $builderSuccess = $true

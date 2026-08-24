@@ -78,9 +78,9 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Configuration
-BUN_VERSION="bun-v1.3.9"  # Pinned version for reproducible builds
+BUN_VERSION="bun-v1.3.10"  # Pinned version for reproducible builds
 
-echo "=== Building Craft Agents DMG (${ARCH}) using electron-builder ==="
+echo "=== Building BoAI DMG (${ARCH}) using electron-builder ==="
 if [ "$UPLOAD" = true ]; then
     echo "Will upload to S3 after build"
 fi
@@ -97,28 +97,30 @@ echo "Installing dependencies..."
 cd "$ROOT_DIR"
 bun install
 
-# 3. Download Bun binary with checksum verification
-echo "Downloading Bun ${BUN_VERSION} for darwin-${ARCH}..."
+# 3. Stage the pinned Bun runtime. Reuse the host binary for native builds;
+# cross-architecture builds download and verify the matching release artifact.
 mkdir -p "$ELECTRON_DIR/vendor/bun"
 BUN_DOWNLOAD="bun-darwin-$([ "$ARCH" = "arm64" ] && echo "aarch64" || echo "x64")"
+HOST_ARCH=$(uname -m)
+EXPECTED_HOST_ARCH=$([ "$ARCH" = "arm64" ] && echo "arm64" || echo "x86_64")
+SYSTEM_BUN_VERSION=$(bun --version 2>/dev/null || true)
 
-# Create temp directory to avoid race conditions
-TEMP_DIR=$(mktemp -d)
-trap "rm -rf $TEMP_DIR" EXIT
-
-# Download binary and checksums
-curl -fSL "https://github.com/oven-sh/bun/releases/download/${BUN_VERSION}/${BUN_DOWNLOAD}.zip" -o "$TEMP_DIR/${BUN_DOWNLOAD}.zip"
-curl -fSL "https://github.com/oven-sh/bun/releases/download/${BUN_VERSION}/SHASUMS256.txt" -o "$TEMP_DIR/SHASUMS256.txt"
-
-# Verify checksum
-echo "Verifying checksum..."
-cd "$TEMP_DIR"
-grep "${BUN_DOWNLOAD}.zip" SHASUMS256.txt | shasum -a 256 -c -
-cd - > /dev/null
-
-# Extract and install
-unzip -o "$TEMP_DIR/${BUN_DOWNLOAD}.zip" -d "$TEMP_DIR"
-cp "$TEMP_DIR/${BUN_DOWNLOAD}/bun" "$ELECTRON_DIR/vendor/bun/"
+if [ "$HOST_ARCH" = "$EXPECTED_HOST_ARCH" ] && [ "$SYSTEM_BUN_VERSION" = "${BUN_VERSION#bun-v}" ]; then
+    echo "Using host Bun ${SYSTEM_BUN_VERSION} for darwin-${ARCH}"
+    cp "$(command -v bun)" "$ELECTRON_DIR/vendor/bun/bun"
+else
+    echo "Downloading Bun ${BUN_VERSION} for darwin-${ARCH}..."
+    TEMP_DIR=$(mktemp -d)
+    trap 'rm -rf "$TEMP_DIR"' EXIT
+    curl -fSL "https://github.com/oven-sh/bun/releases/download/${BUN_VERSION}/${BUN_DOWNLOAD}.zip" -o "$TEMP_DIR/${BUN_DOWNLOAD}.zip"
+    curl -fSL "https://github.com/oven-sh/bun/releases/download/${BUN_VERSION}/SHASUMS256.txt" -o "$TEMP_DIR/SHASUMS256.txt"
+    (
+        cd "$TEMP_DIR"
+        grep "${BUN_DOWNLOAD}.zip" SHASUMS256.txt | shasum -a 256 -c -
+    )
+    unzip -o "$TEMP_DIR/${BUN_DOWNLOAD}.zip" -d "$TEMP_DIR"
+    cp "$TEMP_DIR/${BUN_DOWNLOAD}/bun" "$ELECTRON_DIR/vendor/bun/bun"
+fi
 chmod +x "$ELECTRON_DIR/vendor/bun/bun"
 
 # 4. Copy SDK from root node_modules (monorepo hoisting)
@@ -242,11 +244,11 @@ if [ -n "$APPLE_ID" ] && [ -n "$APPLE_TEAM_ID" ] && [ -n "$APPLE_APP_SPECIFIC_PA
 fi
 
 # Run electron-builder
-npx electron-builder $BUILDER_ARGS
+npx electron-builder $BUILDER_ARGS --publish never
 
 # 8. Verify the DMG was built
-# electron-builder.yml uses artifactName to output: Craft-Agents-${arch}.dmg
-DMG_NAME="Craft-Agents-${ARCH}.dmg"
+# electron-builder.yml uses artifactName to output: BoAI-${arch}.dmg
+DMG_NAME="BoAI-${ARCH}.dmg"
 DMG_PATH="$ELECTRON_DIR/release/$DMG_NAME"
 
 if [ ! -f "$DMG_PATH" ]; then

@@ -73,6 +73,14 @@ files:
 extraMetadata:
   main: dist/main.cjs
 
+# Generate GitHub Release update manifests (latest.yml, latest-mac.yml, and
+# latest-linux.yml) and embed the matching provider in packaged applications.
+publish:
+  provider: github
+  owner: 6owen
+  repo: boai
+  releaseType: release
+
 # Disable ASAR to avoid decompression overhead and click delays
 asar: false
 

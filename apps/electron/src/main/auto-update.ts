@@ -2,8 +2,9 @@
  * Auto-update module using electron-updater
  *
  * Handles checking for updates, downloading, and installing via the standard
- * electron-updater library. Fork builds stay offline unless BOAI_UPDATE_URL is
- * explicitly configured with a generic-provider feed.
+ * electron-updater library. Packaged builds use the GitHub Release provider
+ * embedded by electron-builder. BOAI_UPDATE_URL can override it with a custom
+ * generic-provider feed.
  *
  * Platform behavior:
  * - macOS: Downloads zip, extracts and swaps app bundle atomically
@@ -40,7 +41,9 @@ if (UPDATE_FEED_URL) {
 }
 
 export function isAutoUpdateConfigured(): boolean {
-  return Boolean(UPDATE_FEED_URL)
+  // Packaged builds receive app-update.yml from electron-builder. Development
+  // builds stay offline unless a custom feed is explicitly supplied.
+  return app.isPackaged || Boolean(UPDATE_FEED_URL)
 }
 
 // Get the update cache directory path (for file watcher fallback on macOS)
@@ -367,7 +370,7 @@ function checkForExistingDownload(): { exists: boolean; version?: string } {
  */
 export async function checkForUpdates(options: CheckOptions = {}): Promise<UpdateInfo> {
   if (!isAutoUpdateConfigured()) {
-    mainLog.info('[auto-update] Skipping update check: BOAI_UPDATE_URL is not configured')
+    mainLog.info('[auto-update] Skipping update check in development: BOAI_UPDATE_URL is not configured')
     return getUpdateInfo()
   }
 
