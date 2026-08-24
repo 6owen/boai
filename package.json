@@ -102,7 +102,7 @@
     "docs:build": "cd apps/docs-site && bun run build",
     "docs:preview": "cd apps/docs-site && bun run preview",
     "build": "bun run scripts/build.ts",
-    "release": "bumpp",
+    "release": "bun run scripts/release.ts",
     "check-version": "bun run scripts/check-version.ts",
     "oss:sync": "bun run scripts/oss-sync.ts",
     "prepare": "husky"

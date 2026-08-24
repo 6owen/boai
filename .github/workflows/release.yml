@@ -66,8 +66,6 @@ jobs:
             platform: mac
           - os: windows-latest
             platform: win
-          - os: ubuntu-latest
-            platform: linux
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
     steps:
@@ -103,11 +101,6 @@ jobs:
         shell: pwsh
         run: bun run dist:win
 
-      - name: Build Linux x64 package
-        if: matrix.platform == 'linux'
-        working-directory: apps/electron
-        run: bun run dist:linux
-
       - name: Upload release assets
         shell: bash
         env:
@@ -119,7 +112,6 @@ jobs:
             apps/electron/release/*.dmg
             apps/electron/release/*.zip
             apps/electron/release/*.exe
-            apps/electron/release/*.AppImage
             apps/electron/release/*.blockmap
             apps/electron/release/latest*.yml
           )
