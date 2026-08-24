@@ -1,22 +1,25 @@
 import { join, resolve } from 'path'
 import { existsSync, readdirSync, statSync } from 'fs'
 import { RPC_CHANNELS, type SkillFile } from '@craft-agent/shared/protocol'
-import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
+import { getLlmConnections, getWorkspaceByNameOrId } from '@craft-agent/shared/config'
+import { listSessions, loadSession } from '@craft-agent/shared/sessions'
 import type {
   DeleteSkillRequest,
   InstallSkillRequest,
   ManageSkillRequest,
   ScanSkillSourceRequest,
+  SkillUsageRange,
 } from '@craft-agent/shared/skills'
 
 const SKILLS_UPDATE_ALL_TIMEOUT_MS = 10 * 60_000
-import { annotateManagedSkills, SkillsCliService } from '@craft-agent/shared/skills'
+import { aggregateSkillUsage, annotateManagedSkills, loadAllSkills, SkillsCliService } from '@craft-agent/shared/skills'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.skills.GET,
   RPC_CHANNELS.skills.GET_FILES,
+  RPC_CHANNELS.skills.GET_USAGE_STATS,
   RPC_CHANNELS.skills.SCAN_SOURCE,
   RPC_CHANNELS.skills.INSTALL,
   RPC_CHANNELS.skills.CHECK_UPDATES,
@@ -126,6 +129,42 @@ export function registerSkillsHandlers(
     }
 
     return scanDirectory(skillDir)
+  })
+
+  // Derive lightweight Skill usage statistics from the workspace's persisted
+  // BoAI sessions. This intentionally reports only explicit requests recorded
+  // by this app; it does not claim visibility into other Agent applications.
+  server.handle(RPC_CHANNELS.skills.GET_USAGE_STATS, async (
+    _ctx,
+    workspaceId: string,
+    range: SkillUsageRange,
+  ) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+    if (range !== '7d' && range !== '30d' && range !== 'all') {
+      throw new Error('Invalid Skill usage range')
+    }
+
+    const sessions = listSessions(workspace.rootPath).flatMap((metadata) => {
+      const session = loadSession(workspace.rootPath, metadata.id)
+      return session ? [session] : []
+    })
+    const connections = new Map(getLlmConnections().map(connection => [connection.slug, connection]))
+    const knownSkillSlugs = loadAllSkills(workspace.rootPath).map(skill => skill.slug)
+
+    return aggregateSkillUsage(sessions, {
+      range,
+      knownSkillSlugs,
+      resolveAgentSource: (session) => {
+        if (!session.llmConnection) return undefined
+        const connection = connections.get(session.llmConnection)
+        if (!connection) return undefined
+        return {
+          label: connection.name,
+          provider: connection.piAuthProvider ?? connection.providerType,
+        }
+      },
+    })
   })
 
   // Discover every valid SKILL.md before the user chooses what to install.

@@ -665,8 +665,14 @@ export function NavigationProvider({
         return nextState
       }
 
-      // Skills: auto-select first skill
-      if (isSkillsNavigation(nextState) && !nextState.details && !options?.skipAutoSelect) {
+      // Skills: auto-select first skill for collection views. Statistics is an
+      // aggregate page and must remain detail-free.
+      if (
+        isSkillsNavigation(nextState) &&
+        nextState.viewMode !== 'stats' &&
+        !nextState.details &&
+        !options?.skipAutoSelect
+      ) {
         const firstSkillSlug = getFirstSkillSlug(nextState.filter)
         if (firstSkillSlug) {
           return { ...nextState, details: { type: 'skill', skillSlug: firstSkillSlug } }

@@ -28,6 +28,7 @@ import {
   MailOpen,
   PackageCheck,
   UserRound,
+  ChartNoAxesColumnIncreasing,
 } from "lucide-react"
 // SessionStatusIcons no longer used - icons come from dynamic sessionStatuses
 import { SourceAvatar } from "@/components/ui/source-avatar"
@@ -307,8 +308,7 @@ function AppShellContent({
 
   const sessionFilter = sessionsContext?.filter ?? null
 
-  // Board view replaces the session-list navigator with the full-width Kanban panel,
-  // so the navigator (and its resize handle) collapse to zero width while it's active.
+  // Board view replaces the session-list navigator with the full-width Kanban panel.
   const isBoardView = isSessionsNavigation(navState) && navState.viewMode === 'board'
 
   // Derive source filter from navigation state (only when in sources navigator)
@@ -316,6 +316,12 @@ function AppShellContent({
 
   // Derive skill collection from navigation state. Legacy bare `skills` routes map to Installed.
   const skillFilter: SkillFilter | null = isSkillsNavigation(navState) ? navState.filter ?? null : null
+  const isSkillStatsView = isSkillsNavigation(navState) && navState.viewMode === 'stats'
+
+  // Standalone content views use Craft's existing panel-stack seam: keep the
+  // route in the content panel, but collapse the navigator and its resize sash.
+  // Compact mode still mounts the navigator so its drill-in transition works.
+  const isStandaloneContentView = isBoardView || isSkillStatsView
 
   const handleJumpToTaskSessions = useCallback(
     (sessionId: string, _scope: { labelId: string; projectId?: string }) => {
@@ -358,7 +364,7 @@ function AppShellContent({
       return `chats:${filter.kind}:${filter.kind === 'state' ? filter.stateId : ''}`
     }
     if (isSkillsNavigation(navState)) {
-      return `skills:${navState.filter?.collection ?? 'installed'}`
+      return `skills:${navState.viewMode ?? navState.filter?.collection ?? 'installed'}`
     }
     return navState.navigator
   }, [navState])
@@ -405,7 +411,7 @@ function AppShellContent({
     () => skills.filter(skill => isSkillInOwnCollection(skill, favoriteSkillKeys)),
     [favoriteSkillKeys, skills],
   )
-  const visibleSkills = skillFilter?.collection === 'own' ? ownSkills : skills
+  const visibleSkills = !isSkillStatsView && skillFilter?.collection === 'own' ? ownSkills : skills
   // Sync skills to atom for NavigationContext auto-selection
   const setSkillsAtom = useSetAtom(skillsAtom)
   React.useEffect(() => {
@@ -553,18 +559,18 @@ function AppShellContent({
   // Handle selecting a skill from the list
   const handleSkillSelect = React.useCallback((skill: LoadedSkill) => {
     if (!activeWorkspaceId) return
-    navigate(skillFilter?.collection === 'own'
+    navigate(!isSkillStatsView && skillFilter?.collection === 'own'
       ? routes.view.skillsOwn(skill.slug)
       : routes.view.skillsInstalled(skill.slug))
-  }, [activeWorkspaceId, navigate, skillFilter])
+  }, [activeWorkspaceId, isSkillStatsView, skillFilter])
 
   const handleToggleFavoriteSkill = React.useCallback((skill: LoadedSkill) => {
     const wasFavorite = favoriteSkillKeys.has(getSkillCollectionKey(skill))
     toggleFavoriteSkill(skill)
-    if (skillFilter?.collection === 'own' && wasFavorite) {
+    if (!isSkillStatsView && skillFilter?.collection === 'own' && wasFavorite) {
       navigate(routes.view.skillsOwn())
     }
-  }, [favoriteSkillKeys, skillFilter, toggleFavoriteSkill])
+  }, [favoriteSkillKeys, isSkillStatsView, skillFilter, toggleFavoriteSkill])
 
   // Focus zone management
   const { focusZone, focusNextZone, focusPreviousZone } = useFocusContext()
@@ -941,6 +947,10 @@ function AppShellContent({
     navigate(routes.view.skillsOwn())
   }, [])
 
+  const handleSkillStatsClick = useCallback(() => {
+    navigate(routes.view.skillsStats())
+  }, [])
+
   // Handler for settings view. With no arg → bare `settings` route (navigator-only
   // in compact mode, App fallback on desktop). With an arg → `settings/<subpage>`.
   const handleSettingsClick = useCallback((subpage?: SettingsSubpage) => {
@@ -1093,11 +1103,12 @@ function AppShellContent({
     result.push({ id: 'nav:skills', type: 'nav', action: handleSkillsClick })
     result.push({ id: 'nav:skills:installed', type: 'nav', action: handleSkillsInstalledClick })
     result.push({ id: 'nav:skills:own', type: 'nav', action: handleSkillsOwnClick })
+    result.push({ id: 'nav:skills:stats', type: 'nav', action: handleSkillStatsClick })
     result.push({ id: 'nav:settings', type: 'nav', action: () => handleSettingsClick() })
     result.push({ id: 'nav:whats-new', type: 'nav', action: handleWhatsNewClick })
 
     return result
-  }, [handleAllSessionsClick, handleSourcesClick, handleSkillsClick, handleSkillsInstalledClick, handleSkillsOwnClick, handleSettingsClick, handleWhatsNewClick])
+  }, [handleAllSessionsClick, handleSourcesClick, handleSkillsClick, handleSkillsInstalledClick, handleSkillsOwnClick, handleSkillStatsClick, handleSettingsClick, handleWhatsNewClick])
 
   // Get props for any sidebar item (unified roving tabindex pattern)
   const getSidebarItemProps = React.useCallback((id: string) => ({
@@ -1200,7 +1211,7 @@ function AppShellContent({
 
     // Skills navigator
     if (isSkillsNavigation(navState)) {
-      return skillFilter?.collection === 'own' ? t("sidebar.ownSkills") : t("sidebar.installedSkills")
+      return !isSkillStatsView && skillFilter?.collection === 'own' ? t("sidebar.ownSkills") : t("sidebar.installedSkills")
     }
 
     // Settings navigator
@@ -1223,7 +1234,7 @@ function AppShellContent({
       default:
         return t("sidebar.allSessions")
     }
-  }, [navState, t, sessionFilter, skillFilter, labelConfigs, viewConfigs, effectiveSessionStatuses])
+  }, [navState, t, sessionFilter, skillFilter, isSkillStatsView, labelConfigs, viewConfigs, effectiveSessionStatuses])
 
   return (
     <AppShellProvider value={appShellContextValue}>
@@ -1411,7 +1422,7 @@ function AppShellContent({
                           title: t("sidebar.installedSkills"),
                           label: String(skills.length),
                           icon: PackageCheck,
-                          variant: (isSkillsNavigation(navState) && skillFilter?.collection !== 'own') ? "default" : "ghost",
+                          variant: (isSkillsNavigation(navState) && !isSkillStatsView && skillFilter?.collection !== 'own') ? "default" : "ghost",
                           onClick: handleSkillsInstalledClick,
                           contextMenu: { type: 'skills' as const, onAddSkill: openAddSkill },
                         },
@@ -1420,8 +1431,15 @@ function AppShellContent({
                           title: t("sidebar.ownSkills"),
                           label: String(ownSkills.length),
                           icon: UserRound,
-                          variant: skillFilter?.collection === 'own' ? "default" : "ghost",
+                          variant: (isSkillsNavigation(navState) && !isSkillStatsView && skillFilter?.collection === 'own') ? "default" : "ghost",
                           onClick: handleSkillsOwnClick,
+                        },
+                        {
+                          id: "nav:skills:stats",
+                          title: t("sidebar.skillStats"),
+                          icon: ChartNoAxesColumnIncreasing,
+                          variant: isSkillStatsView ? "default" : "ghost",
+                          onClick: handleSkillStatsClick,
                         },
                       ],
                     },
@@ -1459,7 +1477,7 @@ function AppShellContent({
           </div>
           }
           sidebarWidth={effectiveSidebarAndNavigatorHidden ? 0 : (isSidebarVisible ? sidebarWidth : 0)}
-          navigatorSlot={
+          navigatorSlot={isStandaloneContentView && !isAutoCompact ? null : (
             <div
               style={{ width: isAutoCompact ? '100%' : sessionListWidth }}
               className="h-full flex flex-col min-w-0 relative z-panel"
@@ -1513,7 +1531,7 @@ function AppShellContent({
                   {/* Create-with-AI button (only for skills mode) */}
                   {isSkillsNavigation(navState) && activeWorkspace && (
                     <>
-                      {skillFilter?.collection !== 'own' && (
+                      {(isSkillStatsView || skillFilter?.collection !== 'own') && (
                         <SkillInstallMenu
                           workspaceId={activeWorkspace.id}
                           workingDirectory={activeSessionWorkingDirectory}
@@ -1562,7 +1580,7 @@ function AppShellContent({
                   setSearchActive(false)
                   setSearchQuery('')
                 }}
-                collection={skillFilter?.collection ?? 'installed'}
+                collection={!isSkillStatsView && skillFilter?.collection === 'own' ? 'own' : 'installed'}
                 favoriteSkillKeys={favoriteSkillKeys}
                 onToggleFavorite={handleToggleFavoriteSkill}
                 onSkillClick={handleSkillSelect}
@@ -1637,8 +1655,8 @@ function AppShellContent({
               <FabNewChat onClick={() => handleNewChat()} />
             )}
             </div>
-          }
-          navigatorWidth={isAutoCompact ? sessionListWidth : (effectiveSidebarAndNavigatorHidden || isBoardView ? 0 : sessionListWidth)}
+          )}
+          navigatorWidth={isAutoCompact ? sessionListWidth : (effectiveSidebarAndNavigatorHidden || isStandaloneContentView ? 0 : sessionListWidth)}
           isSidebarAndNavigatorHidden={effectiveSidebarAndNavigatorHidden}
           isRightSidebarVisible={false}
           isCompact={isAutoCompact}
@@ -1678,8 +1696,8 @@ function AppShellContent({
         </div>
         )}
 
-        {/* Session List Resize Handle (absolute, hidden in focused mode and board view) */}
-        {!effectiveSidebarAndNavigatorHidden && !isBoardView && (
+        {/* Navigator resize handle (hidden when the active view has no navigator) */}
+        {!effectiveSidebarAndNavigatorHidden && !isStandaloneContentView && (
         <div
           ref={sessionListHandleRef}
           onMouseDown={(e) => { e.preventDefault(); setIsResizing('session-list') }}

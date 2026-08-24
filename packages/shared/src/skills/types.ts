@@ -5,6 +5,8 @@
  * Skills are specialized instructions that extend Claude's capabilities.
  */
 
+import type { StoredSession } from '../sessions/types.ts';
+
 /**
  * Skill metadata from SKILL.md YAML frontmatter
  */
@@ -152,4 +154,71 @@ export interface LoadedSkill {
   management?: SkillManagementInfo;
   /** Installed Agents that can currently read this skill. */
   agentPlacements?: SkillAgentPlacement[];
+}
+
+/** Time window supported by BoAI's lightweight Skill usage summary. */
+export type SkillUsageRange = '7d' | '30d' | 'all';
+
+/** One Skill ranked by distinct conversation turns that requested or activated it. */
+export interface SkillUsageItem {
+  slug: string;
+  count: number;
+  sessionCount: number;
+  lastUsedAt: number;
+}
+
+/** Usage attributed to one BoAI LLM connection/model combination. */
+export interface SkillUsageAgentSource {
+  key: string;
+  /** Optional human-readable connection name supplied by the caller. */
+  label?: string;
+  /** Optional provider identifier supplied by the caller. */
+  provider?: string;
+  llmConnection?: string;
+  model?: string;
+  count: number;
+  sessionCount: number;
+  skillCount: number;
+}
+
+/** Optional display metadata used to enrich an Agent source while aggregating. */
+export type SkillUsageAgentSourceOverride = Partial<Pick<
+  SkillUsageAgentSource,
+  'key' | 'label' | 'provider' | 'llmConnection' | 'model'
+>>;
+
+export interface AggregateSkillUsageOptions {
+  range: SkillUsageRange;
+  /** Clock override for deterministic callers and tests. Defaults to Date.now(). */
+  now?: number;
+  /** Maximum number of ranked Skills returned. Agent source distribution is not truncated. */
+  limit?: number;
+  /**
+   * Installed Skill identifiers used to preserve qualified Plugin identities.
+   * Outer runtime namespaces are removed only until a known identifier matches.
+   */
+  knownSkillSlugs?: readonly string[];
+  /** Enrich or replace the default connection/model identity for a session. */
+  resolveAgentSource?: (session: StoredSession) => SkillUsageAgentSourceOverride | undefined;
+}
+
+/**
+ * Lightweight analytics derived only from sessions stored by BoAI.
+ *
+ * `requested-or-activated` means a Skill was explicitly attached to a user
+ * message or observed through the legacy Skill tool. It does not prove that an
+ * external Agent completed the Skill instructions.
+ */
+export interface SkillUsageStats {
+  scope: 'boai';
+  metric: 'requested-or-activated';
+  range: SkillUsageRange;
+  totals: {
+    activations: number;
+    skills: number;
+    sessions: number;
+    agentSources: number;
+  };
+  topSkills: SkillUsageItem[];
+  agentSources: SkillUsageAgentSource[];
 }

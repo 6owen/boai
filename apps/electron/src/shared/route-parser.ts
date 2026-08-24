@@ -46,6 +46,8 @@ export interface ParsedCompoundRoute {
   sourceFilter?: SourceFilter
   /** Skill collection filter (only for skills navigator) */
   skillFilter?: SkillFilter
+  /** Alternate skills content view (only for skills navigator). */
+  skillViewMode?: 'stats'
   /** Sessions presentation mode (only for sessions navigator). 'board' = Kanban view. */
   viewMode?: 'list' | 'board'
   /** Details page info (null for empty state) */
@@ -165,6 +167,11 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
     }
 
     const collection = segments[1]
+    if (collection === 'stats') {
+      if (segments.length !== 2) return null
+      return { navigator: 'skills', skillViewMode: 'stats', details: null }
+    }
+
     if (collection === 'installed' || collection === 'own') {
       const skillFilter: SkillFilter = { kind: 'collection', collection }
       if (segments[2] === 'skill' && segments[3]) {
@@ -282,6 +289,7 @@ export function buildCompoundRoute(parsed: ParsedCompoundRoute): string {
   }
 
   if (parsed.navigator === 'skills') {
+    if (parsed.skillViewMode === 'stats') return 'skills/stats'
     const base = parsed.skillFilter ? `skills/${parsed.skillFilter.collection}` : 'skills'
     if (!parsed.details) return base
     return `${base}/skill/${parsed.details.id}`
@@ -375,6 +383,9 @@ function convertCompoundToViewRoute(compound: ParsedCompoundRoute): ParsedRoute 
 
   // Skills
   if (compound.navigator === 'skills') {
+    if (compound.skillViewMode === 'stats') {
+      return { type: 'view', name: 'skill-stats', params: {} }
+    }
     if (!compound.details) {
       return { type: 'view', name: 'skills', params: {} }
     }
@@ -499,6 +510,9 @@ function convertCompoundToNavigationState(compound: ParsedCompoundRoute): Naviga
 
   // Skills
   if (compound.navigator === 'skills') {
+    if (compound.skillViewMode === 'stats') {
+      return { navigator: 'skills', viewMode: 'stats', details: null }
+    }
     if (!compound.details) {
       return { navigator: 'skills', filter: compound.skillFilter, details: null }
     }
@@ -571,6 +585,8 @@ function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationSta
       return { navigator: 'sources', details: null }
     case 'skills':
       return { navigator: 'skills', details: null }
+    case 'skill-stats':
+      return { navigator: 'skills', viewMode: 'stats', details: null }
     case 'skill-info':
       if (parsed.id) {
         return {
@@ -639,6 +655,7 @@ function navigationStateToCompoundRoute(state: NavigationState): ParsedCompoundR
   if (state.navigator === 'skills') {
     return {
       navigator: 'skills',
+      skillViewMode: state.viewMode,
       skillFilter: state.filter ?? undefined,
       details: state.details?.type === 'skill' ? { type: 'skill', id: state.details.skillSlug } : null,
     }

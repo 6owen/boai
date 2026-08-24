@@ -60,8 +60,8 @@ import type { LoadedSource, FolderSourceConfig, SourceConnectionStatus } from '@
 export type { LoadedSource, FolderSourceConfig, SourceConnectionStatus };
 
 // Skill types
-import type { InstallSkillRequest, LoadedSkill, ManageSkillRequest, ScanSkillSourceRequest, SkillAgentPlacement, SkillManagementResult, SkillMetadata, SkillSourceScanResult, SkillUpdateCheckResult } from '@craft-agent/shared/skills/types';
-export type { InstallSkillRequest, LoadedSkill, ManageSkillRequest, ScanSkillSourceRequest, SkillAgentPlacement, SkillManagementResult, SkillMetadata, SkillSourceScanResult, SkillUpdateCheckResult };
+import type { InstallSkillRequest, LoadedSkill, ManageSkillRequest, ScanSkillSourceRequest, SkillAgentPlacement, SkillManagementResult, SkillMetadata, SkillSourceScanResult, SkillUpdateCheckResult, SkillUsageRange, SkillUsageStats } from '@craft-agent/shared/skills/types';
+export type { InstallSkillRequest, LoadedSkill, ManageSkillRequest, ScanSkillSourceRequest, SkillAgentPlacement, SkillManagementResult, SkillMetadata, SkillSourceScanResult, SkillUpdateCheckResult, SkillUsageRange, SkillUsageStats };
 
 // Resource bundle types (cross-workspace export/import)
 import type { ExportResourcesOptions, ExportResult, ResourceImportMode, ResourceBundle, ResourceImportResult } from '@craft-agent/shared/resources';
@@ -498,6 +498,7 @@ export interface ElectronAPI {
   // Skills
   getSkills(workspaceId: string, workingDirectory?: string): Promise<LoadedSkill[]>
   getSkillFiles?(workspaceId: string, skillSlug: string): Promise<SkillFile[]>
+  getSkillUsageStats(workspaceId: string, range: SkillUsageRange): Promise<SkillUsageStats>
   scanSkillSource(workspaceId: string, request: ScanSkillSourceRequest): Promise<SkillSourceScanResult>
   installSkill(workspaceId: string, request: InstallSkillRequest): Promise<SkillManagementResult>
   checkSkillUpdates(workspaceId: string, request?: ManageSkillRequest): Promise<import('@craft-agent/shared/skills').SkillUpdateCheckResult>
@@ -867,6 +868,8 @@ export interface SkillsNavigationState {
   filter?: SkillFilter
   details: { type: 'skill'; skillSlug: string } | null
   rightSidebar?: RightSidebarPanel
+  /** Show aggregate skill usage statistics instead of a skill collection. */
+  viewMode?: 'stats'
 }
 
 /**
@@ -922,6 +925,7 @@ export const getNavigationStateKey = (state: NavigationState): string => {
     return 'sources'
   }
   if (state.navigator === 'skills') {
+    if (state.viewMode === 'stats') return 'skills/stats'
     const base = state.filter ? `skills/${state.filter.collection}` : 'skills'
     if (state.details?.type === 'skill') {
       return `${base}/skill/${state.details.skillSlug}`
@@ -959,6 +963,9 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
 
   // Handle skills
   if (key === 'skills') return { navigator: 'skills', details: null }
+  if (key === 'skills/stats') {
+    return { navigator: 'skills', viewMode: 'stats', details: null }
+  }
   if (key === 'skills/installed' || key === 'skills/own') {
     const collection = key.slice(7) as SkillFilter['collection']
     return { navigator: 'skills', filter: { kind: 'collection', collection }, details: null }

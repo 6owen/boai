@@ -18,7 +18,8 @@ import type { NavigationState } from '../../shared/types'
  * Per-navigator semantics:
  * - sessions: a session is selected
  * - settings: a subpage is selected (bare `settings` route → false)
- * - sources / skills / projects: a detail item is selected
+ * - sources / projects: a detail item is selected
+ * - skills: a detail item or the statistics content page is selected
  */
 export function isDetailNavState(navState: NavigationState | null): boolean {
   if (!navState) return false
@@ -28,8 +29,9 @@ export function isDetailNavState(navState: NavigationState | null): boolean {
     case 'settings':
       return navState.subpage !== null
     case 'sources':
-    case 'skills':
     case 'projects':
       return navState.details !== null
+    case 'skills':
+      return navState.viewMode === 'stats' || navState.details !== null
   }
 }

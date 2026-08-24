@@ -170,6 +170,9 @@ export const routes = {
         ? `skills/own/skill/${skillSlug}` as const
         : 'skills/own' as const,
 
+    /** Skill usage statistics. */
+    skillsStats: () => 'skills/stats' as const,
+
     /** Settings view (settings navigator) - uses SettingsSubpage from registry */
     settings: (subpage?: SettingsSubpage) =>
       subpage

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 import { buildCompoundRoute, buildRouteFromNavigationState, parseCompoundRoute, parseRouteToNavigationState } from '../route-parser'
+import { routes } from '../routes'
 import { getNavigationStateKey, parseNavigationStateKey } from '../types'
 
 describe('route-parser: skill collection routes', () => {
@@ -48,5 +49,37 @@ describe('route-parser: skill collection routes', () => {
     const key = getNavigationStateKey(state)
     expect(key).toBe('skills/own/skill/saved')
     expect(parseNavigationStateKey(key)).toEqual(state)
+  })
+
+  it('treats statistics as a dedicated skills view instead of a collection', () => {
+    expect(routes.view.skillsStats()).toBe('skills/stats')
+    expect(parseCompoundRoute('skills/stats')).toEqual({
+      navigator: 'skills',
+      skillViewMode: 'stats',
+      details: null,
+    })
+
+    const state = parseRouteToNavigationState('skills/stats')
+    expect(state).toEqual({
+      navigator: 'skills',
+      viewMode: 'stats',
+      details: null,
+    })
+    expect(state && buildRouteFromNavigationState(state)).toBe('skills/stats')
+  })
+
+  it('round-trips the statistics navigation key', () => {
+    const state = {
+      navigator: 'skills' as const,
+      viewMode: 'stats' as const,
+      details: null,
+    }
+    const key = getNavigationStateKey(state)
+    expect(key).toBe('skills/stats')
+    expect(parseNavigationStateKey(key)).toEqual(state)
+  })
+
+  it('rejects skill details nested under the statistics view', () => {
+    expect(parseCompoundRoute('skills/stats/skill/not-valid')).toBeNull()
   })
 })

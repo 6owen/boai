@@ -38,6 +38,7 @@ import { extractLabelId } from '@craft-agent/shared/labels'
 import type { SessionStatusId } from '@/config/session-status-config'
 import { SourceInfoPage, ChatPage } from '@/pages'
 import SkillInfoPage from '@/pages/SkillInfoPage'
+import SkillStatsRoutePage from '@/pages/SkillStatsRoutePage'
 import { getSettingsPageComponent } from '@/pages/settings/settings-pages'
 import ProjectInfoPage from '@/pages/ProjectInfoPage'
 import { KanbanBoardContainer } from './kanban/KanbanBoardContainer'
@@ -207,6 +208,13 @@ export function MainContentPanel({
 
   // Skills navigator - show skill info, multi-select panel, or empty state
   if (isSkillsNavigation(navState)) {
+    if (navState.viewMode === 'stats') {
+      return wrapWithStoplight(
+        <Panel variant="grow" className={className}>
+          <SkillStatsRoutePage workspaceId={activeWorkspaceId || ''} />
+        </Panel>
+      )
+    }
     if (isSkillMultiSelectActive) {
       return wrapWithStoplight(
         <Panel variant="grow" className={className}>

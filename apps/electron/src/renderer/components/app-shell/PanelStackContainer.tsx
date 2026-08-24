@@ -218,31 +218,36 @@ export function PanelStackContainer({
           </div>
         </motion.div>
 
-        {/* === NAVIGATOR SLOT === */}
-        <motion.div
-          data-panel-role="navigator"
-          initial={false}
-          animate={{
-            width: hasNavigator ? navigatorWidth : 0,
-            marginRight: hasNavigator ? 0 : -PANEL_GAP,
-            opacity: hasNavigator ? 1 : 0,
-          }}
-          transition={transition}
-          className={cn(
-            'h-full overflow-hidden relative shrink-0 z-[2]',
-            'bg-background shadow-middle',
-          )}
-          style={{
-            borderTopLeftRadius: RADIUS_INNER,
-            borderBottomLeftRadius: !hasSidebar ? RADIUS_EDGE : RADIUS_INNER,
-            borderTopRightRadius: RADIUS_INNER,
-            borderBottomRightRadius: RADIUS_INNER,
-          }}
-        >
-          <div className="h-full" style={{ width: navigatorWidth }}>
-            {navigatorSlot}
-          </div>
-        </motion.div>
+        {/* === NAVIGATOR SLOT ===
+            A null slot means the active route has no navigator at all. In
+            that case, unmount it synchronously instead of animating width to
+            zero so standalone content never flashes a disappearing list. */}
+        {navigatorSlot && (
+          <motion.div
+            data-panel-role="navigator"
+            initial={false}
+            animate={{
+              width: hasNavigator ? navigatorWidth : 0,
+              marginRight: hasNavigator ? 0 : -PANEL_GAP,
+              opacity: hasNavigator ? 1 : 0,
+            }}
+            transition={transition}
+            className={cn(
+              'h-full overflow-hidden relative shrink-0 z-[2]',
+              'bg-background shadow-middle',
+            )}
+            style={{
+              borderTopLeftRadius: RADIUS_INNER,
+              borderBottomLeftRadius: !hasSidebar ? RADIUS_EDGE : RADIUS_INNER,
+              borderTopRightRadius: RADIUS_INNER,
+              borderBottomRightRadius: RADIUS_INNER,
+            }}
+          >
+            <div className="h-full" style={{ width: navigatorWidth }}>
+              {navigatorSlot}
+            </div>
+          </motion.div>
+        )}
 
         {/* === CONTENT PANELS WITH SASHES === */}
         {visiblePanels.length === 0 ? (

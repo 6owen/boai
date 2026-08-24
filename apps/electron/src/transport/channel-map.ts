@@ -241,6 +241,7 @@ export const CHANNEL_MAP = {
   // Skills
   getSkills: invoke(RPC_CHANNELS.skills.GET),
   getSkillFiles: invoke(RPC_CHANNELS.skills.GET_FILES),
+  getSkillUsageStats: invoke(RPC_CHANNELS.skills.GET_USAGE_STATS),
   scanSkillSource: invoke(RPC_CHANNELS.skills.SCAN_SOURCE, undefined, 180_000),
   installSkill: invoke(RPC_CHANNELS.skills.INSTALL, undefined, 180_000),
   checkSkillUpdates: invoke(RPC_CHANNELS.skills.CHECK_UPDATES, undefined, 180_000),
