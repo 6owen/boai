@@ -216,14 +216,35 @@ bun run electron:build
 echo "Packaging app with electron-builder..."
 cd "$ELECTRON_DIR"
 
-# Set up environment for electron-builder
-export CSC_IDENTITY_AUTO_DISCOVERY=true
+# GitHub Actions exposes missing secrets as empty environment variables.
+# electron-builder treats an empty CSC_LINK as a filesystem path, so remove
+# empty signing/notarization variables before invoking it.
+for signing_var in \
+    CSC_LINK \
+    CSC_KEY_PASSWORD \
+    APPLE_ID \
+    APPLE_APP_SPECIFIC_PASSWORD \
+    APPLE_TEAM_ID \
+    APPLE_SIGNING_IDENTITY; do
+    if [ -z "${!signing_var}" ]; then
+        unset "$signing_var"
+    fi
+done
+
+# Signed builds are enabled automatically once a certificate or local signing
+# identity is supplied. Public CI can still produce an unsigned DMG otherwise.
+if [ -n "${CSC_LINK:-}" ] || [ -n "${APPLE_SIGNING_IDENTITY:-}" ]; then
+    export CSC_IDENTITY_AUTO_DISCOVERY=true
+else
+    export CSC_IDENTITY_AUTO_DISCOVERY=false
+    echo "No macOS signing certificate configured; building an unsigned package"
+fi
 
 # Build electron-builder arguments
 BUILDER_ARGS="--mac --${ARCH}"
 
 # Add code signing if identity is available
-if [ -n "$APPLE_SIGNING_IDENTITY" ]; then
+if [ -n "${APPLE_SIGNING_IDENTITY:-}" ]; then
     # Strip "Developer ID Application: " prefix if present (electron-builder adds it automatically)
     CSC_NAME_CLEAN="${APPLE_SIGNING_IDENTITY#Developer ID Application: }"
     echo "Using signing identity: $CSC_NAME_CLEAN"
@@ -231,7 +252,7 @@ if [ -n "$APPLE_SIGNING_IDENTITY" ]; then
 fi
 
 # Add notarization if all credentials are available
-if [ -n "$APPLE_ID" ] && [ -n "$APPLE_TEAM_ID" ] && [ -n "$APPLE_APP_SPECIFIC_PASSWORD" ]; then
+if [ -n "${APPLE_ID:-}" ] && [ -n "${APPLE_TEAM_ID:-}" ] && [ -n "${APPLE_APP_SPECIFIC_PASSWORD:-}" ]; then
     echo "Notarization enabled"
     export APPLE_ID="$APPLE_ID"
     export APPLE_TEAM_ID="$APPLE_TEAM_ID"
