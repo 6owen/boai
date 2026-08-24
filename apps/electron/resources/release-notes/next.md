@@ -6,7 +6,12 @@ This file accumulates release notes for the next unreleased version. PRs that ad
 
 ## Improvements
 
+- **精简偏好设置**：移除不再需要的“备注”输入区及其 AI 编辑入口。
+
 ## Bug Fixes
+
+- **修复 Pi 会话启动失败**：桌面安装包现在会完整携带 Pi 与 Session 子进程资源，避免已配置 AI 后因缺少 `piServerPath` 无法启动会话。
+- **修复 macOS 旧图标冲突**：BoAI 改用独立的应用 Bundle ID，避免与旧 Craft Agents 安装共用系统图标缓存。
 
 ## Breaking Changes
 

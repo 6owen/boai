@@ -142,7 +142,7 @@ esac
 # Set platform-specific variables
 if [ "$OS_TYPE" = "darwin" ]; then
     platform="darwin-${arch}"
-    APP_NAME="Craft Agents.app"
+    APP_NAME="BoAI.app"
     INSTALL_DIR="/Applications"
     ext="zip"
     yml_file="latest-mac.yml"
@@ -201,7 +201,7 @@ fi
 
 # Use default filename if not found
 if [ -z "$filename" ]; then
-    filename="Craft-Agents-${arch}.${ext}"
+    filename="BoAI-${arch}.${ext}"
 fi
 
 info "Expected sha512: ${checksum:0:20}..."
@@ -241,23 +241,23 @@ if [ "$OS_TYPE" = "darwin" ]; then
     zip_path="$installer_path"
 
     # Quit the app if it's running (use bundle ID for reliability)
-    APP_BUNDLE_ID="com.lukilabs.craft-agent"
-    if pgrep -x "Craft Agents" >/dev/null 2>&1; then
-        info "Quitting Craft Agents..."
+    APP_BUNDLE_ID="com.boai.desktop"
+    if pgrep -x "BoAI" >/dev/null 2>&1; then
+        info "Quitting BoAI..."
         osascript -e "tell application id \"$APP_BUNDLE_ID\" to quit" 2>/dev/null || true
         # Wait for app to quit (max 5 seconds) - POSIX compatible loop
         i=0
         while [ $i -lt 10 ]; do
-            if ! pgrep -x "Craft Agents" >/dev/null 2>&1; then
+            if ! pgrep -x "BoAI" >/dev/null 2>&1; then
                 break
             fi
             sleep 0.5
             i=$((i + 1))
         done
         # Force kill if still running
-        if pgrep -x "Craft Agents" >/dev/null 2>&1; then
+        if pgrep -x "BoAI" >/dev/null 2>&1; then
             warn "App didn't quit gracefully. Force quitting (unsaved data may be lost)..."
-            pkill -9 -x "Craft Agents" 2>/dev/null || true
+            pkill -9 -x "BoAI" 2>/dev/null || true
             # Wait longer for macOS to release file handles
             sleep 3
         fi
@@ -304,10 +304,10 @@ if [ "$OS_TYPE" = "darwin" ]; then
     echo ""
     success "Installation complete!"
     echo ""
-    printf "%b\n" "  Craft Agents has been installed to ${BOLD}$INSTALL_DIR/$APP_NAME${NC}"
+    printf "%b\n" "  BoAI has been installed to ${BOLD}$INSTALL_DIR/$APP_NAME${NC}"
     echo ""
     printf "%b\n" "  You can launch it from ${BOLD}Applications${NC} or by running:"
-    printf "%b\n" "    ${BOLD}open -a 'Craft Agents'${NC}"
+    printf "%b\n" "    ${BOLD}open -a 'BoAI'${NC}"
     echo ""
 
 else
