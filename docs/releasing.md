@@ -23,7 +23,8 @@ the release workflow, which:
 4. Publishes the release only after every platform succeeds.
 
 If a build fails, the release stays in draft form so it is never offered by the
-automatic updater.
+automatic updater. A failed or skipped tag build can be restarted from Actions
+with **Run workflow** and the existing version tag.
 
 ## macOS signing
 
