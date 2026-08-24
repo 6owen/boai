@@ -121,7 +121,14 @@ try {
     # Verify checksum
     Write-Host "Verifying checksum..."
     $ExpectedHash = (Get-Content "$TempDir\SHASUMS256.txt" | Select-String "$BunDownload.zip").ToString().Split(" ")[0]
-    $ActualHash = (Get-FileHash "$TempDir\$BunDownload.zip" -Algorithm SHA256).Hash.ToLower()
+    $Sha256 = [System.Security.Cryptography.SHA256]::Create()
+    $ZipStream = [System.IO.File]::OpenRead("$TempDir\$BunDownload.zip")
+    try {
+        $ActualHash = ([System.BitConverter]::ToString($Sha256.ComputeHash($ZipStream))).Replace("-", "").ToLowerInvariant()
+    } finally {
+        $ZipStream.Dispose()
+        $Sha256.Dispose()
+    }
 
     if ($ActualHash -ne $ExpectedHash) {
         throw "Checksum verification failed! Expected: $ExpectedHash, Got: $ActualHash"
