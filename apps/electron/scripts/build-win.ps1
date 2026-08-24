@@ -7,6 +7,19 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ElectronDir = Split-Path -Parent $ScriptDir
 $RootDir = Split-Path -Parent (Split-Path -Parent $ElectronDir)
 
+function Get-Sha256Hash {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $sha256 = [System.Security.Cryptography.SHA256]::Create()
+    $stream = [System.IO.File]::OpenRead($Path)
+    try {
+        return ([System.BitConverter]::ToString($sha256.ComputeHash($stream))).Replace("-", "").ToLowerInvariant()
+    } finally {
+        $stream.Dispose()
+        $sha256.Dispose()
+    }
+}
+
 # Configuration
 $BunVersion = "bun-v1.3.10"  # Pinned version for reproducible builds
 
@@ -121,14 +134,7 @@ try {
     # Verify checksum
     Write-Host "Verifying checksum..."
     $ExpectedHash = (Get-Content "$TempDir\SHASUMS256.txt" | Select-String "$BunDownload.zip").ToString().Split(" ")[0]
-    $Sha256 = [System.Security.Cryptography.SHA256]::Create()
-    $ZipStream = [System.IO.File]::OpenRead("$TempDir\$BunDownload.zip")
-    try {
-        $ActualHash = ([System.BitConverter]::ToString($Sha256.ComputeHash($ZipStream))).Replace("-", "").ToLowerInvariant()
-    } finally {
-        $ZipStream.Dispose()
-        $Sha256.Dispose()
-    }
+    $ActualHash = Get-Sha256Hash "$TempDir\$BunDownload.zip"
 
     if ($ActualHash -ne $ExpectedHash) {
         throw "Checksum verification failed! Expected: $ExpectedHash, Got: $ActualHash"
@@ -360,7 +366,7 @@ if (Test-Path $BunExe) {
     }
 
     # Check file hash
-    $hash = (Get-FileHash $BunExe -Algorithm SHA256).Hash
+    $hash = Get-Sha256Hash $BunExe
     Write-Host "SHA256: $hash"
 } else {
     Write-Host "ERROR: bun.exe not found at $BunExe" -ForegroundColor Red
