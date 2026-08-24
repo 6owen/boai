@@ -21,7 +21,7 @@ import {
   Inbox,
   Globe,
   FolderOpen,
-  Cake,
+  MapPinned,
   Calendar,
   Layers,
   Bot,
@@ -60,6 +60,7 @@ import { ContextMenuProvider } from "@/components/ui/menu-context"
 import { SidebarMenu } from "./SidebarMenu"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { FadingText } from "@/components/ui/fading-text"
+import roadmapNoiseUrl from "@/assets/roadmap-noise.jpg"
 import {
   Collapsible,
   CollapsibleTrigger,
@@ -70,6 +71,7 @@ import { SessionList } from "./SessionList"
 import { MainContentPanel } from "./MainContentPanel"
 import { UpdateSkillPopover } from "./UpdateSkillPopover"
 import { SkillInstallMenu } from "./SkillInstallMenu"
+import { OwnSkillsLibraryMenu } from "./OwnSkillsLibraryMenu"
 import { PanelStackContainer } from "./PanelStackContainer"
 import type { ChatDisplayHandle } from "./ChatDisplay"
 import { LeftSidebar } from "./LeftSidebar"
@@ -135,7 +137,7 @@ import {
 import { hasOpenOverlay } from "@/lib/overlay-detection"
 import { clearSourceIconCaches } from "@/lib/icon-cache"
 import { dispatchFocusInputEvent } from "./input/focus-input-events"
-import { getSkillCollectionKey, isSkillInOwnCollection, useSkillFavorites } from "@/hooks/useSkillCollections"
+import { isSkillInOwnCollection, useSkillFavorites } from "@/hooks/useSkillCollections"
 
 /**
  * AppShellProps - Minimal props interface for AppShell component
@@ -244,12 +246,12 @@ function AppShellContent({
 
   const effectiveSidebarAndNavigatorHidden = isSidebarAndNavigatorHidden || isAutoCompact
 
-  // What's New overlay
+  // BoAI Roadmap overlay (legacy state names preserve storage/API compatibility)
   const [showWhatsNew, setShowWhatsNew] = React.useState(false)
   const [releaseNotesContent, setReleaseNotesContent] = React.useState('')
   const [hasUnseenReleaseNotes, setHasUnseenReleaseNotes] = React.useState(false)
 
-  // Check for unseen release notes on mount
+  // Check for a changed roadmap revision on mount
   useEffect(() => {
     window.electronAPI.getLatestReleaseVersion().then((latestVersion) => {
       if (!latestVersion) return
@@ -406,10 +408,15 @@ function AppShellContent({
 
   // Skills state (workspace-scoped)
   const [skills, setSkills] = React.useState<LoadedSkill[]>([])
-  const { favoriteKeys: favoriteSkillKeys, toggleFavorite: toggleFavoriteSkill } = useSkillFavorites(activeWorkspaceId || undefined)
+  const {
+    favoriteKeys: favoriteSkillKeys,
+    excludedOwnSkillKeys,
+    toggleFavorite: toggleFavoriteSkill,
+    addToOwn: addSkillToOwn,
+  } = useSkillFavorites(activeWorkspaceId || undefined)
   const ownSkills = React.useMemo(
-    () => skills.filter(skill => isSkillInOwnCollection(skill, favoriteSkillKeys)),
-    [favoriteSkillKeys, skills],
+    () => skills.filter(skill => isSkillInOwnCollection(skill, favoriteSkillKeys, excludedOwnSkillKeys)),
+    [excludedOwnSkillKeys, favoriteSkillKeys, skills],
   )
   const visibleSkills = !isSkillStatsView && skillFilter?.collection === 'own' ? ownSkills : skills
   // Sync skills to atom for NavigationContext auto-selection
@@ -565,12 +572,12 @@ function AppShellContent({
   }, [activeWorkspaceId, isSkillStatsView, skillFilter])
 
   const handleToggleFavoriteSkill = React.useCallback((skill: LoadedSkill) => {
-    const wasFavorite = favoriteSkillKeys.has(getSkillCollectionKey(skill))
+    const wasInOwn = isSkillInOwnCollection(skill, favoriteSkillKeys, excludedOwnSkillKeys)
     toggleFavoriteSkill(skill)
-    if (!isSkillStatsView && skillFilter?.collection === 'own' && wasFavorite) {
+    if (!isSkillStatsView && skillFilter?.collection === 'own' && wasInOwn) {
       navigate(routes.view.skillsOwn())
     }
-  }, [favoriteSkillKeys, isSkillStatsView, skillFilter, toggleFavoriteSkill])
+  }, [excludedOwnSkillKeys, favoriteSkillKeys, isSkillStatsView, skillFilter, toggleFavoriteSkill])
 
   // Focus zone management
   const { focusZone, focusNextZone, focusPreviousZone } = useFocusContext()
@@ -957,7 +964,7 @@ function AppShellContent({
     navigate(routes.view.settings(subpage))
   }, [])
 
-  // Handler for What's New overlay
+  // Handler for the BoAI Roadmap overlay
   const handleWhatsNewClick = useCallback(async () => {
     const content = await window.electronAPI.getReleaseNotes()
     setReleaseNotesContent(content)
@@ -1453,16 +1460,16 @@ function AppShellContent({
                       variant: isSettingsNavigation(navState) ? "default" : "ghost",
                       onClick: () => handleSettingsClick(),
                     },
-                    // --- What's New ---
+                    // --- BoAI Roadmap ---
                     {
                       id: "nav:whats-new",
                       title: t("sidebar.whatsNew"),
                       icon: hasUnseenReleaseNotes ? (
                         <span className="relative">
-                          <Cake className="h-3.5 w-3.5" />
+                          <MapPinned className="h-3.5 w-3.5" />
                           <span className="absolute -top-0.5 -right-0.5 h-1.5 w-1.5 rounded-full bg-accent" />
                         </span>
-                      ) : Cake,
+                      ) : MapPinned,
                       variant: "ghost" as const,
                       onClick: handleWhatsNewClick,
                     },
@@ -1531,6 +1538,15 @@ function AppShellContent({
                   {/* Create-with-AI button (only for skills mode) */}
                   {isSkillsNavigation(navState) && activeWorkspace && (
                     <>
+                      {!isSkillStatsView && skillFilter?.collection === 'own' && (
+                        <OwnSkillsLibraryMenu
+                          workspaceId={activeWorkspace.id}
+                          workingDirectory={activeSessionWorkingDirectory}
+                          favoriteKeys={favoriteSkillKeys}
+                          excludedOwnSkillKeys={excludedOwnSkillKeys}
+                          onAddToOwn={addSkillToOwn}
+                        />
+                      )}
                       {(isSkillStatsView || skillFilter?.collection !== 'own') && (
                         <SkillInstallMenu
                           workspaceId={activeWorkspace.id}
@@ -1582,6 +1598,7 @@ function AppShellContent({
                 }}
                 collection={!isSkillStatsView && skillFilter?.collection === 'own' ? 'own' : 'installed'}
                 favoriteSkillKeys={favoriteSkillKeys}
+                excludedOwnSkillKeys={excludedOwnSkillKeys}
                 onToggleFavorite={handleToggleFavoriteSkill}
                 onSkillClick={handleSkillSelect}
                 selectedSkillSlug={isSkillsNavigation(navState) && navState.details?.type === 'skill' ? navState.details.skillSlug : null}
@@ -1784,12 +1801,14 @@ function AppShellContent({
         </>
       )}
 
-      {/* What's New overlay */}
+      {/* BoAI Roadmap overlay */}
       <DocumentFormattedMarkdownOverlay
         isOpen={showWhatsNew}
         onClose={() => setShowWhatsNew(false)}
         content={releaseNotesContent}
         onOpenUrl={(url) => window.electronAPI.openUrl(url)}
+        accessibleTitle={t("sidebar.whatsNew")}
+        contentTextureUrl={roadmapNoiseUrl}
       />
 
       {/* Send to Workspace dialog (driven by sendToWorkspaceAtom) */}

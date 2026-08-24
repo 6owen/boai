@@ -12,6 +12,8 @@ import { downloadUv, type Platform, type Arch } from "./build/common";
 const ROOT_DIR = join(import.meta.dir, "..");
 const ELECTRON_DIR = join(ROOT_DIR, "apps/electron");
 const DIST_DIR = join(ELECTRON_DIR, "dist");
+const DEFAULT_VITE_PORT = "1221";
+const DEFAULT_CDP_PORT = "9333";
 
 // Replace grammY's bundled polyfills (node-fetch@2 + abort-controller@3) with
 // native Node globals. esbuild otherwise renames the polyfill's `class
@@ -275,7 +277,7 @@ function getOAuthDefines(): Record<string, string> {
 
 // Get environment variables for electron process
 function getElectronEnv(): Record<string, string> {
-  const vitePort = process.env.CRAFT_VITE_PORT || "5173";
+  const vitePort = process.env.CRAFT_VITE_PORT || DEFAULT_VITE_PORT;
 
   // Codex binary path is resolved at runtime by the binary-resolver module.
   // It checks: CODEX_PATH env var > bundled binary > local dev fork > system PATH.
@@ -437,7 +439,8 @@ async function main(): Promise<void> {
   // Build WhatsApp worker bundle so the adapter can spawn it on demand
   await buildWaWorker();
 
-  const vitePort = process.env.CRAFT_VITE_PORT || "5173";
+  const vitePort = process.env.CRAFT_VITE_PORT || DEFAULT_VITE_PORT;
+  const cdpPort = process.env.CRAFT_CDP_PORT || DEFAULT_CDP_PORT;
   const oauthDefines = getOAuthDefines();
 
   // Kill any existing process on the Vite port
@@ -592,10 +595,10 @@ async function main(): Promise<void> {
   console.log("👀 Watching browser toolbar preload...");
 
   // 5. Start Electron (build already verified)
-  console.log("🚀 Starting Electron...\n");
+  console.log(`🚀 Starting Electron (CDP: ${cdpPort})...\n`);
 
   const electronProc = spawn({
-    cmd: [ELECTRON_BIN, "apps/electron"],
+    cmd: [ELECTRON_BIN, `--remote-debugging-port=${cdpPort}`, "apps/electron"],
     cwd: ROOT_DIR,
     stdin: "ignore",
     stdout: "inherit",

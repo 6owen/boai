@@ -799,7 +799,7 @@ describe('BrowserPaneManager', () => {
     instance.canGoForward = true
     instance.themeColor = '#654321'
 
-    instance.toolbarView.webContents.getURL = mock(() => 'http://localhost:5173/browser-toolbar.html?instanceId=toolbar-finish-load-replay')
+    instance.toolbarView.webContents.getURL = mock(() => 'http://localhost:1221/browser-toolbar.html?instanceId=toolbar-finish-load-replay')
 
     const sendsBeforeFinishLoad = instance.window.webContents.send.mock.calls.length
     instance.toolbarView.webContents._emit('did-finish-load')

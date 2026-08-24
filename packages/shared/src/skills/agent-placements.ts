@@ -1,7 +1,7 @@
-import { existsSync, readFileSync, realpathSync } from 'fs'
+import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from 'fs'
 import { homedir } from 'os'
 import { join } from 'path'
-import type { LoadedSkill, SkillAgentPlacement } from './types.ts'
+import type { InstalledSkillAgent, LoadedSkill, SkillAgentPlacement } from './types.ts'
 
 interface AgentDefinition {
   id: string
@@ -141,6 +141,28 @@ function isInstalled(agent: AgentDefinition, home: string, config: string): bool
 export interface SkillAgentPlacementOptions {
   homeDir?: string
   configDir?: string
+}
+
+/** Detect Agent applications from their standard local configuration roots. */
+export function detectInstalledSkillAgents(
+  options: SkillAgentPlacementOptions = {},
+): InstalledSkillAgent[] {
+  const home = options.homeDir ?? homedir()
+  const config = options.configDir ?? process.env.XDG_CONFIG_HOME?.trim() ?? join(home, '.config')
+
+  const hasRuntimeFootprint = (path: string): boolean => {
+    if (!existsSync(path)) return false
+    try {
+      if (!statSync(path).isDirectory()) return true
+      return readdirSync(path).some(name => name !== 'skills' && name !== '.DS_Store')
+    } catch {
+      return false
+    }
+  }
+
+  return AGENTS
+    .filter(agent => agent.detectedBy(home, config).some(hasRuntimeFootprint))
+    .map(agent => ({ agentId: agent.id, agentName: agent.name }))
 }
 
 /** Annotate skills with the installed Agents that can actually read each skill. */

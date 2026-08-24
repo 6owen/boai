@@ -1,7 +1,6 @@
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
-import { Search, Star, UserRound, Zap } from 'lucide-react'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@craft-agent/ui'
+import { Search, UserRound, Zap } from 'lucide-react'
 import { toast } from 'sonner'
 import { SkillAvatar } from '@/components/ui/skill-avatar'
 import { EntityPanel } from '@/components/ui/entity-panel'
@@ -14,7 +13,7 @@ import { getFileManagerName } from '@/lib/platform'
 import { cn } from '@/lib/utils'
 import type { LoadedSkill } from '../../../shared/types'
 import { SessionSearchHeader } from './SessionSearchHeader'
-import { getSkillCollectionKey, isSelfAuthoredSkill } from '@/hooks/useSkillCollections'
+import { isSkillInOwnCollection } from '@/hooks/useSkillCollections'
 
 export interface SkillsListPanelProps {
   skills: LoadedSkill[]
@@ -29,6 +28,7 @@ export interface SkillsListPanelProps {
   onSearchClose?: () => void
   collection?: 'installed' | 'own'
   favoriteSkillKeys?: ReadonlySet<string>
+  excludedOwnSkillKeys?: ReadonlySet<string>
   onToggleFavorite?: (skill: LoadedSkill) => void
   className?: string
 }
@@ -46,6 +46,7 @@ export function SkillsListPanel({
   onSearchClose,
   collection = 'installed',
   favoriteSkillKeys = new Set(),
+  excludedOwnSkillKeys = new Set(),
   onToggleFavorite,
   className,
 }: SkillsListPanelProps) {
@@ -160,26 +161,6 @@ export function SkillsListPanel({
                 <span className="truncate">{skill.metadata.description}</span>
               </span>
             ),
-            rowAction: collection === 'own'
-              && favoriteSkillKeys.has(getSkillCollectionKey(skill))
-              && !isSelfAuthoredSkill(skill)
-              && onToggleFavorite ? (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      aria-label={t('skillsList.removeFromOwn')}
-                      onClick={() => onToggleFavorite(skill)}
-                      className="inline-flex h-7 w-7 items-center justify-center rounded-[7px] text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                    >
-                      <Star className="h-3.5 w-3.5 fill-current" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" sideOffset={4}>
-                    {t('skillsList.removeFromOwn')}
-                  </TooltipContent>
-                </Tooltip>
-              ) : undefined,
             menu: (
               <SkillMenu
                 skillSlug={skill.slug}
@@ -201,10 +182,8 @@ export function SkillsListPanel({
                 onDelete={!skill.management && skill.source !== 'plugin' ? () => void handleRemoveSkill(skill) : undefined}
                 canDelete={skill.source !== 'plugin'}
                 deleteLabel={t('skillsList.deleteSkill')}
-                isFavorite={favoriteSkillKeys.has(getSkillCollectionKey(skill))}
-                onToggleFavorite={!isSelfAuthoredSkill(skill) && onToggleFavorite
-                  ? () => onToggleFavorite(skill)
-                  : undefined}
+                isFavorite={isSkillInOwnCollection(skill, favoriteSkillKeys, excludedOwnSkillKeys)}
+                onToggleFavorite={onToggleFavorite ? () => onToggleFavorite(skill) : undefined}
               />
             ),
           })}

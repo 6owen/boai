@@ -55,7 +55,7 @@ import { NAVIGATE_EVENT, type NavigateOptions } from '../lib/navigate'
 import { normalizePanelRouteForReconcile } from './navigation-reconcile'
 import { buildSemanticHistoryKey, canRunInitialRestore } from './navigation-history'
 import * as storage from '@/lib/local-storage'
-import { getStoredFavoriteSkillKeys, isSkillInOwnCollection } from '@/hooks/useSkillCollections'
+import { getStoredExcludedOwnSkillKeys, getStoredFavoriteSkillKeys, isSkillInOwnCollection } from '@/hooks/useSkillCollections'
 import type {
   DeepLinkNavigation,
   Session,
@@ -609,7 +609,8 @@ export function NavigationProvider({
         return skills[0]?.slug ?? null
       }
       const favoriteKeys = getStoredFavoriteSkillKeys(workspaceId)
-      return skills.find(skill => isSkillInOwnCollection(skill, favoriteKeys))?.slug ?? null
+      const excludedOwnSkillKeys = getStoredExcludedOwnSkillKeys(workspaceId)
+      return skills.find(skill => isSkillInOwnCollection(skill, favoriteKeys, excludedOwnSkillKeys))?.slug ?? null
     },
     [skills, workspaceId]
   )

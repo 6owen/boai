@@ -228,6 +228,16 @@ export const mockElectronAPI = {
     return null
   },
 
+  exportOwnSkillLibrary: async (_workspaceId: string, request: { targetDirectory: string }) => ({
+    targetDirectory: request.targetDirectory,
+    archivePath: `${request.targetDirectory}/boai-skills.zip`,
+    localSkills: [],
+    vendorSkills: [],
+    sources: [],
+    snapshots: [],
+    warnings: [],
+  }),
+
   getTaskOutput: async (taskId: string) => {
     console.log('[Playground] getTaskOutput called:', taskId)
     return `Output for task ${taskId}:\n\nThis is a mock output in the playground.\nIn the real app, this would show the actual task output.`

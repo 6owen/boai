@@ -282,6 +282,7 @@ export const RPC_CHANNELS = {
     UPDATE_ALL_GLOBAL: 'skills:updateAllGlobal',
     UNINSTALL: 'skills:uninstall',
     DELETE: 'skills:delete',
+    EXPORT_LIBRARY: 'skills:exportLibrary',
     OPEN_EDITOR: 'skills:openEditor',
     OPEN_FINDER: 'skills:openFinder',
     CHANGED: 'skills:changed',

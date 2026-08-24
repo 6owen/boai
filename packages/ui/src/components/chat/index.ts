@@ -13,6 +13,7 @@ export { TurnCardActionsMenu, type TurnCardActionsMenuProps } from './TurnCardAc
 export { SessionViewer, type SessionViewerProps, type SessionViewerMode } from './SessionViewer'
 export { UserMessageBubble, type UserMessageBubbleProps } from './UserMessageBubble'
 export { SystemMessage, type SystemMessageProps, type SystemMessageType } from './SystemMessage'
+export { BoAILogo, type BoAILogoProps } from '../icons/BoAILogo'
 
 // Attachment helpers
 export { FileTypeIcon, getFileTypeLabel, type FileTypeIconProps } from './attachment-helpers'

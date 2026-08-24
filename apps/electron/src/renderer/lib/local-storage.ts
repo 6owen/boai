@@ -54,7 +54,7 @@ export const KEYS = {
   showConnectionIcons: 'show-connection-icons',
   projectColorTreatment: 'project-color-treatment', // 'stripe' | 'stripe-tint'
 
-  // What's New
+  // BoAI Roadmap (legacy key name retained for existing preferences)
   whatsNewLastSeenVersion: 'whats-new-last-seen-version',
 
   // Workspace navigation state (workspace-scoped via suffix = workspaceSlug)
@@ -63,6 +63,7 @@ export const KEYS = {
 
   // Skills (workspace-scoped)
   skillFavorites: 'skill-favorites',
+  skillOwnExclusions: 'skill-own-exclusions',
 } as const
 
 export type StorageKey = typeof KEYS[keyof typeof KEYS]

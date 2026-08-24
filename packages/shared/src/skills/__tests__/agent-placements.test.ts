@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { annotateSkillAgentPlacements } from '../agent-placements.ts'
+import { annotateSkillAgentPlacements, detectInstalledSkillAgents } from '../agent-placements.ts'
 import type { LoadedSkill } from '../types.ts'
 
 const tempDirs: string[] = []
@@ -97,5 +97,33 @@ describe('annotateSkillAgentPlacements', () => {
     )[0]!
 
     expect(result.agentPlacements).toEqual([])
+  })
+})
+
+describe('detectInstalledSkillAgents', () => {
+  test('returns installed Agent identities without requiring a matching skill', () => {
+    const home = makeTempDir()
+    const config = join(home, '.config')
+    mkdirSync(join(home, '.codex'), { recursive: true })
+    mkdirSync(join(home, '.cursor'), { recursive: true })
+    mkdirSync(join(config, 'opencode'), { recursive: true })
+    writeFileSync(join(home, '.codex', 'config.toml'), '')
+    writeFileSync(join(home, '.cursor', 'state.json'), '{}')
+    writeFileSync(join(config, 'opencode', 'config.json'), '{}')
+
+    expect(detectInstalledSkillAgents({ homeDir: home, configDir: config })).toEqual([
+      { agentId: 'codex', agentName: 'Codex' },
+      { agentId: 'cursor', agentName: 'Cursor' },
+      { agentId: 'opencode', agentName: 'OpenCode' },
+    ])
+  })
+
+  test('ignores empty or skill-only roots created by universal installers', () => {
+    const home = makeTempDir()
+    const config = join(home, '.config')
+    mkdirSync(join(home, '.adal', 'skills'), { recursive: true })
+    mkdirSync(join(home, '.roo'), { recursive: true })
+
+    expect(detectInstalledSkillAgents({ homeDir: home, configDir: config })).toEqual([])
   })
 })

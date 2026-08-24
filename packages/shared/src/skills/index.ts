@@ -8,6 +8,7 @@ export * from './types.ts';
 export * from './agent-placements.ts';
 export * from './management.ts';
 export * from './usage.ts';
+export * from './system-usage.ts';
 export {
   GLOBAL_AGENT_SKILLS_DIR,
   PROJECT_AGENT_SKILLS_DIR,

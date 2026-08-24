@@ -1,48 +1,27 @@
 import type { ComponentEntry } from './types'
-import { CraftAgentsLogo } from '@/components/icons/CraftAgentsLogo'
-import { CraftAgentsSymbol } from '@/components/icons/CraftAgentsSymbol'
+import { BoAILogo } from '@/components/icons/BoAILogo'
 import { PanelLeftRounded } from '@/components/icons/PanelLeftRounded'
 import { SquarePenRounded } from '@/components/icons/SquarePenRounded'
 
 export const iconComponents: ComponentEntry[] = [
   {
-    id: 'craft-agents-logo',
-    name: 'CraftAgentsLogo',
+    id: 'boai-logo',
+    name: 'BoAILogo',
     category: 'Icons',
-    description: 'Full Craft Agents branding logo with text',
-    component: CraftAgentsLogo,
+    description: 'Transparent BoAI cow mascot',
+    component: BoAILogo,
     props: [
       {
         name: 'className',
         description: 'Tailwind classes for sizing and styling',
         control: { type: 'string' },
-        defaultValue: 'h-8',
+        defaultValue: 'size-8 object-contain',
       },
     ],
     variants: [
-      { name: 'Small', props: { className: 'h-6' } },
-      { name: 'Medium', props: { className: 'h-8' } },
-      { name: 'Large', props: { className: 'h-12' } },
-    ],
-  },
-  {
-    id: 'craft-agents-symbol',
-    name: 'CraftAgentsSymbol',
-    category: 'Icons',
-    description: 'Craft Agents "E" pixel art symbol icon (brand color: #9570BE)',
-    component: CraftAgentsSymbol,
-    props: [
-      {
-        name: 'className',
-        description: 'Tailwind classes for sizing',
-        control: { type: 'string' },
-        defaultValue: 'h-6 w-6',
-      },
-    ],
-    variants: [
-      { name: 'Small', props: { className: 'h-4 w-4' } },
-      { name: 'Medium', props: { className: 'h-6 w-6' } },
-      { name: 'Large', props: { className: 'h-10 w-10' } },
+      { name: 'Small', props: { className: 'size-6 object-contain' } },
+      { name: 'Medium', props: { className: 'size-8 object-contain' } },
+      { name: 'Large', props: { className: 'size-12 object-contain' } },
     ],
   },
   {

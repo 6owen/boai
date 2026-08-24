@@ -2,8 +2,8 @@
  * Auto-update module using electron-updater
  *
  * Handles checking for updates, downloading, and installing via the standard
- * electron-updater library. Updates are served from https://thecraftagents.com/electron/latest
- * using the generic provider (YAML manifests + binaries on R2/S3).
+ * electron-updater library. Fork builds stay offline unless BOAI_UPDATE_URL is
+ * explicitly configured with a generic-provider feed.
  *
  * Platform behavior:
  * - macOS: Downloads zip, extracts and swaps app bundle atomically
@@ -33,6 +33,15 @@ import type { EventSink } from '@craft-agent/server-core/transport'
 const PLATFORM = platform()
 const IS_MAC = PLATFORM === 'darwin'
 const IS_WINDOWS = PLATFORM === 'win32'
+const UPDATE_FEED_URL = process.env.BOAI_UPDATE_URL?.trim()
+
+if (UPDATE_FEED_URL) {
+  autoUpdater.setFeedURL({ provider: 'generic', url: UPDATE_FEED_URL })
+}
+
+export function isAutoUpdateConfigured(): boolean {
+  return Boolean(UPDATE_FEED_URL)
+}
 
 // Get the update cache directory path (for file watcher fallback on macOS)
 // electron-updater uses these paths:
@@ -357,6 +366,11 @@ function checkForExistingDownload(): { exists: boolean; version?: string } {
  * @param options.autoDownload - If false, only checks without downloading (for manual "Check Now")
  */
 export async function checkForUpdates(options: CheckOptions = {}): Promise<UpdateInfo> {
+  if (!isAutoUpdateConfigured()) {
+    mainLog.info('[auto-update] Skipping update check: BOAI_UPDATE_URL is not configured')
+    return getUpdateInfo()
+  }
+
   const { autoDownload = true } = options
 
   // Temporarily override autoDownload for this check if needed
@@ -491,6 +505,10 @@ export interface UpdateOnLaunchResult {
  * - Auto-downloads if update available
  */
 export async function checkForUpdatesOnLaunch(): Promise<UpdateOnLaunchResult> {
+  if (!isAutoUpdateConfigured()) {
+    return { action: 'skipped', reason: 'not-configured' }
+  }
+
   autoUpdateLog.info('Checking for updates on launch...')
 
   const info = await checkForUpdates({ autoDownload: true })

@@ -3,7 +3,7 @@
  * Summaries provide quick context; "Learn more" opens the full docs.
  */
 
-const DOC_BASE_URL = 'https://thecraftagents.com/docs'
+const DOC_BASE_URL = 'https://github.com/6owen/boai/blob/main/apps/electron/resources/docs'
 
 export type DocFeature =
   | 'sources'
@@ -31,79 +31,79 @@ export interface DocInfo {
 
 export const DOCS: Record<DocFeature, DocInfo> = {
   sources: {
-    path: '/sources/overview',
+    path: '/sources.md',
     title: 'Sources',
     summary:
       'Connect external data like MCP servers, REST APIs, and local filesystems. Sources give your agent tools to access services like GitHub, Linear, or your Obsidian vault.',
   },
   'sources-api': {
-    path: '/sources/apis/overview',
+    path: '/sources.md',
     title: 'APIs',
     summary:
       'Connect to any REST API with flexible authentication. Make HTTP requests to external services directly from your conversations.',
   },
   'sources-mcp': {
-    path: '/sources/mcp-servers/overview',
+    path: '/sources.md',
     title: 'MCP Servers',
     summary:
       'Connect to Model Context Protocol servers for rich tool integrations. MCP servers provide structured access to services like GitHub, Linear, and Notion.',
   },
   'sources-local': {
-    path: '/sources/local-filesystems',
+    path: '/sources.md',
     title: 'Local Folders',
     summary:
       'Give your agent access to local directories like Obsidian vaults, code repositories, or data folders on your machine.',
   },
   skills: {
-    path: '/skills/overview',
+    path: '/skills.md',
     title: 'Skills',
     summary:
       'Reusable instruction sets that teach your agent specialized behaviors. Create a SKILL.md file and invoke it with @mention in your messages.',
   },
   statuses: {
-    path: '/statuses/overview',
+    path: '/statuses.md',
     title: 'Statuses',
     summary:
       'Organize conversations into workflow states like Todo, In Progress, and Done. Open statuses appear in your inbox; closed ones move to the archive.',
   },
   permissions: {
-    path: '/core-concepts/permissions',
+    path: '/permissions.md',
     title: 'Permissions',
     summary:
       'Control how much autonomy your agent has. Explore mode is read-only, Ask to Edit prompts before changes, and Execute mode runs without prompts.',
   },
   labels: {
-    path: '/labels/overview',
+    path: '/labels.md',
     title: 'Labels',
     summary:
       'Tag sessions with colored labels for organization and filtering. Labels support hierarchical nesting, typed values, and auto-apply rules that extract data from messages using regex patterns.',
   },
   workspaces: {
-    path: '/go-further/workspaces',
+    path: '/sources.md',
     title: 'Workspaces',
     summary:
       'Separate configurations for different contexts like personal projects or work. Each workspace has its own sources, skills, statuses, and session history.',
   },
   themes: {
-    path: '/go-further/themes',
+    path: '/themes.md',
     title: 'Themes',
     summary:
       'Customize the visual appearance with a 6-color system. Override specific colors in theme.json or install preset themes for complete visual styles.',
   },
   'app-settings': {
-    path: '/reference/config/config-file',
+    path: '/craft-cli.md',
     title: 'App Settings',
     summary:
-      'Configure global app settings like your default model, authentication method, and workspace list. Settings are stored in ~/.craft-agent/config.json.',
+      'Configure global BoAI settings such as your default model, authentication method, and workspace list.',
   },
   preferences: {
-    path: '/reference/config/preferences',
+    path: '/craft-cli.md',
     title: 'Preferences',
     summary:
-      'Personal preferences like your name, timezone, and language that help the agent personalize responses. Stored in ~/.craft-agent/preferences.json.',
+      'Personal preferences like your name, timezone, and language help BoAI personalize responses.',
   },
   messaging: {
-    path: '/messaging/overview',
+    path: '/sources.md',
     title: 'Messaging',
     summary:
       'Connect a session to a chat platform — Telegram, WhatsApp, or Lark / Feishu — and reach your agent from anywhere with native rich replies.',

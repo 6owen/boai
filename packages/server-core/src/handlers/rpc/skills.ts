@@ -10,9 +10,18 @@ import type {
   ScanSkillSourceRequest,
   SkillUsageRange,
 } from '@craft-agent/shared/skills'
+import type { ExportOwnSkillLibraryRequest } from '@craft-agent/shared/personal-repository'
 
 const SKILLS_UPDATE_ALL_TIMEOUT_MS = 10 * 60_000
-import { aggregateSkillUsage, annotateManagedSkills, loadAllSkills, SkillsCliService } from '@craft-agent/shared/skills'
+import {
+  aggregateSkillUsage,
+  annotateManagedSkills,
+  detectInstalledSkillAgents,
+  loadAllSkills,
+  mergeSystemSkillUsage,
+  scanCodexSkillUsage,
+  SkillsCliService,
+} from '@craft-agent/shared/skills'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 
@@ -27,6 +36,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.skills.UPDATE_ALL_GLOBAL,
   RPC_CHANNELS.skills.UNINSTALL,
   RPC_CHANNELS.skills.DELETE,
+  RPC_CHANNELS.skills.EXPORT_LIBRARY,
   RPC_CHANNELS.skills.OPEN_EDITOR,
   RPC_CHANNELS.skills.OPEN_FINDER,
 ] as const
@@ -131,9 +141,7 @@ export function registerSkillsHandlers(
     return scanDirectory(skillDir)
   })
 
-  // Derive lightweight Skill usage statistics from the workspace's persisted
-  // BoAI sessions. This intentionally reports only explicit requests recorded
-  // by this app; it does not claim visibility into other Agent applications.
+  // Combine native BoAI activations with best-effort local Agent histories.
   server.handle(RPC_CHANNELS.skills.GET_USAGE_STATS, async (
     _ctx,
     workspaceId: string,
@@ -152,8 +160,11 @@ export function registerSkillsHandlers(
     const connections = new Map(getLlmConnections().map(connection => [connection.slug, connection]))
     const knownSkillSlugs = loadAllSkills(workspace.rootPath).map(skill => skill.slug)
 
-    return aggregateSkillUsage(sessions, {
+    const now = Date.now()
+    const boaiStats = aggregateSkillUsage(sessions, {
       range,
+      now,
+      limit: Math.max(10, knownSkillSlugs.length),
       knownSkillSlugs,
       resolveAgentSource: (session) => {
         if (!session.llmConnection) return undefined
@@ -164,6 +175,23 @@ export function registerSkillsHandlers(
           provider: connection.piAuthProvider ?? connection.providerType,
         }
       },
+    })
+    const installedAgents = detectInstalledSkillAgents()
+    const hasCodex = installedAgents.some(agent => agent.agentId === 'codex')
+    const cutoff = range === '7d'
+      ? now - 7 * 24 * 60 * 60 * 1000
+      : range === '30d'
+        ? now - 30 * 24 * 60 * 60 * 1000
+        : undefined
+    const externalEvents = hasCodex
+      ? scanCodexSkillUsage({ knownSkillSlugs, cutoff })
+      : []
+
+    return mergeSystemSkillUsage(boaiStats, externalEvents, {
+      installedAgents,
+      observableAgentIds: hasCodex ? ['codex'] : [],
+      range,
+      now,
     })
   })
 
@@ -347,6 +375,43 @@ export function registerSkillsHandlers(
 
     await refreshAndBroadcastSkills(workspaceId, workspace.rootPath, projectRoot)
     deps.platform.logger?.info(`Deleted ${request.source} skill: ${request.slug}`)
+  })
+
+  // Export the current Own collection as a portable, Git-friendly directory.
+  server.handle(RPC_CHANNELS.skills.EXPORT_LIBRARY, async (
+    _ctx,
+    workspaceId: string,
+    request: ExportOwnSkillLibraryRequest,
+  ) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+    if (workspace.remoteServer) {
+      throw new Error('Exporting a local Skill Library is not available for remote workspaces')
+    }
+
+    const projectRoot = resolveProjectRoot(workspaceId, request.workingDirectory)
+    const favoriteKeys = new Set(request.favoriteKeys)
+    const excludedKeys = new Set(request.excludedKeys ?? [])
+    const currentSkills = annotateManagedSkills(
+      loadAllSkills(workspace.rootPath, projectRoot),
+      projectRoot,
+    )
+    const ownSkills = currentSkills.filter(skill =>
+      skill.source === 'workspace'
+        ? !excludedKeys.has(`${skill.source}:${skill.slug}`)
+        : favoriteKeys.has(`${skill.source}:${skill.slug}`))
+
+    const { exportOwnSkillLibrary } = await import('@craft-agent/shared/personal-repository')
+    const result = exportOwnSkillLibrary({
+      targetDirectory: request.targetDirectory,
+      libraryName: `${workspace.name} Skills`,
+      skills: ownSkills,
+    })
+    deps.platform.logger?.info(
+      `Exported Own Skill Library: ${result.localSkills.length} local, `
+      + `${result.vendorSkills.length} vendor, ${result.sources.length} sources`,
+    )
+    return result
   })
 
   // Open skill SKILL.md in editor

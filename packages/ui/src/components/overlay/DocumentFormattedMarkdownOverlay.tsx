@@ -19,6 +19,9 @@ import { FullscreenOverlayBase } from './FullscreenOverlayBase'
 import type { OverlayTypeBadge } from './FullscreenOverlayBaseHeader'
 import { AnnotatableMarkdownDocument } from './AnnotatableMarkdownDocument'
 
+const CONTENT_TEXTURE_Z_INDEX = 0
+const CONTENT_Z_INDEX = 1
+
 export interface DocumentFormattedMarkdownOverlayProps {
   /** The content to display (markdown) */
   content: string
@@ -38,6 +41,10 @@ export interface DocumentFormattedMarkdownOverlayProps {
   typeBadge?: OverlayTypeBadge
   /** Optional error message — renders a tinted error banner above the content card */
   error?: string
+  /** Optional repeating texture rendered over the document card background */
+  contentTextureUrl?: string
+  /** Accessible dialog title */
+  accessibleTitle?: string
   /** Optional session id used for annotation payload source metadata */
   sessionId?: string
   /** Optional message id; when present with callbacks, overlay becomes annotatable */
@@ -68,6 +75,8 @@ export function DocumentFormattedMarkdownOverlay({
   filePath,
   typeBadge,
   error,
+  contentTextureUrl,
+  accessibleTitle,
   sessionId,
   messageId,
   annotations,
@@ -86,49 +95,67 @@ export function DocumentFormattedMarkdownOverlay({
       typeBadge={typeBadge}
       copyContent={content}
       error={error ? { label: 'Write Failed', message: error } : undefined}
+      accessibleTitle={accessibleTitle}
     >
       {/* Content wrapper — min-h-full for vertical centering within FullscreenOverlayBase's scroll container.
           Scrolling and gradient fade mask are handled by FullscreenOverlayBase. */}
       <div className="min-h-full flex flex-col justify-center px-6 py-16">
         {/* Content card - my-auto centers vertically when content is small, flows naturally when large */}
-        <div className="bg-background rounded-[16px] shadow-strong w-full max-w-[960px] h-fit mx-auto my-auto">
-          {/* Plan header (variant="plan" only) */}
-          {variant === 'plan' && (
-            <div className="px-4 py-2 border-b border-border/30 flex items-center gap-2 bg-success/5 rounded-t-[16px]">
-              <ListTodo className="w-3 h-3 text-success" />
-              <span className="text-[13px] font-medium text-success">Plan</span>
-            </div>
+        <div className="bg-background relative isolate overflow-hidden rounded-[16px] shadow-strong w-full max-w-[960px] h-fit mx-auto my-auto">
+          {contentTextureUrl && (
+            <div
+              aria-hidden="true"
+              className="absolute inset-0 pointer-events-none"
+              style={{
+                backgroundImage: `url("${contentTextureUrl}")`,
+                backgroundRepeat: 'repeat',
+                mixBlendMode: 'multiply',
+                filter: 'contrast(1.2)',
+                opacity: 0.35,
+                zIndex: CONTENT_TEXTURE_Z_INDEX,
+              }}
+            />
           )}
 
-          {/* Content area */}
-          <div className="px-10 pt-8 pb-8">
-            <div className="text-sm">
-              {messageId && onAddAnnotation ? (
-                <AnnotatableMarkdownDocument
-                  content={content}
-                  sessionId={sessionId}
-                  messageId={messageId}
-                  annotations={annotations}
-                  onAddAnnotation={onAddAnnotation}
-                  onRemoveAnnotation={onRemoveAnnotation}
-                  onUpdateAnnotation={onUpdateAnnotation}
-                  onOpenUrl={onOpenUrl}
-                  onOpenFile={onOpenFile}
-                  sendMessageKey={sendMessageKey}
-                  islandZIndex={420}
-                  openAnnotationRequest={openAnnotationRequest}
-                  isStreaming={isStreaming}
-                />
-              ) : (
-                <Markdown
-                  mode="minimal"
-                  onUrlClick={onOpenUrl}
-                  onFileClick={onOpenFile}
-                  hideFirstMermaidExpand={false}
-                >
-                  {content}
-                </Markdown>
-              )}
+          <div className="relative" style={{ zIndex: CONTENT_Z_INDEX }}>
+            {/* Plan header (variant="plan" only) */}
+            {variant === 'plan' && (
+              <div className="px-4 py-2 border-b border-border/30 flex items-center gap-2 bg-success/5 rounded-t-[16px]">
+                <ListTodo className="w-3 h-3 text-success" />
+                <span className="text-[13px] font-medium text-success">Plan</span>
+              </div>
+            )}
+
+            {/* Content area */}
+            <div className="px-10 pt-8 pb-8">
+              <div className="text-sm">
+                {messageId && onAddAnnotation ? (
+                  <AnnotatableMarkdownDocument
+                    content={content}
+                    sessionId={sessionId}
+                    messageId={messageId}
+                    annotations={annotations}
+                    onAddAnnotation={onAddAnnotation}
+                    onRemoveAnnotation={onRemoveAnnotation}
+                    onUpdateAnnotation={onUpdateAnnotation}
+                    onOpenUrl={onOpenUrl}
+                    onOpenFile={onOpenFile}
+                    sendMessageKey={sendMessageKey}
+                    islandZIndex={420}
+                    openAnnotationRequest={openAnnotationRequest}
+                    isStreaming={isStreaming}
+                  />
+                ) : (
+                  <Markdown
+                    mode="minimal"
+                    onUrlClick={onOpenUrl}
+                    onFileClick={onOpenFile}
+                    hideFirstMermaidExpand={false}
+                  >
+                    {content}
+                  </Markdown>
+                )}
+              </div>
             </div>
           </div>
         </div>

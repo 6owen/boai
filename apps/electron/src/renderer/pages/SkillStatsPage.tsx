@@ -98,7 +98,7 @@ export default function SkillStatsPage({
   )
 
   const topSkills = stats?.topSkills.slice(0, 10) ?? []
-  const agentSources = stats?.agentSources.slice(0, 10) ?? []
+  const agentSources = stats?.agentSources ?? []
   const maxSkillCount = Math.max(0, ...topSkills.map((item) => item.count))
   const maxAgentCount = Math.max(0, ...agentSources.map((item) => item.count))
 
@@ -122,7 +122,7 @@ export default function SkillStatsPage({
           <div className="min-w-0">
             <p className="text-sm text-foreground/70">{t('skillStats.subtitle')}</p>
             <p className="mt-1 text-xs text-muted-foreground">
-              {t('skillStats.boaiOnlyNote')}
+              {t('skillStats.systemNote')}
             </p>
           </div>
           <div className="w-fit shrink-0 rounded-[9px] bg-foreground/[0.04] p-0.5">
@@ -135,7 +135,7 @@ export default function SkillStatsPage({
           </div>
         </div>
 
-        <dl className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <dl className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
           <MetricCard
             label={t('skillStats.totalActivations')}
             value={numberFormatter.format(stats?.totals.activations ?? 0)}
@@ -145,8 +145,12 @@ export default function SkillStatsPage({
             value={numberFormatter.format(stats?.totals.skills ?? 0)}
           />
           <MetricCard
-            label={t('skillStats.agentSources')}
-            value={numberFormatter.format(stats?.totals.agentSources ?? 0)}
+            label={t('skillStats.detectedAgents')}
+            value={numberFormatter.format(stats?.coverage?.detectedAgents ?? stats?.totals.agentSources ?? 0)}
+          />
+          <MetricCard
+            label={t('skillStats.observableAgents')}
+            value={numberFormatter.format(stats?.coverage?.observableAgents ?? stats?.totals.agentSources ?? 0)}
           />
         </dl>
 
@@ -207,8 +211,16 @@ export default function SkillStatsPage({
                 const sourceDetail = Array.from(new Set([
                   item.provider,
                   item.model,
+                  item.availability === 'unavailable'
+                    ? undefined
+                    : item.confidence === 'inferred'
+                      ? t('skillStats.inferred')
+                      : item.confidence === 'exact'
+                        ? t('skillStats.exact')
+                        : undefined,
                 ].filter((value): value is string => Boolean(value && value !== sourceName))))
                   .join(' · ')
+                const isUnavailable = item.availability === 'unavailable'
 
                 return (
                   <Info_Table.Row
@@ -235,22 +247,28 @@ export default function SkillStatsPage({
                           )}
                         </div>
                         <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-                          {t('skillStats.usageCount')}: {numberFormatter.format(item.count)}
+                          {isUnavailable
+                            ? t('skillStats.unavailable')
+                            : `${t('skillStats.usageCount')}: ${numberFormatter.format(item.count)}`}
                         </span>
                       </div>
-                      <RatioBar
-                        label={`${sourceName}, ${t('skillStats.usageCount')}: ${numberFormatter.format(item.count)}`}
-                        value={item.count}
-                        max={maxAgentCount}
-                      />
-                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                        <span>
-                          {t('skillStats.activeSkills')}: {numberFormatter.format(item.skillCount)}
-                        </span>
-                        <span>
-                          {t('skillStats.sessions')}: {numberFormatter.format(item.sessionCount)}
-                        </span>
-                      </div>
+                      {!isUnavailable && (
+                        <>
+                          <RatioBar
+                            label={`${sourceName}, ${t('skillStats.usageCount')}: ${numberFormatter.format(item.count)}`}
+                            value={item.count}
+                            max={maxAgentCount}
+                          />
+                          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                            <span>
+                              {t('skillStats.activeSkills')}: {numberFormatter.format(item.skillCount)}
+                            </span>
+                            <span>
+                              {t('skillStats.sessions')}: {numberFormatter.format(item.sessionCount)}
+                            </span>
+                          </div>
+                        </>
+                      )}
                     </div>
                   </Info_Table.Row>
                 )

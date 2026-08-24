@@ -1,4 +1,4 @@
-# Craft Agent CLI Guide
+# BoAI CLI Guide
 
 `craft-agent` is the preferred interface for managing workspace config domains such as labels, sources, and skills.
 

@@ -563,7 +563,7 @@ export const messagesComponents: ComponentEntry[] = [
     id: 'user-message-bubble',
     name: 'UserMessageBubble',
     category: 'Chat Messages',
-    description: 'Right-aligned user message bubble (from @craft-agent/ui)',
+    description: 'Right-aligned user message bubble (from the shared UI package)',
     component: UserMessageBubble,
     props: [
       {
@@ -626,7 +626,7 @@ export const messagesComponents: ComponentEntry[] = [
     id: 'system-message',
     name: 'SystemMessage',
     category: 'Chat Messages',
-    description: 'System/info/warning/error message (from @craft-agent/ui)',
+    description: 'System/info/warning/error message (from the shared UI package)',
     component: SystemMessage,
     props: [
       {

@@ -139,6 +139,116 @@ describe('SkillsCliService.scan', () => {
       ],
     })
   })
+
+  test('restores per-skill vendor provenance from a BoAI library manifest', async () => {
+    const root = makeTempDir()
+    writeFileSync(join(root, 'boai.json'), JSON.stringify({
+      schemaVersion: 1,
+      kind: 'boai-skill-library',
+      name: 'My Skills',
+      skillsPath: 'skills',
+      vendorPath: 'vendor',
+      sourcesPath: 'sources',
+    }))
+    writeFileSync(join(root, 'boai.lock.json'), JSON.stringify({
+      schemaVersion: 1,
+      skills: {
+        'global:vendor-skill': {
+          kind: 'vendor',
+          sourceId: 'owner-repo',
+        },
+        'workspace:local-skill': {
+          kind: 'local',
+        },
+      },
+    }))
+    writeFileSync(join(root, '.gitmodules'), [
+      '[submodule "vendor/owner-repo"]',
+      '\tpath = vendor/owner-repo',
+      '\turl = https://github.com/owner/repo.git',
+    ].join('\n'))
+    const service = new SkillsCliService({
+      runner: async () => ({
+        stdout: [
+          '│    vendor-skill',
+          '│      From another repository.',
+          '│    local-skill',
+          '│      Written locally.',
+        ].join('\n'),
+        stderr: '',
+      }),
+    })
+
+    const result = await service.scan({ source: root, kind: 'folder' })
+
+    expect(result.candidates).toEqual([
+      {
+        slug: 'vendor-skill',
+        description: 'From another repository.',
+        libraryKind: 'vendor',
+        sourceId: 'owner-repo',
+        installSource: 'https://github.com/owner/repo.git',
+      },
+      {
+        slug: 'local-skill',
+        description: 'Written locally.',
+        libraryKind: 'local',
+      },
+    ])
+    expect(result.library).toEqual({
+      name: 'My Skills',
+      vendorCount: 1,
+      sourceCount: 0,
+    })
+  })
+
+  test('recognizes Vendor and Source declarations in a compatible meta.ts repository', async () => {
+    const root = makeTempDir()
+    writeFileSync(join(root, 'meta.ts'), [
+      "export const submodules = { docs: 'https://github.com/owner/docs' }",
+      'export const vendors = {',
+      "  'upstream': {",
+      "    source: 'https://github.com/owner/upstream',",
+      '    skills: {',
+      "      'source-name': 'vendor-skill',",
+      '    },',
+      '  },',
+      '}',
+      "export const manual = ['manual-skill']",
+    ].join('\n'))
+    const service = new SkillsCliService({
+      runner: async () => ({
+        stdout: [
+          '│    vendor-skill',
+          '│    docs',
+          '│    manual-skill',
+        ].join('\n'),
+        stderr: '',
+      }),
+    })
+
+    const result = await service.scan({ source: root, kind: 'folder' })
+
+    expect(result.candidates).toEqual([
+      {
+        slug: 'vendor-skill',
+        libraryKind: 'vendor',
+        sourceId: 'upstream',
+        installSource: 'https://github.com/owner/upstream',
+      },
+      {
+        slug: 'docs',
+        libraryKind: 'source',
+        sourceId: 'docs',
+      },
+      {
+        slug: 'manual-skill',
+        libraryKind: 'local',
+      },
+    ])
+    expect(result.library?.vendorCount).toBe(1)
+    expect(result.library?.sourceCount).toBe(1)
+  })
 })
 
 describe('SkillsCliService.update', () => {

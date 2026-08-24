@@ -1,7 +1,7 @@
 /**
- * Craft Agent Session Viewer
+ * BoAI Session Viewer
  *
- * A minimal web app for viewing Craft Agent session transcripts.
+ * A minimal web app for viewing BoAI session transcripts.
  * Users can upload session JSON files or view shared sessions via URL.
  *
  * Routes:

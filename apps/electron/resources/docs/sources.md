@@ -1,6 +1,6 @@
 # Sources Configuration Guide
 
-This guide explains how to configure sources (MCP servers, APIs, local filesystems) in Craft Agent.
+This guide explains how to configure sources (MCP servers, APIs, local filesystems) in BoAI.
 
 > **CLI-first workflow (recommended):** Use `craft-agent source ...` commands instead of editing source config files directly.
 > - `craft-agent source --help`
@@ -10,17 +10,13 @@ This guide explains how to configure sources (MCP servers, APIs, local filesyste
 
 When a user wants to add a new source, follow this conversational setup process to create a tailored, well-documented integration.
 
-### 0. Check for a Specialized Source Guide (REQUIRED FIRST STEP)
+### 0. Check the Service's Official Documentation (REQUIRED FIRST STEP)
 
-**Before doing anything else**, check the product documentation at https://thecraftagents.com/docs for a service-specific setup guide (fetch pages with your web tools, e.g. search for "{service} source setup").
+**Before doing anything else**, consult the service's official API or MCP documentation. URLs, authentication methods, and scopes change frequently, so verify current requirements with web search or the in-app browser.
 
-**Available guides:** GitHub, Linear, Slack, Gmail, Google Calendar, Google Drive, Google Docs, Google Sheets, Outlook, Microsoft Calendar, Teams, SharePoint, Craft, Filesystem, Brave Search, Memory
-
-**If a guide exists for the service:**
-1. **Read the guide content** carefully
-2. **Pay special attention to the "Setup Hints" section** - it contains critical instructions
-3. **Follow any CRITICAL/MANDATORY instructions** before proceeding (e.g., GitHub requires checking for `gh` CLI first)
-4. **ALWAYS verify current API endpoints via WebSearch and/or in-app browser** - URLs and docs change frequently
+1. **Read the official setup and authentication guidance** carefully.
+2. **Check prerequisites** before creating the source (for example, whether a provider recommends its own CLI).
+3. **Verify current API endpoints and required scopes** before writing configuration.
 
 **Why this matters:** Some services have important prerequisites or gotchas that MUST be checked before creating a source. Skipping this step can lead to failed setups or redundant configurations.
 
@@ -187,7 +183,7 @@ What data/functionality this provides. Include:
 ## Examples
 
 Concrete examples tailored to the user's workflow:
-- "To find issues in the Craft iOS project: ..."
+- "To find issues in the Mobile App project: ..."
 - "To search for recent commits by the mobile team: ..."
 ```
 
@@ -204,30 +200,30 @@ Concrete examples tailored to the user's workflow:
 ```
 User: I want to add Linear
 
-Agent: [FIRST: Fetches the Linear setup guide from https://thecraftagents.com/docs]
+Agent: [FIRST: Reads Linear's current official setup documentation]
 
 Agent: I found the Linear setup guide! A few questions:
 1. What will you primarily use Linear for? (issue tracking, sprint planning, reporting?)
 2. Are there specific teams or projects you want to focus on?
 3. Should I set it up for read-only exploration or full access?
 
-User: Issue tracking for my iOS team, project called "Craft iOS"
+User: Issue tracking for my iOS team, project called "Mobile App"
 
 Agent: [Uses WebSearch to verify current Linear MCP URL]
 Agent: [Creates config.json with:
         - icon: (searches web for app icon or uses favicon)
-        - tagline: "Issue tracking for the Craft iOS team"
+        - tagline: "Issue tracking for the Mobile App team"
         - OAuth authentication]
-Agent: [Writes guide.md mentioning "Craft iOS" project and iOS team context]
+Agent: [Writes guide.md mentioning the "Mobile App" project and iOS team context]
 Agent: [Sets up permissions.json for read-only listing in Explore mode]
 Agent: [MANDATORY: Runs source_test to validate]
        mcp__session__source_test({ sourceSlug: "linear" })
 Agent: [Triggers source_oauth_trigger for authentication]
        mcp__session__source_oauth_trigger({ sourceSlug: "linear" })
 
-Agent: Linear is now set up! I've configured it to focus on the "Craft iOS" project.
+Agent: Linear is now set up! I've configured it to focus on the "Mobile App" project.
 You can use it to:
-- Search and view issues in Craft iOS
+- Search and view issues in Mobile App
 - Track sprint progress for the iOS team
 - Create and update issues
 

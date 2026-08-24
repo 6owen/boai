@@ -44,12 +44,26 @@ export interface ScanSkillSourceRequest {
 export interface SkillInstallCandidate {
   slug: string;
   description?: string;
+  /** Classification restored from a BoAI skill-library manifest. */
+  libraryKind?: 'local' | 'vendor' | 'source' | 'snapshot';
+  /** Stable repository id from boai.lock.json. */
+  sourceId?: string;
+  /** Candidate-specific source used to preserve Vendor update provenance. */
+  installSource?: string;
+}
+
+export interface SkillLibraryScanInfo {
+  name: string;
+  vendorCount: number;
+  sourceCount: number;
 }
 
 export interface SkillSourceScanResult {
   /** Source that should be passed back to installSkill (ZIPs resolve to a temp folder). */
   installSource: string;
   candidates: SkillInstallCandidate[];
+  /** Present when the scanned source is a BoAI skill-library repository. */
+  library?: SkillLibraryScanInfo;
 }
 
 /** Scope supported by the skills CLI. */
@@ -167,9 +181,11 @@ export interface SkillUsageItem {
   lastUsedAt: number;
 }
 
-/** Usage attributed to one BoAI LLM connection/model combination. */
+/** Usage attributed to either a BoAI model source or a local Agent application. */
 export interface SkillUsageAgentSource {
   key: string;
+  /** External Agent application identity (BoAI, Codex, Cursor, and so on). */
+  agentId?: string;
   /** Optional human-readable connection name supplied by the caller. */
   label?: string;
   /** Optional provider identifier supplied by the caller. */
@@ -179,6 +195,25 @@ export interface SkillUsageAgentSource {
   count: number;
   sessionCount: number;
   skillCount: number;
+  /** Whether BoAI can currently read usage records for this Agent. */
+  availability?: 'observed' | 'unavailable';
+  /** Exact means instrumented by BoAI; inferred means reconstructed from local logs. */
+  confidence?: 'exact' | 'inferred';
+}
+
+export interface InstalledSkillAgent {
+  agentId: string;
+  agentName: string;
+}
+
+export interface ExternalSkillUsageEvent {
+  agentId: string;
+  agentName: string;
+  confidence: 'exact' | 'inferred';
+  sessionId: string;
+  turnId: string;
+  slug: string;
+  timestamp: number;
 }
 
 /** Optional display metadata used to enrich an Agent source while aggregating. */
@@ -203,14 +238,15 @@ export interface AggregateSkillUsageOptions {
 }
 
 /**
- * Lightweight analytics derived only from sessions stored by BoAI.
+ * Lightweight analytics derived from BoAI sessions and optional local Agent adapters.
  *
  * `requested-or-activated` means a Skill was explicitly attached to a user
  * message or observed through the legacy Skill tool. It does not prove that an
- * external Agent completed the Skill instructions.
+ * external Agent completed the Skill instructions. `scope: system` may include
+ * inferred events reconstructed from bounded local-log scans.
  */
 export interface SkillUsageStats {
-  scope: 'boai';
+  scope: 'boai' | 'system';
   metric: 'requested-or-activated';
   range: SkillUsageRange;
   totals: {
@@ -221,4 +257,8 @@ export interface SkillUsageStats {
   };
   topSkills: SkillUsageItem[];
   agentSources: SkillUsageAgentSource[];
+  coverage?: {
+    detectedAgents: number;
+    observableAgents: number;
+  };
 }

@@ -225,8 +225,8 @@ let messagingHandle: MessagingBootstrapHandle | null = null
 let pendingDeepLink: string | null = null
 
 // Set app name early (before app.whenReady) to ensure correct macOS menu bar title
-// Supports multi-instance dev: CRAFT_APP_NAME env var (e.g., "Craft Agents [1]")
-app.setName(process.env.CRAFT_APP_NAME || 'Craft Agents')
+// Supports multi-instance dev: CRAFT_APP_NAME env var (e.g., "BoAI [1]")
+app.setName(process.env.CRAFT_APP_NAME || 'BoAI')
 
 // Register as default protocol client for craftagents:// URLs
 // This must be done before app.whenReady() on some platforms
@@ -1127,17 +1127,17 @@ app.whenReady().then(async () => {
         type: 'error',
         title: 'Update failed',
         message: 'The update could not be installed.',
-        detail: 'Craft Agents will restart now. The update will be retried on the next launch.',
+        detail: 'BoAI will restart now. The update will be retried on the next launch.',
       })
       app.relaunch()
       app.exit(0)
     })
-    if (app.isPackaged) {
+    if (app.isPackaged && process.env.BOAI_UPDATE_URL?.trim()) {
       checkForUpdatesOnLaunch().catch(err => {
         mainLog.error('[auto-update] Launch check failed:', err)
       })
     } else {
-      mainLog.info('[auto-update] Skipping auto-update in dev mode')
+      mainLog.info('[auto-update] Skipping auto-update: no BoAI update feed is configured')
     }
 
     // Process pending deep link from cold start

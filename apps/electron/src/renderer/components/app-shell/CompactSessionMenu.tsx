@@ -252,7 +252,6 @@ export function CompactSessionMenu({
               sharedUrl={sharedUrl}
               hasMessages={_hasMessages}
               hasUnread={_hasUnread}
-              onShare={closeAfter(actions.share)}
               onOpenShareSub={() => setView('share')}
               onOpenMessagingSub={() => setView('messaging')}
               onMarkUnread={closeAfter(onMarkUnread)}
@@ -292,7 +291,6 @@ interface RootPaneProps {
   sharedUrl?: string
   hasMessages: boolean
   hasUnread: boolean
-  onShare?: () => void
   onOpenShareSub: () => void
   onOpenMessagingSub: () => void
   onMarkUnread?: () => void
@@ -309,7 +307,6 @@ function RootPane({
   sharedUrl,
   hasMessages,
   hasUnread,
-  onShare,
   onOpenShareSub,
   onOpenMessagingSub,
   onMarkUnread,
@@ -325,10 +322,8 @@ function RootPane({
 
   return (
     <div className="flex flex-col">
-      {/* Share / Shared */}
-      {!sharedUrl ? (
-        <Row icon={<CloudUpload className="h-4 w-4" />} label={t('sessionMenu.share')} onTap={onShare} />
-      ) : (
+      {/* BoAI has no public viewer service yet; only manage existing legacy shares. */}
+      {sharedUrl && (
         <Row
           icon={<CloudUpload className="h-4 w-4" />}
           label={t('sessionMenu.shared')}

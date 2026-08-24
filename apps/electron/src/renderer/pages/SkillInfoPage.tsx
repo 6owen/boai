@@ -26,8 +26,7 @@ import {
 } from '@/components/info'
 import type { LoadedSkill } from '../../shared/types'
 import {
-  getSkillCollectionKey,
-  isSelfAuthoredSkill,
+  isSkillInOwnCollection,
   useSkillFavorites,
 } from '@/hooks/useSkillCollections'
 
@@ -56,7 +55,7 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
   const [error, setError] = useState<string | null>(null)
   const activeWorkspace = useActiveWorkspace()
   const canRevealLocally = !activeWorkspace?.remoteServer
-  const { favoriteKeys, toggleFavorite } = useSkillFavorites(workspaceId)
+  const { favoriteKeys, excludedOwnSkillKeys, toggleFavorite } = useSkillFavorites(workspaceId)
 
   // Load skill data
   useEffect(() => {
@@ -144,13 +143,13 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
   }, [collection, skill, t, workspaceId, workingDirectory])
 
   const handleToggleFavorite = useCallback(() => {
-    if (!skill || isSelfAuthoredSkill(skill)) return
-    const wasFavorite = favoriteKeys.has(getSkillCollectionKey(skill))
+    if (!skill) return
+    const wasInOwn = isSkillInOwnCollection(skill, favoriteKeys, excludedOwnSkillKeys)
     toggleFavorite(skill)
-    if (collection === 'own' && wasFavorite) {
+    if (collection === 'own' && wasInOwn) {
       navigate(routes.view.skillsOwn())
     }
-  }, [collection, favoriteKeys, skill, toggleFavorite])
+  }, [collection, excludedOwnSkillKeys, favoriteKeys, skill, toggleFavorite])
 
   // Handle opening in new window
   const handleOpenInNewWindow = useCallback(() => {
@@ -205,8 +204,8 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
             onDelete={skill && !skill.management && skill.source !== 'plugin' ? () => void handleDelete() : undefined}
             canDelete={Boolean(skill && skill.source !== 'plugin')}
             deleteLabel={t('skillInfo.deleteSkill')}
-            isFavorite={skill ? favoriteKeys.has(getSkillCollectionKey(skill)) : false}
-            onToggleFavorite={skill && !isSelfAuthoredSkill(skill) ? handleToggleFavorite : undefined}
+            isFavorite={skill ? isSkillInOwnCollection(skill, favoriteKeys, excludedOwnSkillKeys) : false}
+            onToggleFavorite={skill ? handleToggleFavorite : undefined}
           />
         }
       />

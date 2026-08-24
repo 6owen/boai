@@ -1,7 +1,7 @@
 import { spawn } from 'child_process'
-import { existsSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'fs'
+import { existsSync, mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from 'fs'
 import { homedir, tmpdir } from 'os'
-import { dirname, join } from 'path'
+import { basename, dirname, join } from 'path'
 import { GLOBAL_AGENT_SKILLS_DIR, PROJECT_AGENT_SKILLS_DIR } from './storage.ts'
 import { annotateSkillAgentPlacements } from './agent-placements.ts'
 import type {
@@ -352,7 +352,10 @@ export class SkillsCliService {
     if (candidates.length === 0) {
       throw new Error('No valid skills found. Each skill needs a SKILL.md with name and description.')
     }
-    return { installSource, candidates }
+    const library = await readBoaiSkillLibrary(installSource, candidates)
+    return library
+      ? { installSource, candidates: library.candidates, library: library.info }
+      : { installSource, candidates }
   }
 
   async update(input: UpdateManagedSkillInput): Promise<SkillManagementResult> {
@@ -498,6 +501,306 @@ export function parseSkillListOutput(output: string): SkillInstallCandidate[] {
     }
   }
   return candidates
+}
+
+interface BoaiLibraryLockEntry {
+  kind?: 'local' | 'vendor'
+  sourceId?: string
+  snapshot?: boolean
+}
+
+interface BoaiLibraryLockFile {
+  schemaVersion?: number
+  skills?: Record<string, BoaiLibraryLockEntry>
+}
+
+function findSkillLibraryRoot(source: string): string | undefined {
+  if (!existsSync(source) || !statSync(source).isDirectory()) return undefined
+  if (existsSync(join(source, 'boai.json')) || existsSync(join(source, 'meta.ts'))) return source
+
+  const nested = readdirSync(source, { withFileTypes: true })
+    .filter(entry => entry.isDirectory() && (
+      existsSync(join(source, entry.name, 'boai.json'))
+      || existsSync(join(source, entry.name, 'meta.ts'))
+    ))
+  const nestedName = nested.length === 1 ? nested[0]?.name : undefined
+  return nestedName ? join(source, nestedName) : undefined
+}
+
+function readJsonObject(path: string): Record<string, unknown> | undefined {
+  try {
+    return parseJsonObject(readFileSync(path, 'utf8'))
+  } catch {
+    return undefined
+  }
+}
+
+function parseJsonObject(content: string): Record<string, unknown> | undefined {
+  try {
+    const value = JSON.parse(content)
+    return value && typeof value === 'object' && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function parseGitmoduleSources(content: string): Map<string, string> {
+  const sources = new Map<string, string>()
+
+  let currentPath = ''
+  let currentUrl = ''
+  const flush = () => {
+    if (currentPath && currentUrl) sources.set(currentPath, currentUrl)
+    currentPath = ''
+    currentUrl = ''
+  }
+  for (const line of content.split(/\r?\n/)) {
+    if (/^\s*\[submodule\s+"[^"]+"\]\s*$/.test(line)) {
+      flush()
+      continue
+    }
+    const pathMatch = line.match(/^\s*path\s*=\s*(.+?)\s*$/)
+    if (pathMatch?.[1]) currentPath = pathMatch[1]
+    const urlMatch = line.match(/^\s*url\s*=\s*(.+?)\s*$/)
+    if (urlMatch?.[1]) currentUrl = urlMatch[1]
+  }
+  flush()
+  return sources
+}
+
+function extractAssignmentLiteral(
+  content: string,
+  name: string,
+  opening: '{' | '[',
+  closing: '}' | ']',
+): string | undefined {
+  const assignment = new RegExp(`export\\s+const\\s+${name}[^=]*=`).exec(content)
+  if (!assignment) return undefined
+  const start = content.indexOf(opening, assignment.index + assignment[0].length)
+  if (start < 0) return undefined
+
+  let depth = 0
+  let quote = ''
+  let escaped = false
+  for (let index = start; index < content.length; index++) {
+    const char = content[index]
+    if (quote) {
+      if (escaped) escaped = false
+      else if (char === '\\') escaped = true
+      else if (char === quote) quote = ''
+      continue
+    }
+    if (char === '\'' || char === '"' || char === '`') {
+      quote = char
+      continue
+    }
+    if (char === opening) depth++
+    if (char === closing) {
+      depth--
+      if (depth === 0) return content.slice(start + 1, index)
+    }
+  }
+  return undefined
+}
+
+function readStringValues(content: string | undefined): string[] {
+  if (!content) return []
+  return [...content.matchAll(/['"]([^'"]+)['"]/g)]
+    .map(match => match[1])
+    .filter((value): value is string => Boolean(value))
+}
+
+function enrichCompatibleMetaRepository(
+  name: string,
+  metaContent: string,
+  candidates: SkillInstallCandidate[],
+): {
+  candidates: SkillInstallCandidate[]
+  info: NonNullable<SkillSourceScanResult['library']>
+} | undefined {
+  const submodulesBlock = extractAssignmentLiteral(metaContent, 'submodules', '{', '}')
+  const vendorBlock = extractAssignmentLiteral(metaContent, 'vendors', '{', '}')
+  if (submodulesBlock === undefined && vendorBlock === undefined) return undefined
+
+  const sourceIds = new Set<string>()
+  for (const match of (submodulesBlock ?? '').matchAll(/(?:['"]([^'"]+)['"]|([a-zA-Z0-9._-]+))\s*:\s*['"]([^'"]+)['"]/g)) {
+    const sourceId = match[1] ?? match[2]
+    if (sourceId) sourceIds.add(sourceId)
+  }
+  const vendorsBySlug = new Map<string, { sourceId: string; source: string }>()
+  const vendorEntryPattern = /^\s{2}(?:['"]([^'"]+)['"]|([a-zA-Z0-9._-]+))\s*:\s*\{([\s\S]*?)^\s{2}\},?\s*$/gm
+  for (const match of (vendorBlock ?? '').matchAll(vendorEntryPattern)) {
+    const sourceId = match[1] ?? match[2]
+    const body = match[3] ?? ''
+    const source = body.match(/^\s*source\s*:\s*['"]([^'"]+)['"]/m)?.[1]
+    const skillsBlock = extractAssignmentLiteral(`export const skills = {${body.match(/skills\s*:\s*\{([\s\S]*)/m)?.[1] ?? ''}`, 'skills', '{', '}')
+    if (!sourceId || !source || skillsBlock === undefined) continue
+    for (const skillMatch of skillsBlock.matchAll(/(?:['"][^'"]+['"]|[a-zA-Z0-9._-]+)\s*:\s*['"]([^'"]+)['"]/g)) {
+      const slug = skillMatch[1]
+      if (slug) vendorsBySlug.set(slug, { sourceId, source })
+    }
+  }
+  const manual = new Set(readStringValues(extractAssignmentLiteral(metaContent, 'manual', '[', ']')))
+  const snapshots = new Set(readStringValues(extractAssignmentLiteral(metaContent, 'snapshots', '[', ']')))
+  let vendorCount = 0
+  const enriched = candidates.map(candidate => {
+    const vendor = vendorsBySlug.get(candidate.slug)
+    if (vendor) {
+      vendorCount++
+      return {
+        ...candidate,
+        libraryKind: 'vendor' as const,
+        sourceId: vendor.sourceId,
+        installSource: vendor.source,
+      }
+    }
+    if (sourceIds.has(candidate.slug)) {
+      return { ...candidate, libraryKind: 'source' as const, sourceId: candidate.slug }
+    }
+    if (manual.has(candidate.slug)) return { ...candidate, libraryKind: 'local' as const }
+    if (snapshots.has(candidate.slug)) return { ...candidate, libraryKind: 'snapshot' as const }
+    return candidate
+  })
+
+  return {
+    candidates: enriched,
+    info: { name, vendorCount, sourceCount: sourceIds.size },
+  }
+}
+
+function enrichBoaiSkillLibrary(
+  manifest: Record<string, unknown>,
+  lock: BoaiLibraryLockFile | undefined,
+  gitmodulesContent: string,
+  candidates: SkillInstallCandidate[],
+): {
+  candidates: SkillInstallCandidate[]
+  info: NonNullable<SkillSourceScanResult['library']>
+} | undefined {
+  if (manifest.kind !== 'boai-skill-library') return undefined
+  if (manifest.schemaVersion !== 1) {
+    throw new Error(`Unsupported BoAI skill library schema: ${String(manifest.schemaVersion)}`)
+  }
+  const entries = lock?.skills && typeof lock.skills === 'object' ? lock.skills : {}
+  const gitmodules = parseGitmoduleSources(gitmodulesContent)
+  const bySlug = new Map<string, BoaiLibraryLockEntry>()
+  for (const [identity, entry] of Object.entries(entries)) {
+    const separator = identity.lastIndexOf(':')
+    const slug = separator >= 0 ? identity.slice(separator + 1) : identity
+    if (VALID_SKILL_SLUG.test(slug) && entry && typeof entry === 'object') bySlug.set(slug, entry)
+  }
+
+  let vendorCount = 0
+  const enriched = candidates.map(candidate => {
+    const entry = bySlug.get(candidate.slug)
+    if (!entry) return candidate
+    if (entry.kind === 'local') return { ...candidate, libraryKind: 'local' as const }
+    if (entry.kind !== 'vendor') return candidate
+    if (entry.snapshot) return { ...candidate, libraryKind: 'snapshot' as const }
+
+    vendorCount++
+    const vendorPath = entry.sourceId ? `vendor/${entry.sourceId}` : ''
+    const installSource = vendorPath ? gitmodules.get(vendorPath) : undefined
+    return {
+      ...candidate,
+      libraryKind: 'vendor' as const,
+      ...(entry.sourceId ? { sourceId: entry.sourceId } : {}),
+      ...(installSource ? { installSource } : {}),
+    }
+  })
+
+  return {
+    candidates: enriched,
+    info: {
+      name: typeof manifest.name === 'string' && manifest.name.trim()
+        ? manifest.name.trim()
+        : 'BoAI Skills',
+      vendorCount,
+      sourceCount: [...gitmodules.keys()].filter(path => path.startsWith('sources/')).length,
+    },
+  }
+}
+
+function parseGitHubRepositoryUrl(source: string): { owner: string; repo: string } | undefined {
+  try {
+    const url = new URL(source)
+    if (url.hostname.toLowerCase() !== 'github.com') return undefined
+    const [owner, rawRepo] = url.pathname.replace(/^\/+|\/+$/g, '').split('/')
+    const repo = rawRepo?.replace(/\.git$/i, '')
+    return owner && repo ? { owner, repo } : undefined
+  } catch {
+    return undefined
+  }
+}
+
+async function readGitHubFile(owner: string, repo: string, path: string): Promise<string | undefined> {
+  try {
+    const response = await fetch(`https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${path}`, {
+      headers: {
+        Accept: 'application/vnd.github.raw+json',
+        'User-Agent': 'BoAI',
+      },
+      signal: AbortSignal.timeout(15_000),
+    })
+    return response.ok ? response.text() : undefined
+  } catch {
+    return undefined
+  }
+}
+
+async function readBoaiSkillLibrary(
+  source: string,
+  candidates: SkillInstallCandidate[],
+): Promise<{
+  candidates: SkillInstallCandidate[]
+  info: NonNullable<SkillSourceScanResult['library']>
+} | undefined> {
+  const root = findSkillLibraryRoot(source)
+  if (root) {
+    const manifest = readJsonObject(join(root, 'boai.json'))
+    if (manifest) {
+      const lock = readJsonObject(join(root, 'boai.lock.json')) as BoaiLibraryLockFile | undefined
+      const gitmodules = existsSync(join(root, '.gitmodules'))
+        ? readFileSync(join(root, '.gitmodules'), 'utf8')
+        : ''
+      const library = enrichBoaiSkillLibrary(manifest, lock, gitmodules, candidates)
+      if (!library || !existsSync(join(root, 'meta.ts'))) return library
+      const compatible = enrichCompatibleMetaRepository(
+        library.info.name,
+        readFileSync(join(root, 'meta.ts'), 'utf8'),
+        library.candidates,
+      )
+      return compatible ?? library
+    }
+    if (!existsSync(join(root, 'meta.ts'))) return undefined
+    return enrichCompatibleMetaRepository(
+      basename(root),
+      readFileSync(join(root, 'meta.ts'), 'utf8'),
+      candidates,
+    )
+  }
+
+  const repository = parseGitHubRepositoryUrl(source)
+  if (!repository) return undefined
+  const [manifestContent, lockContent, gitmodules, metaContent] = await Promise.all([
+    readGitHubFile(repository.owner, repository.repo, 'boai.json'),
+    readGitHubFile(repository.owner, repository.repo, 'boai.lock.json'),
+    readGitHubFile(repository.owner, repository.repo, '.gitmodules'),
+    readGitHubFile(repository.owner, repository.repo, 'meta.ts'),
+  ])
+  if (manifestContent) {
+    const manifest = parseJsonObject(manifestContent)
+    if (!manifest) return undefined
+    const lock = lockContent ? parseJsonObject(lockContent) as BoaiLibraryLockFile | undefined : undefined
+    const library = enrichBoaiSkillLibrary(manifest, lock, gitmodules ?? '', candidates)
+    if (!library || !metaContent) return library
+    return enrichCompatibleMetaRepository(library.info.name, metaContent, library.candidates) ?? library
+  }
+  return metaContent
+    ? enrichCompatibleMetaRepository(repository.repo, metaContent, candidates)
+    : undefined
 }
 
 async function extractSkillArchive(source: string): Promise<string> {

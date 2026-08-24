@@ -451,7 +451,7 @@ export interface ElectronAPI {
   updateWorkspaceSetting<K extends keyof WorkspaceSettings>(workspaceId: string, key: K, value: WorkspaceSettings[K]): Promise<void>
 
   // Folder dialog
-  openFolderDialog(): Promise<string | null>
+  openFolderDialog(options?: { title?: string; buttonLabel?: string }): Promise<string | null>
 
   // User Preferences
   readPreferences(): Promise<{ content: string; exists: boolean; path: string }>
@@ -506,6 +506,7 @@ export interface ElectronAPI {
   updateAllGlobalSkills(workspaceId: string, workingDirectory?: string): Promise<SkillManagementResult>
   uninstallSkill(workspaceId: string, request: ManageSkillRequest): Promise<SkillManagementResult>
   deleteSkill(workspaceId: string, request: import('@craft-agent/shared/skills').DeleteSkillRequest): Promise<void>
+  exportOwnSkillLibrary(workspaceId: string, request: import('@craft-agent/shared/personal-repository').ExportOwnSkillLibraryRequest): Promise<import('@craft-agent/shared/personal-repository').ExportOwnSkillLibraryResult>
   openSkillInEditor(workspaceId: string, skillSlug: string): Promise<void>
   openSkillInFinder(workspaceId: string, skillSlug: string): Promise<void>
 

@@ -249,6 +249,7 @@ export const CHANNEL_MAP = {
   updateAllGlobalSkills: invoke(RPC_CHANNELS.skills.UPDATE_ALL_GLOBAL, undefined, 10 * 60_000),
   uninstallSkill: invoke(RPC_CHANNELS.skills.UNINSTALL, undefined, 180_000),
   deleteSkill: invoke(RPC_CHANNELS.skills.DELETE),
+  exportOwnSkillLibrary: invoke(RPC_CHANNELS.skills.EXPORT_LIBRARY),
   openSkillInEditor: invoke(RPC_CHANNELS.skills.OPEN_EDITOR),
   openSkillInFinder: invoke(RPC_CHANNELS.skills.OPEN_FINDER),
   onSkillsChanged: listener(RPC_CHANNELS.skills.CHANGED),

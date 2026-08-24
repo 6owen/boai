@@ -63,7 +63,8 @@
     "./protocol": "./src/protocol/index.ts",
     "./tasks": "./src/tasks/index.ts",
     "./i18n": "./src/i18n/index.ts",
-    "./resources": "./src/resources/index.ts"
+    "./resources": "./src/resources/index.ts",
+    "./personal-repository": "./src/personal-repository/index.ts"
   },
   "dependencies": {
     "@craft-agent/core": "workspace:*",
@@ -72,6 +73,7 @@
     "@leeoniya/ufuzzy": "^1.0.19",
     "bash-parser": "^0.5.0",
     "filtrex": "^3.1.0",
+    "fflate": "^0.8.2",
     "glob": "^13.0.0",
     "date-fns": "^4.1.0",
     "i18next": "^26.0.3",

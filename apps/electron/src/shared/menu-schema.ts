@@ -227,7 +227,7 @@ export const MENU_SECTIONS: MenuSection[] = [EDIT_MENU, VIEW_MENU, WINDOW_MENU]
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Root-level leaf actions exposed in the Craft logo menu.
+ * Root-level leaf actions exposed in the BoAI logo menu.
  *
  * Both DesktopAppMenu (dropdown) and MobileAppMenu (full-screen sheet) read from
  * this collection. Desktop renders all four directly inline. Mobile filters out
@@ -298,7 +298,7 @@ export const HELP_LINKS: MenuItemUrl[] = [
     type: 'url',
     id: 'helpAndDocs',
     labelKey: 'menu.helpAndDocs',
-    url: 'https://thecraftagents.com/docs',
+    url: 'https://github.com/6owen/boai/tree/main/apps/electron/resources/docs',
     icon: 'HelpCircle',
   },
 ]

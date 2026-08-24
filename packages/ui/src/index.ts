@@ -1,5 +1,5 @@
 /**
- * @craft-agent/ui - Shared React UI components for Craft Agent
+ * @craft-agent/ui - Shared React UI components for BoAI
  *
  * This package provides platform-agnostic UI components that work in both:
  * - Electron desktop app (full interactive mode)
@@ -33,6 +33,7 @@ export {
   ResponseCard,
   UserMessageBubble,
   SystemMessage,
+  BoAILogo,
   FileTypeIcon,
   getFileTypeLabel,
   asRecord,
@@ -54,6 +55,7 @@ export {
   type UserMessageBubbleProps,
   type SystemMessageProps,
   type SystemMessageType,
+  type BoAILogoProps,
   type FileTypeIconProps,
   type ActivityItem,
   type ActivityStatus,

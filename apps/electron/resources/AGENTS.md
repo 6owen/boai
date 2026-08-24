@@ -17,7 +17,7 @@ This folder contains assets that are bundled with the Electron app and synced to
 | `themes/` | `~/.craft-agent/themes/` | Always overwrite on launch |
 | `permissions/` | `~/.craft-agent/permissions/` | Always overwrite on launch |
 | `tool-icons/` | `~/.craft-agent/tool-icons/` | Always overwrite on launch |
-| `release-notes/` | `~/.craft-agent/release-notes/` | Always overwrite on launch |
+| `release-notes/roadmap.md` | `~/.craft-agent/release-notes/roadmap.md` | Always overwrite on launch |
 | `config-defaults.json` | `~/.craft-agent/config-defaults.json` | Always overwrite on launch |
 
 ## Why Sync on Every Launch?
@@ -35,7 +35,7 @@ These files are used by electron-builder or the app directly, not synced to user
 | `icon.*` | App icons (icns, ico, png, svg) |
 | `Assets.car` | macOS compiled asset catalog |
 | `dmg-background.*` | DMG installer background |
-| `craft-logos/` | Branding assets |
+| `boai-mascot.png` | Transparent in-product BoAI mascot |
 | `source.png` | Default source icon |
 | `generate-icons.sh` | Icon generation script |
 | `bridge-mcp-server/` | Bundled MCP server for Codex/Copilot API source bridge |
@@ -52,8 +52,10 @@ There is no TypeScript fallback - if the bundled JSON file is missing, the app w
 
 ## Release Notes Authoring
 
+`roadmap.md` is the only document shown in BoAI's in-app Roadmap panel. Update it
+when product direction changes. `next.md` remains the scratch file for future
+versioned BoAI release notes and is not rendered in that panel.
+
 **Never create `{version}.md` files in feature commits.** Versioned files in `release-notes/` are owned by the release skill — it consolidates pending entries into `{version}.md` at release-prep time and resets the scratch file.
 
-For PRs that add user-visible behavior, append a bullet to the relevant section in [`release-notes/next.md`](release-notes/next.md). Match the tone and depth of recent versioned files (e.g. `0.9.0.md`): bold short title — detailed paragraph — issue reference — commit hash.
-
-**Why this exists:** during v0.9.0 prep, two feature commits had pre-emptively written `0.8.14.md` and `0.8.15.md` (guessing patch releases), but the changes ended up rolled into a minor. Both files had to be deleted and folded back in — without that cleanup, they would have surfaced as ghost versions in the in-app release-notes panel.
+For changes that will later ship in a versioned BoAI release, append a bullet to the relevant section in [`release-notes/next.md`](release-notes/next.md): bold short title followed by a concise user-facing explanation.

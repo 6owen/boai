@@ -12,6 +12,8 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
+import { isSkillInOwnCollection } from '@/hooks/useSkillCollections'
+import type { LoadedSkill } from '../../../shared/types'
 import type {
   SkillInstallSourceKind,
   SkillManagementScope,
@@ -22,6 +24,10 @@ interface InstallSkillPopoverContentProps {
   workspaceId: string
   workingDirectory?: string
   variant: 'local' | 'git'
+  mode?: 'install' | 'import-own'
+  favoriteKeys?: ReadonlySet<string>
+  excludedOwnSkillKeys?: ReadonlySet<string>
+  onAddToOwn?: (skill: Pick<LoadedSkill, 'slug' | 'source'>) => void
   onClose: () => void
   onBusyChange?: (busy: boolean) => void
 }
@@ -49,6 +55,10 @@ export function InstallSkillPopoverContent({
   workspaceId,
   workingDirectory,
   variant,
+  mode = 'install',
+  favoriteKeys = new Set(),
+  excludedOwnSkillKeys = new Set(),
+  onAddToOwn,
   onClose,
   onBusyChange,
 }: InstallSkillPopoverContentProps) {
@@ -56,6 +66,7 @@ export function InstallSkillPopoverContent({
   const [kind, setKind] = React.useState<SkillInstallSourceKind>(variant === 'git' ? 'git' : 'folder')
   const [source, setSource] = React.useState('')
   const [scanResult, setScanResult] = React.useState<SkillSourceScanResult | null>(null)
+  const [existingSkills, setExistingSkills] = React.useState<Map<string, LoadedSkill>>(new Map())
   const [selected, setSelected] = React.useState<Set<string>>(new Set())
   const [scope, setScope] = React.useState<SkillManagementScope>('global')
   const [scanning, setScanning] = React.useState(false)
@@ -84,10 +95,28 @@ export function InstallSkillPopoverContent({
     setScanResult(null)
     setStatuses({})
     try {
-      const result = await window.electronAPI.scanSkillSource(workspaceId, { source: trimmed, kind: nextKind })
+      const [result, loadedSkills] = await Promise.all([
+        window.electronAPI.scanSkillSource(workspaceId, { source: trimmed, kind: nextKind }),
+        mode === 'import-own'
+          ? window.electronAPI.getSkills(workspaceId, workingDirectory)
+          : Promise.resolve([] as LoadedSkill[]),
+      ])
+      const bySlug = new Map<string, LoadedSkill>()
+      for (const skill of loadedSkills) {
+        const current = bySlug.get(skill.slug)
+        if (!current || isSkillInOwnCollection(skill, favoriteKeys, excludedOwnSkillKeys)) {
+          bySlug.set(skill.slug, skill)
+        }
+      }
       setSource(trimmed)
       setScanResult(result)
-      setSelected(new Set(result.candidates.map(candidate => candidate.slug)))
+      setExistingSkills(bySlug)
+      setSelected(new Set(result.candidates
+        .filter(candidate => {
+          const installed = bySlug.get(candidate.slug)
+          return !installed || !isSkillInOwnCollection(installed, favoriteKeys, excludedOwnSkillKeys)
+        })
+        .map(candidate => candidate.slug)))
     } catch (error) {
       toast.error(t('skillsManager.scanFailed'), {
         description: error instanceof Error ? error.message : String(error),
@@ -95,7 +124,7 @@ export function InstallSkillPopoverContent({
     } finally {
       setScanning(false)
     }
-  }, [kind, source, t, workspaceId])
+  }, [excludedOwnSkillKeys, favoriteKeys, kind, mode, source, t, workspaceId, workingDirectory])
 
   const selectFiles = React.useCallback((files: FileList | null, selectedKind: 'folder' | 'zip') => {
     const file = files?.[0]
@@ -125,12 +154,18 @@ export function InstallSkillPopoverContent({
     for (const candidate of scanResult.candidates.filter(item => selected.has(item.slug))) {
       setStatuses(current => ({ ...current, [candidate.slug]: 'installing' }))
       try {
-        await window.electronAPI.installSkill(workspaceId, {
-          source: scanResult.installSource,
-          slug: candidate.slug,
-          scope,
-          workingDirectory,
-        })
+        const existing = existingSkills.get(candidate.slug)
+        if (mode === 'import-own' && existing) {
+          onAddToOwn?.(existing)
+        } else {
+          await window.electronAPI.installSkill(workspaceId, {
+            source: candidate.installSource ?? scanResult.installSource,
+            slug: candidate.slug,
+            scope: mode === 'import-own' ? 'global' : scope,
+            workingDirectory,
+          })
+          if (mode === 'import-own') onAddToOwn?.({ slug: candidate.slug, source: 'global' })
+        }
         setStatuses(current => ({ ...current, [candidate.slug]: 'installed' }))
       } catch {
         failed += 1
@@ -138,10 +173,14 @@ export function InstallSkillPopoverContent({
       }
     }
     if (failed === 0) {
-      toast.success(t('skillsManager.installedCount', { count: selected.size }))
+      toast.success(t(mode === 'import-own' ? 'skillsLibrary.importedCount' : 'skillsManager.installedCount', {
+        count: selected.size,
+      }))
       onClose()
     } else {
-      toast.error(t('skillsManager.installPartialFailed', { count: failed }))
+      toast.error(t(mode === 'import-own' ? 'skillsLibrary.importPartialFailed' : 'skillsManager.installPartialFailed', {
+        count: failed,
+      }))
     }
   }
 
@@ -149,11 +188,22 @@ export function InstallSkillPopoverContent({
     setKind(nextKind)
     setSource('')
     setScanResult(null)
+    setExistingSkills(new Map())
     setSelected(new Set())
     setStatuses({})
   }
 
   const isUrlMode = kind === 'url' || kind === 'git'
+  const selectableSlugs = scanResult?.candidates
+    .filter(candidate => {
+      const installed = existingSkills.get(candidate.slug)
+      return mode !== 'import-own'
+        || !installed
+        || !isSkillInOwnCollection(installed, favoriteKeys, excludedOwnSkillKeys)
+    })
+    .map(candidate => candidate.slug) ?? []
+  const allSelectableSelected = selectableSlugs.length > 0
+    && selectableSlugs.every(slug => selected.has(slug))
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -281,15 +331,25 @@ export function InstallSkillPopoverContent({
           {scanResult && (
             <div className="mx-3 mb-3 flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border/60">
               <div className="flex shrink-0 items-center justify-between border-b border-border/50 px-3 py-2 text-xs text-muted-foreground">
-                <span>{t('skillsManager.foundSkills', { count: scanResult.candidates.length })}</span>
+                <div>
+                  <span>{t('skillsManager.foundSkills', { count: scanResult.candidates.length })}</span>
+                  {scanResult.library && (
+                    <span className="mt-0.5 block text-[11px] text-muted-foreground/80">
+                      {t('skillsLibrary.vendorCount', { count: scanResult.library.vendorCount })}
+                      {' · '}
+                      {t('skillsLibrary.sourceCount', { count: scanResult.library.sourceCount })}
+                    </span>
+                  )}
+                </div>
                 <button
                   type="button"
                   className="rounded-[5px] px-1.5 py-0.5 transition-colors hover:bg-foreground/[0.04] hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                  onClick={() => setSelected(selected.size === scanResult.candidates.length
+                  disabled={selectableSlugs.length === 0}
+                  onClick={() => setSelected(allSelectableSelected
                     ? new Set()
-                    : new Set(scanResult.candidates.map(candidate => candidate.slug)))}
+                    : new Set(selectableSlugs))}
                 >
-                  {selected.size === scanResult.candidates.length
+                  {allSelectableSelected
                     ? t('skillsManager.selectNone')
                     : t('skillsManager.selectAll')}
                 </button>
@@ -298,13 +358,17 @@ export function InstallSkillPopoverContent({
                 {scanResult.candidates.map(candidate => {
                   const checked = selected.has(candidate.slug)
                   const status = statuses[candidate.slug]
+                  const installed = existingSkills.get(candidate.slug)
+                  const alreadyInOwn = mode === 'import-own'
+                    && installed
+                    && isSkillInOwnCollection(installed, favoriteKeys, excludedOwnSkillKeys)
                   return (
                     <button
                       key={candidate.slug}
                       type="button"
                       aria-pressed={checked}
                       onClick={() => toggleCandidate(candidate.slug)}
-                      disabled={installing}
+                      disabled={installing || alreadyInOwn}
                       className="flex w-full items-start gap-2.5 rounded-[7px] px-2 py-2 text-left transition-colors hover:bg-foreground/[0.04] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none"
                     >
                       <span className={cn(
@@ -320,10 +384,19 @@ export function InstallSkillPopoverContent({
                             {candidate.description}
                           </span>
                         )}
+                        {candidate.libraryKind && (
+                          <span className="mt-1 block truncate text-[11px] leading-4 text-muted-foreground/80">
+                            {t(`skillsLibrary.kind.${candidate.libraryKind}`)}
+                            {candidate.sourceId ? ` · ${candidate.sourceId}` : ''}
+                          </span>
+                        )}
                       </span>
                       {status === 'installing' && <LoaderCircle className="mt-0.5 h-3.5 w-3.5 animate-spin" />}
                       {status === 'installed' && <Check className="mt-0.5 h-3.5 w-3.5 text-success" />}
                       {status === 'failed' && <span className="text-xs text-destructive">{t('common.failed')}</span>}
+                      {!status && alreadyInOwn && (
+                        <span className="shrink-0 text-xs text-muted-foreground">{t('skillsLibrary.alreadyInOwn')}</span>
+                      )}
                     </button>
                   )
                 })}
@@ -335,7 +408,7 @@ export function InstallSkillPopoverContent({
 
       {scanResult && (
         <div className="flex shrink-0 items-end justify-between gap-3 border-t border-border/50 p-3">
-          <div>
+          {mode === 'install' && <div>
             <div className="mb-1.5 text-xs font-medium text-muted-foreground">{t('skillsManager.scopeLabel')}</div>
             <div className="flex rounded-[7px] bg-foreground-2 p-0.5 shadow-minimal">
               <button
@@ -363,7 +436,8 @@ export function InstallSkillPopoverContent({
                 {t('skillsManager.scopeProject')}
               </button>
             </div>
-          </div>
+          </div>}
+          {mode === 'import-own' && <div />}
           <Button
             size="sm"
             className="h-9 gap-1.5"
@@ -371,7 +445,9 @@ export function InstallSkillPopoverContent({
             disabled={selected.size === 0 || installing}
           >
             {installing && <LoaderCircle className="animate-spin" />}
-            {t('skillsManager.installSelected', { count: selected.size })}
+            {t(mode === 'import-own' ? 'skillsLibrary.importSelected' : 'skillsManager.installSelected', {
+              count: selected.size,
+            })}
           </Button>
         </div>
       )}

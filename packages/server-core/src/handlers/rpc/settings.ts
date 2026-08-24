@@ -84,10 +84,14 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
   })
 
   // Open native folder dialog for selecting working directory (routed to client)
-  server.handle(RPC_CHANNELS.dialog.OPEN_FOLDER, async (ctx) => {
+  server.handle(RPC_CHANNELS.dialog.OPEN_FOLDER, async (
+    ctx,
+    options?: { title?: string; buttonLabel?: string },
+  ) => {
     const result = await requestClientOpenFileDialog(server, ctx.clientId, {
       properties: ['openDirectory', 'createDirectory'],
-      title: 'Select Working Directory',
+      title: options?.title || 'Select Working Directory',
+      buttonLabel: options?.buttonLabel,
     })
     return result.canceled ? null : result.filePaths[0]
   })

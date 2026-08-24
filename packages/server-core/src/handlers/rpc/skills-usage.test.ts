@@ -170,7 +170,12 @@ function invokeUsageHandler(
   `
   const run = Bun.spawnSync([process.execPath, '--eval', script], {
     cwd: join(import.meta.dir, '..', '..', '..', '..', '..'),
-    env: { ...process.env, CRAFT_CONFIG_DIR: configDir },
+    env: {
+      ...process.env,
+      HOME: configDir,
+      CODEX_HOME: join(configDir, '.codex'),
+      CRAFT_CONFIG_DIR: configDir,
+    },
     stdout: 'pipe',
     stderr: 'pipe',
   })
@@ -191,7 +196,7 @@ afterEach(() => {
 })
 
 describe('Skill usage RPC handler', () => {
-  it('registers GET_USAGE_STATS and returns connection-enriched workspace usage', () => {
+  it('registers GET_USAGE_STATS and returns system Agent usage', () => {
     const { configDir } = setupWorkspace()
 
     const response = invokeUsageHandler(configDir, 'workspace-1', '30d')
@@ -199,7 +204,7 @@ describe('Skill usage RPC handler', () => {
     expect(response.ok).toBe(true)
     expect(response.registered).toContain(RPC_CHANNELS.skills.GET_USAGE_STATS)
     expect(response.result).toMatchObject({
-      scope: 'boai',
+      scope: 'system',
       metric: 'requested-or-activated',
       range: '30d',
       totals: {
@@ -214,15 +219,19 @@ describe('Skill usage RPC handler', () => {
         sessionCount: 1,
       }],
       agentSources: [{
-        key: 'work-anthropic::claude-sonnet-4-5',
-        label: 'Team Anthropic',
-        provider: 'anthropic',
-        llmConnection: 'work-anthropic',
-        model: 'claude-sonnet-4-5',
+        key: 'agent:boai',
+        agentId: 'boai',
+        label: 'BoAI',
+        availability: 'observed',
+        confidence: 'exact',
         count: 1,
         sessionCount: 1,
         skillCount: 1,
       }],
+      coverage: {
+        detectedAgents: 1,
+        observableAgents: 1,
+      },
     })
   })
 
