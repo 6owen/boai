@@ -752,13 +752,13 @@ services:
       # - CRAFT_RPC_TLS_CERT=/certs/cert.pem
       # - CRAFT_RPC_TLS_KEY=/certs/key.pem
     volumes:
-      - craft-data:/root/.craft-agent
+      - boai-data:/root/.boai
       # TLS — mount cert directory
       # - ./certs:/certs:ro
     restart: unless-stopped
 
 volumes:
-  craft-data:
+  boai-data:
 `;
   writeFileSync(join(outputDir, 'docker-compose.yml'), dockerCompose);
 }

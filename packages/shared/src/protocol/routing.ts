@@ -67,6 +67,7 @@ export const LOCAL_ONLY_CHANNELS = new Set<string>([
   // system — local OS info
   RPC_CHANNELS.system.VERSIONS,
   RPC_CHANNELS.system.HOME_DIR,
+  RPC_CHANNELS.system.DATA_ROOT,
   RPC_CHANNELS.system.IS_DEBUG_MODE,
 
   // theme — app/OS-level preferences, not workspace content
@@ -88,6 +89,7 @@ export const LOCAL_ONLY_CHANNELS = new Set<string>([
 
   // update — local auto-update
   RPC_CHANNELS.update.CHECK,
+  RPC_CHANNELS.update.DOWNLOAD,
   RPC_CHANNELS.update.GET_INFO,
   RPC_CHANNELS.update.INSTALL,
   RPC_CHANNELS.update.DISMISS,

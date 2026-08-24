@@ -1,6 +1,7 @@
 # Releasing BoAI
 
-BoAI releases are built from version tags and published to the public
+BoAI releases are built automatically after the `Validate` workflow succeeds
+for a push to `main`, and are published to the public
 [`6owen/boai`](https://github.com/6owen/boai) repository.
 
 ## Create a release
@@ -17,16 +18,24 @@ bun run release -- --release 1.2.3
 `bumpp` updates the root and workspace package versions, verifies they match,
 and creates a `chore: release vX.Y.Z` commit and tag. The release wrapper then
 pushes only the current branch and that exact tag, so inherited local tags are
-never uploaded. The tag starts the release workflow, which:
+never uploaded. Once validation for the new `main` commit succeeds, the release
+workflow:
 
-1. Creates a draft GitHub Release.
-2. Builds macOS arm64 and Windows x64 packages.
-3. Uploads the installers and `latest*.yml` update manifests.
-4. Publishes the release only after every platform succeeds.
+1. Verifies that every workspace uses the root package version.
+2. Creates `vX.Y.Z` at the validated commit if the tag does not exist yet.
+3. Creates a draft GitHub Release.
+4. Builds macOS arm64 and Windows x64 packages.
+5. Uploads the installers and `latest*.yml` update manifests.
+6. Publishes the release only after every platform succeeds.
+
+The same automation also works when a version bump reaches `main` through a
+pull request without using the local release wrapper. A normal push that keeps
+an already-published version is reported as skipped instead of rebuilding or
+overwriting the existing release.
 
 If a build fails, the release stays in draft form so it is never offered by the
-automatic updater. A failed or skipped tag build can be restarted from Actions
-with **Run workflow** and the existing version tag.
+automatic updater. A failed build can be restarted from Actions with
+**Run workflow** and the existing version tag.
 
 ## Manual update installation
 

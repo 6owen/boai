@@ -8,13 +8,12 @@
 
 import { createHash } from 'crypto';
 import { join } from 'path';
-import { homedir } from 'os';
 import { existsSync, mkdirSync, writeFileSync, readFileSync } from 'fs';
 import { getBundledAssetsDir } from '../utils/paths.ts';
 import { debug } from '../utils/debug.ts';
+import { APP_PATHS } from '../config/paths.ts';
 
-const CONFIG_DIR = join(homedir(), '.craft-agent');
-const ROADMAP_DIR = join(CONFIG_DIR, 'release-notes');
+const ROADMAP_DIR = APP_PATHS.releaseNotesDir;
 const ROADMAP_FILENAME = 'roadmap.md';
 
 let roadmapInitialized = false;

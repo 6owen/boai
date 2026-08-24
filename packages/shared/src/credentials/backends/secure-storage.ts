@@ -1,7 +1,7 @@
 /**
  * Secure Storage Backend
  *
- * Stores credentials in an encrypted file at ~/.craft-agent/credentials.enc
+ * Stores credentials in an encrypted file at ~/.boai/credentials.enc
  * Uses AES-256-GCM for authenticated encryption.
  *
  * Encryption key is derived from OS-native hardware UUID using PBKDF2:
@@ -39,10 +39,11 @@ import { join, dirname } from 'path';
 import type { CredentialBackend } from './types.ts';
 import type { CredentialId, StoredCredential } from '../types.ts';
 import { credentialIdToAccount, accountToCredentialId } from '../types.ts';
+import { APP_PATHS, CONFIG_DIR } from '../../config/paths.ts';
 
 // File location
-const CREDENTIALS_DIR = join(homedir(), '.craft-agent');
-const CREDENTIALS_FILE = join(CREDENTIALS_DIR, 'credentials.enc');
+const CREDENTIALS_DIR = CONFIG_DIR;
+const CREDENTIALS_FILE = APP_PATHS.credentialsFile;
 
 // File format constants
 const MAGIC_BYTES = Buffer.from('CRAFT01\0');

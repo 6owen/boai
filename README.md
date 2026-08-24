@@ -144,12 +144,16 @@ boai/
 
 ## 数据目录与兼容边界
 
-BoAI 当前仍使用 `~/.craft-agent/` 作为本地数据目录，并保留以下内部兼容标识：
+BoAI 默认使用 `~/.boai/` 作为本地数据目录。可通过 `BOAI_HOME` 指定其他目录；
+旧的 `CRAFT_CONFIG_DIR` 仍作为弃用兼容项保留一个迁移周期。`~/.craft-agent/`
+只作为旧数据来源保留，BoAI 不会自动覆盖、合并或删除它。
+
+项目仍暂时保留以下内部兼容标识：
 
 - `@craft-agent/*` Workspace 包名
 - `CRAFT_*` 环境变量
 - `craftagents://` Deep Link 协议
-- 既有 App ID、OAuth 回调和本地日志路径
+- 既有 App ID 与 OAuth 回调
 
 这些标识不会作为 BoAI 产品品牌展示。它们暂时保留，是为了兼容已有数据、导入路径、脚本、OAuth 和 Deep Link；在没有迁移方案前，不建议直接批量重命名。
 

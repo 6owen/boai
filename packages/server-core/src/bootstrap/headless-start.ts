@@ -4,7 +4,7 @@ import { uptime as osUptime } from 'node:os'
 import { join, basename } from 'node:path'
 import { lockHolderMatchesLock, parseTasklistImageName, type LockIdentity } from './lock-identity.ts'
 import { OAuthFlowStore } from '@craft-agent/shared/auth'
-import { ensureConfigDir, loadStoredConfig, saveConfig } from '@craft-agent/shared/config'
+import { ensureConfigDir, inspectDataRoots, loadStoredConfig, saveConfig } from '@craft-agent/shared/config'
 import { CONFIG_DIR } from '@craft-agent/shared/config/paths'
 import { setBundledAssetsRoot } from '@craft-agent/shared/utils'
 import { WsRpcServer, type WsRpcTlsOptions } from '../transport/server'
@@ -262,7 +262,7 @@ function acquireServerLock(logger: PlatformServices['logger']): void {
             throw new Error(
               `Another server instance is already running (PID ${lock.pid}). ` +
               `If this is stale, delete ${LOCK_FILE} and retry. ` +
-              `To run a parallel instance (e.g. for dev), set CRAFT_CONFIG_DIR to a different path.`
+              `To run a parallel instance (e.g. for dev), set BOAI_HOME to a different path.`
             )
           }
         } else {
@@ -309,6 +309,19 @@ export function releaseServerLock(): void {
 // ---------------------------------------------------------------------------
 
 function bootstrapConfigArtifacts(platform: PlatformServices): void {
+  const roots = inspectDataRoots()
+  platform.logger.info(`[bootstrap] Active BoAI data root: ${roots.activeRoot} (${roots.source})`)
+  if (roots.status === 'conflict') {
+    platform.logger.warn(
+      `[bootstrap] Both ${roots.activeRoot} and legacy ${roots.legacyRoot} contain user data. ` +
+      `Using ${roots.activeRoot}; the legacy directory will not be modified or merged automatically.`,
+    )
+  } else if (roots.status === 'legacy-only') {
+    platform.logger.warn(
+      `[bootstrap] Legacy data exists at ${roots.legacyRoot}, but BoAI now writes to ${roots.activeRoot}. ` +
+      'The legacy directory will not be modified automatically.',
+    )
+  }
   ensureConfigDir()
   platform.logger.info('[bootstrap] Config artifacts initialized')
 }

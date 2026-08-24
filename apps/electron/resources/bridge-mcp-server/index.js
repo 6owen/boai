@@ -17919,7 +17919,8 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 function getCredentialCachePath(workspaceId, sourceSlug) {
-  return join(homedir(), ".craft-agent", "workspaces", workspaceId, "sources", sourceSlug, ".credential-cache.json");
+  const dataRoot = process.env.BOAI_HOME || process.env.CRAFT_CONFIG_DIR || join(homedir(), ".boai");
+  return join(dataRoot, "workspaces", workspaceId, "sources", sourceSlug, ".credential-cache.json");
 }
 function readCredential(workspaceId, sourceSlug) {
   const cachePath = getCredentialCachePath(workspaceId, sourceSlug);

@@ -1,9 +1,13 @@
 name: Release desktop apps
 
 on:
-  push:
-    tags:
-      - "v*"
+  workflow_run:
+    workflows:
+      - Validate
+    types:
+      - completed
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       tag:
@@ -15,40 +19,81 @@ permissions:
   contents: write
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ github.event.workflow_run.head_sha || inputs.tag || github.run_id }}
   cancel-in-progress: false
 
 jobs:
   prepare:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.version.outputs.tag }}
+      should_release: ${{ steps.version.outputs.should_release }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ inputs.tag || github.event.workflow_run.head_sha }}
+          fetch-depth: 0
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: "1.3.10"
 
-      - name: Verify tag and workspace versions
+      - name: Verify versions and prepare release tag
         id: version
         shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_TAG: ${{ inputs.tag }}
         run: |
           VERSION=$(node -p "require('./package.json').version")
           EXPECTED_TAG="v${VERSION}"
-          RELEASE_TAG="${{ inputs.tag || github.ref_name }}"
-          if [ "$RELEASE_TAG" != "$EXPECTED_TAG" ]; then
-            echo "Tag $RELEASE_TAG does not match package version $VERSION" >&2
+          CURRENT_SHA=$(git rev-parse HEAD)
+
+          if [ -n "$REQUESTED_TAG" ] && [ "$REQUESTED_TAG" != "$EXPECTED_TAG" ]; then
+            echo "Tag $REQUESTED_TAG does not match package version $VERSION" >&2
             exit 1
           fi
+
           bun run check-version
           echo "tag=$EXPECTED_TAG" >> "$GITHUB_OUTPUT"
 
+          if git rev-parse --verify --quiet "refs/tags/${EXPECTED_TAG}^{}" >/dev/null; then
+            TAG_SHA=$(git rev-parse "refs/tags/${EXPECTED_TAG}^{}")
+            if [ "$TAG_SHA" != "$CURRENT_SHA" ]; then
+              if [ "$EVENT_NAME" = "workflow_run" ]; then
+                echo "should_release=false" >> "$GITHUB_OUTPUT"
+                echo "::notice title=Release skipped::$EXPECTED_TAG already points to $TAG_SHA. Bump the package version to publish $CURRENT_SHA."
+                exit 0
+              fi
+
+              echo "Tag $EXPECTED_TAG does not point to the checked-out commit $CURRENT_SHA" >&2
+              exit 1
+            fi
+          else
+            if [ "$EVENT_NAME" != "workflow_run" ]; then
+              echo "Tag $EXPECTED_TAG does not exist" >&2
+              exit 1
+            fi
+
+            git tag "$EXPECTED_TAG" "$CURRENT_SHA"
+            git push origin "refs/tags/${EXPECTED_TAG}:refs/tags/${EXPECTED_TAG}"
+          fi
+
+          RELEASE_DRAFT=$(gh release view "$EXPECTED_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft' 2>/dev/null || true)
+          if [ "$EVENT_NAME" = "workflow_run" ] && [ "$RELEASE_DRAFT" = "false" ]; then
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Release skipped::$EXPECTED_TAG is already published. Bump the package version for the next release."
+            exit 0
+          fi
+
+          echo "should_release=true" >> "$GITHUB_OUTPUT"
+
       - name: Create draft release
+        if: steps.version.outputs.should_release == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.version.outputs.tag }}
@@ -58,6 +103,7 @@ jobs:
 
   build:
     needs: prepare
+    if: needs.prepare.outputs.should_release == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -123,6 +169,7 @@ jobs:
 
   publish:
     needs: [prepare, build]
+    if: needs.prepare.outputs.should_release == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Publish release

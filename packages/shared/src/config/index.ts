@@ -1,4 +1,6 @@
 export * from './types.ts';
+export * from './paths.ts';
+export * from './data-root.ts';
 export * from './llm-connections.ts';
 export * from './llm-validation.ts';
 export * from './models.ts';

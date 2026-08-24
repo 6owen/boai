@@ -99,6 +99,7 @@ export const CHANNEL_MAP = {
   // System
   getVersions: invoke(RPC_CHANNELS.system.VERSIONS),
   getHomeDir: invoke(RPC_CHANNELS.system.HOME_DIR),
+  getDataRoot: invoke(RPC_CHANNELS.system.DATA_ROOT),
   isDebugMode: invoke(RPC_CHANNELS.system.IS_DEBUG_MODE),
 
   // Auto-update
