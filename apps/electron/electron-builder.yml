@@ -115,6 +115,9 @@ win:
     - "!**/*.map"
     - package.json
     - "!node_modules/**/*"
+    # Copy the large main bundle separately below. electron-builder's parallel
+    # Windows file copier can repeatedly lock this freshly generated file.
+    - "!dist/main.cjs"
     # WORKAROUND: Exclude uv from regular files on Windows.
     # electron-builder's npm node module collector causes EBUSY errors when copying
     # .exe files because it scans/locks files while simultaneously trying to copy them.
@@ -123,6 +126,8 @@ win:
     - "!dist/resources/bin/win32-x64/**"
   # Copy executables as extraResources to avoid EBUSY file locking (see comment above)
   extraResources:
+    - from: dist/main.cjs
+      to: app/dist/main.cjs
     - from: node_modules/@vscode/ripgrep
       to: app/node_modules/@vscode/ripgrep
     - from: dist/resources/bin/win32-x64
