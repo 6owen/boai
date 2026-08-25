@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'bun:test'
 import {
+  addSkillGroup,
   addSkillToOwnCollectionState,
+  assignSkillGroup,
   getSkillCollectionKey,
   isSelfAuthoredSkill,
   isSkillInOwnCollection,
+  removeSkillGroup,
+  renameSkillGroup,
 } from '../useSkillCollections'
 
 describe('skill collections', () => {
@@ -47,5 +51,34 @@ describe('skill collections', () => {
     )
 
     expect(next.excludedOwnSkillKeys).toEqual(new Set())
+  })
+
+  it('creates and renames lightweight skill groups without duplicates', () => {
+    const created = addSkillGroup([], '  写文章  ', 'writing')
+    expect(created).toEqual([{ id: 'writing', name: '写文章' }])
+    expect(addSkillGroup(created, '写文章', 'duplicate')).toEqual(created)
+    expect(renameSkillGroup(created, 'writing', ' 内容创作 ')).toEqual([
+      { id: 'writing', name: '内容创作' },
+    ])
+  })
+
+  it('moves a skill between a group and ungrouped', () => {
+    const key = getSkillCollectionKey(globalSkill)
+    const grouped = assignSkillGroup({}, key, 'coding')
+    expect(grouped).toEqual({ [key]: 'coding' })
+    expect(assignSkillGroup(grouped, key)).toEqual({})
+  })
+
+  it('returns grouped skills to ungrouped when deleting a group', () => {
+    const key = getSkillCollectionKey(globalSkill)
+    const result = removeSkillGroup(
+      [{ id: 'coding', name: '写代码' }, { id: 'writing', name: '写文章' }],
+      { [key]: 'coding' },
+      'coding',
+    )
+    expect(result).toEqual({
+      groups: [{ id: 'writing', name: '写文章' }],
+      assignments: {},
+    })
   })
 })

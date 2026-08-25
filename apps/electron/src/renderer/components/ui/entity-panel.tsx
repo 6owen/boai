@@ -7,7 +7,7 @@
 
 import * as React from 'react'
 import { useAction } from '@/actions'
-import { EntityList } from './entity-list'
+import { EntityList, type EntityListGroup } from './entity-list'
 import { EntityRow } from './entity-row'
 import { useEntityListInteractions } from '@/hooks/useEntityListInteractions'
 import type { createEntitySelection } from '@/hooks/useEntitySelection'
@@ -25,6 +25,13 @@ export interface EntityPanelItem {
 
 export interface EntityPanelProps<T> {
   items: T[]
+  /** Optional grouped presentation. `items` must contain the same entries in visual order. */
+  groups?: EntityListGroup<T>[]
+  /** Set of collapsed group keys for collapsible grouped presentations. */
+  collapsedGroups?: Set<string>
+  onToggleCollapse?: (groupKey: string) => void
+  onCollapseAll?: () => void
+  onExpandAll?: () => void
   getId: (item: T) => string
   mapItem: (item: T) => EntityPanelItem
   selection: ReturnType<typeof createEntitySelection>
@@ -39,6 +46,11 @@ export interface EntityPanelProps<T> {
 
 export function EntityPanel<T>({
   items,
+  groups,
+  collapsedGroups,
+  onToggleCollapse,
+  onCollapseAll,
+  onExpandAll,
   getId,
   mapItem,
   selection,
@@ -69,40 +81,52 @@ export function EntityPanel<T>({
   const mergedContainerProps = containerProps
     ? { ...interactions.listProps.containerProps, ...containerProps }
     : interactions.listProps.containerProps
+  const itemIndexes = React.useMemo(
+    () => new Map(items.map((item, index) => [getId(item), index])),
+    [getId, items],
+  )
+
+  const renderItem = (item: T, index: number, isFirst: boolean) => {
+    const mapped = mapItem(item)
+    const globalIndex = itemIndexes.get(getId(item)) ?? index
+    const rowProps = interactions.getRowProps(item, globalIndex)
+    return (
+      <EntityRow
+        icon={mapped.icon}
+        title={mapped.title}
+        badges={mapped.badges}
+        trailing={mapped.trailing}
+        rowAction={mapped.rowAction}
+        isSelected={selectedId === getId(item)}
+        isInMultiSelect={rowProps.isInMultiSelect}
+        showSeparator={!isFirst}
+        onMouseDown={(e) => {
+          rowProps.onMouseDown(e)
+          if (!e.metaKey && !e.ctrlKey && !e.shiftKey && e.button !== 2) {
+            onItemClick(item)
+          }
+        }}
+        buttonProps={rowProps.buttonProps}
+        menuContent={mapped.menu}
+        dataAttributes={mapped.dataAttributes}
+      />
+    )
+  }
 
   return (
     <EntityList
       items={items}
+      groups={groups}
+      collapsedGroups={collapsedGroups}
+      onToggleCollapse={onToggleCollapse}
+      onCollapseAll={onCollapseAll}
+      onExpandAll={onExpandAll}
       getKey={getId}
       containerRef={interactions.listProps.containerRef}
       containerProps={mergedContainerProps}
       className={className}
       emptyState={emptyState}
-      renderItem={(item, index, isFirst) => {
-        const mapped = mapItem(item)
-        const rowProps = interactions.getRowProps(item, index)
-        return (
-          <EntityRow
-            icon={mapped.icon}
-            title={mapped.title}
-            badges={mapped.badges}
-            trailing={mapped.trailing}
-            rowAction={mapped.rowAction}
-            isSelected={selectedId === getId(item)}
-            isInMultiSelect={rowProps.isInMultiSelect}
-            showSeparator={!isFirst}
-            onMouseDown={(e) => {
-              rowProps.onMouseDown(e)
-              if (!e.metaKey && !e.ctrlKey && !e.shiftKey && e.button !== 2) {
-                onItemClick(item)
-              }
-            }}
-            buttonProps={rowProps.buttonProps}
-            menuContent={mapped.menu}
-            dataAttributes={mapped.dataAttributes}
-          />
-        )
-      }}
+      renderItem={renderItem}
     />
   )
 }

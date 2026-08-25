@@ -225,7 +225,7 @@ export function PanelHeader({
         </div>
       )}
       {actions && (
-        <div className="titlebar-no-drag shrink-0 z-[1]">
+        <div className="titlebar-no-drag flex shrink-0 items-center gap-1.5 z-[1]">
           {actions}
         </div>
       )}
@@ -258,7 +258,7 @@ export function PanelHeader({
       </div>
       <div className="flex min-w-0 items-center justify-end gap-1.5">
         {centerButton && <div className="titlebar-no-drag shrink-0">{centerButton}</div>}
-        {actions && <div className="titlebar-no-drag shrink-0">{actions}</div>}
+        {actions && <div className="titlebar-no-drag flex shrink-0 items-center gap-1.5">{actions}</div>}
         {rightSidebarButton && <div className="titlebar-no-drag shrink-0">{rightSidebarButton}</div>}
       </div>
     </>
@@ -285,7 +285,7 @@ export function PanelHeader({
         </div>
       )}
       {actions && (
-        <div className="titlebar-no-drag shrink-0">
+        <div className="titlebar-no-drag flex shrink-0 items-center gap-1.5">
           {actions}
         </div>
       )}

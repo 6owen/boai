@@ -23,9 +23,12 @@ import {
   RefreshCw,
   PackageMinus,
   Star,
+  Check,
+  Folders,
 } from 'lucide-react'
 import { useMenuComponents } from '@/components/ui/menu-context'
 import { getFileManagerName } from '@/lib/platform'
+import type { SkillGroup } from '@/hooks/useSkillCollections'
 
 export interface SkillMenuProps {
   /** Skill slug */
@@ -40,6 +43,9 @@ export interface SkillMenuProps {
   onUninstall?: () => void
   isFavorite?: boolean
   onToggleFavorite?: () => void
+  groups?: readonly SkillGroup[]
+  assignedGroupId?: string
+  onAssignGroup?: (groupId?: string) => void
   canShowInFinder?: boolean
   canDelete?: boolean
   deleteLabel?: string
@@ -59,6 +65,9 @@ export function SkillMenu({
   onUninstall,
   isFavorite = false,
   onToggleFavorite,
+  groups = [],
+  assignedGroupId,
+  onAssignGroup,
   canShowInFinder = true,
   canDelete = true,
   deleteLabel,
@@ -66,7 +75,7 @@ export function SkillMenu({
   const { t } = useTranslation()
 
   // Get menu components from context (works with both DropdownMenu and ContextMenu)
-  const { MenuItem, Separator } = useMenuComponents()
+  const { MenuItem, Separator, Sub, SubTrigger, SubContent } = useMenuComponents()
 
   return (
     <>
@@ -96,6 +105,28 @@ export function SkillMenu({
             {isFavorite ? t('skillsList.removeFromOwn') : t('skillsList.addToOwn')}
           </span>
         </MenuItem>
+      )}
+
+      {onAssignGroup && (
+        <Sub>
+          <SubTrigger className="pr-2">
+            <Folders className="h-3.5 w-3.5" />
+            <span className="flex-1">{t('skillsGroups.moveToGroup')}</span>
+          </SubTrigger>
+          <SubContent>
+            <MenuItem onClick={() => onAssignGroup()}>
+              <span className="flex-1">{t('skillsGroups.ungrouped')}</span>
+              {!assignedGroupId && <Check className="h-3.5 w-3.5" />}
+            </MenuItem>
+            {groups.length > 0 && <Separator />}
+            {groups.map(group => (
+              <MenuItem key={group.id} onClick={() => onAssignGroup(group.id)}>
+                <span className="flex-1">{group.name}</span>
+                {assignedGroupId === group.id && <Check className="h-3.5 w-3.5" />}
+              </MenuItem>
+            ))}
+          </SubContent>
+        </Sub>
       )}
 
       <Separator />

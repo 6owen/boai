@@ -118,6 +118,7 @@ import {
 import type { SettingsSubpage } from "../../../shared/types"
 import { SourcesListPanel } from "./SourcesListPanel"
 import { SkillsListPanel } from "./SkillsListPanel"
+import { SkillGroupsPopover } from "./SkillGroupsPopover"
 import { PanelHeader } from "./PanelHeader"
 import { FabNewChat } from "./FabNewChat"
 import { SendToWorkspaceDialog } from "./SendToWorkspaceDialog"
@@ -137,7 +138,7 @@ import {
 import { hasOpenOverlay } from "@/lib/overlay-detection"
 import { clearSourceIconCaches } from "@/lib/icon-cache"
 import { dispatchFocusInputEvent } from "./input/focus-input-events"
-import { isSkillInOwnCollection, useSkillFavorites } from "@/hooks/useSkillCollections"
+import { getSkillCollectionKey, isSkillInOwnCollection, useSkillFavorites } from "@/hooks/useSkillCollections"
 
 /**
  * AppShellProps - Minimal props interface for AppShell component
@@ -413,12 +414,26 @@ function AppShellContent({
     excludedOwnSkillKeys,
     toggleFavorite: toggleFavoriteSkill,
     addToOwn: addSkillToOwn,
+    groups: skillGroups,
+    groupAssignments: skillGroupAssignments,
+    createGroup: createSkillGroup,
+    renameGroup: renameSkillGroup,
+    deleteGroup: deleteSkillGroup,
+    setSkillGroup,
   } = useSkillFavorites(activeWorkspaceId || undefined)
   const ownSkills = React.useMemo(
     () => skills.filter(skill => isSkillInOwnCollection(skill, favoriteSkillKeys, excludedOwnSkillKeys)),
     [excludedOwnSkillKeys, favoriteSkillKeys, skills],
   )
   const visibleSkills = !isSkillStatsView && skillFilter?.collection === 'own' ? ownSkills : skills
+  const skillGroupCounts = React.useMemo(() => {
+    const counts = Object.fromEntries(skillGroups.map(group => [group.id, 0]))
+    for (const skill of ownSkills) {
+      const groupId = skillGroupAssignments[getSkillCollectionKey(skill)]
+      if (groupId && groupId in counts) counts[groupId] += 1
+    }
+    return counts
+  }, [ownSkills, skillGroupAssignments, skillGroups])
   // Sync skills to atom for NavigationContext auto-selection
   const setSkillsAtom = useSetAtom(skillsAtom)
   React.useEffect(() => {
@@ -1508,6 +1523,15 @@ function AppShellContent({
                       align="start"
                     />
                   )}
+                  {activeWorkspace && !isSkillStatsView && skillFilter?.collection === 'own' && (
+                    <SkillGroupsPopover
+                      groups={skillGroups}
+                      groupCounts={skillGroupCounts}
+                      onCreateGroup={createSkillGroup}
+                      onRenameGroup={renameSkillGroup}
+                      onDeleteGroup={deleteSkillGroup}
+                    />
+                  )}
                 </>
               ) : undefined}
               actions={
@@ -1600,6 +1624,9 @@ function AppShellContent({
                 favoriteSkillKeys={favoriteSkillKeys}
                 excludedOwnSkillKeys={excludedOwnSkillKeys}
                 onToggleFavorite={handleToggleFavoriteSkill}
+                groups={skillGroups}
+                groupAssignments={skillGroupAssignments}
+                onAssignGroup={setSkillGroup}
                 onSkillClick={handleSkillSelect}
                 selectedSkillSlug={isSkillsNavigation(navState) && navState.details?.type === 'skill' ? navState.details.skillSlug : null}
               />

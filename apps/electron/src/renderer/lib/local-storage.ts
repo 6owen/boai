@@ -64,6 +64,9 @@ export const KEYS = {
   // Skills (workspace-scoped)
   skillFavorites: 'skill-favorites',
   skillOwnExclusions: 'skill-own-exclusions',
+  skillGroups: 'skill-groups',
+  skillGroupAssignments: 'skill-group-assignments',
+  collapsedSkillGroups: 'collapsed-skill-groups',
 } as const
 
 export type StorageKey = typeof KEYS[keyof typeof KEYS]

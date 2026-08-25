@@ -11,9 +11,17 @@ import { EditPopover, getEditConfig } from '@/components/ui/EditPopover'
 import { useActiveWorkspace } from '@/context/AppShellContext'
 import { getFileManagerName } from '@/lib/platform'
 import { cn } from '@/lib/utils'
+import * as storage from '@/lib/local-storage'
+import { KEYS } from '@/lib/local-storage'
 import type { LoadedSkill } from '../../../shared/types'
 import { SessionSearchHeader } from './SessionSearchHeader'
-import { isSkillInOwnCollection } from '@/hooks/useSkillCollections'
+import {
+  getSkillCollectionKey,
+  isSkillInOwnCollection,
+  type SkillGroup,
+  type SkillGroupAssignments,
+} from '@/hooks/useSkillCollections'
+import type { EntityListGroup } from '@/components/ui/entity-list'
 
 export interface SkillsListPanelProps {
   skills: LoadedSkill[]
@@ -30,7 +38,19 @@ export interface SkillsListPanelProps {
   favoriteSkillKeys?: ReadonlySet<string>
   excludedOwnSkillKeys?: ReadonlySet<string>
   onToggleFavorite?: (skill: LoadedSkill) => void
+  groups?: readonly SkillGroup[]
+  groupAssignments?: Readonly<SkillGroupAssignments>
+  onAssignGroup?: (skill: LoadedSkill, groupId?: string) => void
   className?: string
+}
+
+const UNGROUPED_SKILLS_KEY = 'ungrouped'
+
+function readCollapsedSkillGroups(scope: string): Set<string> {
+  return new Set(
+    storage.get<unknown[]>(KEYS.collapsedSkillGroups, [], scope)
+      .filter((value): value is string => typeof value === 'string'),
+  )
 }
 
 export function SkillsListPanel({
@@ -48,6 +68,9 @@ export function SkillsListPanel({
   favoriteSkillKeys = new Set(),
   excludedOwnSkillKeys = new Set(),
   onToggleFavorite,
+  groups = [],
+  groupAssignments = {},
+  onAssignGroup,
   className,
 }: SkillsListPanelProps) {
   const { t } = useTranslation()
@@ -55,6 +78,31 @@ export function SkillsListPanel({
   const canRevealLocally = !activeWorkspace?.remoteServer
   const searchInputRef = React.useRef<HTMLInputElement>(null)
   const normalizedSearch = searchQuery.trim().toLowerCase()
+  const collapseScope = workspaceId ?? 'default'
+  const [collapsedGroups, setCollapsedGroups] = React.useState<Set<string>>(
+    () => readCollapsedSkillGroups(collapseScope),
+  )
+  const collapseScopeRef = React.useRef(collapseScope)
+
+  React.useEffect(() => {
+    if (collapseScopeRef.current === collapseScope) return
+    setCollapsedGroups(readCollapsedSkillGroups(collapseScope))
+    collapseScopeRef.current = collapseScope
+  }, [collapseScope])
+
+  React.useEffect(() => {
+    if (collapseScopeRef.current !== collapseScope) return
+    storage.set(KEYS.collapsedSkillGroups, Array.from(collapsedGroups), collapseScope)
+  }, [collapseScope, collapsedGroups])
+
+  const toggleGroupCollapse = React.useCallback((groupKey: string) => {
+    setCollapsedGroups(previous => {
+      const next = new Set(previous)
+      if (next.has(groupKey)) next.delete(groupKey)
+      else next.add(groupKey)
+      return next
+    })
+  }, [])
   const filteredSkills = React.useMemo(() => {
     if (!normalizedSearch) return skills
     return skills.filter(skill => [
@@ -63,6 +111,60 @@ export function SkillsListPanel({
       skill.metadata.description,
     ].some(value => value.toLowerCase().includes(normalizedSearch)))
   }, [normalizedSearch, skills])
+  const groupedPresentation = React.useMemo((): {
+    items: LoadedSkill[]
+    groups?: EntityListGroup<LoadedSkill>[]
+  } => {
+    if (collection !== 'own') return { items: filteredSkills }
+
+    const validGroupIds = new Set(groups.map(group => group.id))
+    const groupedSkills = new Map(groups.map(group => [group.id, [] as LoadedSkill[]]))
+    const ungroupedSkills: LoadedSkill[] = []
+    for (const skill of filteredSkills) {
+      const groupId = groupAssignments[getSkillCollectionKey(skill)]
+      if (groupId && validGroupIds.has(groupId)) groupedSkills.get(groupId)?.push(skill)
+      else ungroupedSkills.push(skill)
+    }
+    const canCollapse = !normalizedSearch
+    const presentationGroups: EntityListGroup<LoadedSkill>[] = groups.flatMap(group => {
+      const items = groupedSkills.get(group.id) ?? []
+      if (items.length === 0) return []
+      const isCollapsed = canCollapse && collapsedGroups.has(group.id)
+      return [{
+        key: group.id,
+        label: group.name,
+        items: isCollapsed ? [] : items,
+        collapsible: canCollapse,
+        ...(isCollapsed ? { collapsedCount: items.length } : {}),
+      }]
+    })
+    if (ungroupedSkills.length > 0) {
+      const isCollapsed = canCollapse && collapsedGroups.has(UNGROUPED_SKILLS_KEY)
+      presentationGroups.push({
+        key: UNGROUPED_SKILLS_KEY,
+        label: t('skillsGroups.ungrouped'),
+        items: isCollapsed ? [] : ungroupedSkills,
+        collapsible: canCollapse,
+        ...(isCollapsed ? { collapsedCount: ungroupedSkills.length } : {}),
+      })
+    }
+    return {
+      items: presentationGroups.flatMap(group => group.items),
+      groups: presentationGroups,
+    }
+  }, [collapsedGroups, collection, filteredSkills, groupAssignments, groups, normalizedSearch, t])
+
+  const collapseAllGroups = React.useCallback(() => {
+    setCollapsedGroups(new Set(
+      groupedPresentation.groups
+        ?.filter(group => group.collapsible)
+        .map(group => group.key) ?? [],
+    ))
+  }, [groupedPresentation.groups])
+
+  const expandAllGroups = React.useCallback(() => {
+    setCollapsedGroups(new Set())
+  }, [])
 
   React.useEffect(() => {
     if (searchActive) searchInputRef.current?.focus()
@@ -110,7 +212,12 @@ export function SkillsListPanel({
         />
       )}
         <EntityPanel<LoadedSkill>
-          items={filteredSkills}
+          items={groupedPresentation.items}
+          groups={groupedPresentation.groups}
+          collapsedGroups={normalizedSearch ? new Set() : collapsedGroups}
+          onToggleCollapse={collection === 'own' && !normalizedSearch ? toggleGroupCollapse : undefined}
+          onCollapseAll={collection === 'own' && !normalizedSearch ? collapseAllGroups : undefined}
+          onExpandAll={collection === 'own' && !normalizedSearch ? expandAllGroups : undefined}
           getId={(s) => s.slug}
           selection={skillSelection}
           selectedId={selectedSkillSlug}
@@ -184,6 +291,13 @@ export function SkillsListPanel({
                 deleteLabel={t('skillsList.deleteSkill')}
                 isFavorite={isSkillInOwnCollection(skill, favoriteSkillKeys, excludedOwnSkillKeys)}
                 onToggleFavorite={onToggleFavorite ? () => onToggleFavorite(skill) : undefined}
+                groups={collection === 'own' ? groups : undefined}
+                assignedGroupId={collection === 'own'
+                  ? groupAssignments[getSkillCollectionKey(skill)]
+                  : undefined}
+                onAssignGroup={collection === 'own' && onAssignGroup
+                  ? groupId => onAssignGroup(skill, groupId)
+                  : undefined}
               />
             ),
           })}
