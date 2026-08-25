@@ -85,7 +85,7 @@ export interface StoredConfig {
   rtkEnabled?: boolean;  // Route Bash commands through rtk to compress tool output (default: false). https://github.com/rtk-ai/rtk
   // Network proxy
   networkProxy?: import('./types.ts').NetworkProxySettings;
-  // Windows: path to Git Bash (bash.exe) for the SDK subprocess
+  // Windows: path to Git Bash (bash.exe) for the PI subprocess
   gitBashPath?: string;
   // User chose "Setup later" during onboarding — skip showing onboarding on next launch
   setupDeferred?: boolean;
@@ -514,9 +514,8 @@ export function setBrowserToolEnabled(enabled: boolean): void {
   config.browserToolEnabled = enabled;
   saveConfig(config);
 
-  // Clear session tool caches so all sessions pick up the change immediately.
-  // Lazy import to avoid circular dependency (storage ← session-scoped-tools ← storage).
-  import('../agent/session-scoped-tools.ts').then(m => m.invalidateAllSessionToolsCaches()).catch(() => {});
+  // PI reads this setting when registering tools for a session. Existing
+  // sessions pick it up the next time their subprocess is recreated.
 }
 
 /**
@@ -589,7 +588,7 @@ export function setRtkEnabled(enabled: boolean): void {
 
 /**
  * Get persisted Git Bash path (Windows only).
- * Used to set CLAUDE_CODE_GIT_BASH_PATH for the SDK subprocess.
+ * Forwarded to the PI subprocess as CRAFT_PI_SHELL_PATH.
  */
 export function getGitBashPath(): string | undefined {
   const config = loadStoredConfig();
@@ -1887,14 +1886,14 @@ function withUpdatedModelEntry(
   nextId: string,
 ): ModelDefinition | string {
   if (typeof entry === 'string') {
-    if (connection.providerType === 'anthropic' && nextId === OPUS_DEFAULT_ID) {
+    if ((connection.providerType as string) === 'anthropic' && nextId === OPUS_DEFAULT_ID) {
       return { ...getModelById(OPUS_DEFAULT_ID)! };
     }
     return nextId;
   }
 
   const nextEntry: ModelDefinition = { ...entry, id: nextId };
-  if (connection.providerType === 'anthropic' && nextId === OPUS_DEFAULT_ID) {
+  if ((connection.providerType as string) === 'anthropic' && nextId === OPUS_DEFAULT_ID) {
     return { ...getModelById(OPUS_DEFAULT_ID)! };
   }
   if (nextEntry.name && /Opus 4\.[56]/.test(nextEntry.name)) {
@@ -1904,7 +1903,7 @@ function withUpdatedModelEntry(
 }
 
 function modelEntryForDefault(connection: LlmConnection, modelId: string): ModelDefinition | string {
-  if (connection.providerType === 'anthropic' && modelId === OPUS_DEFAULT_ID) {
+  if ((connection.providerType as string) === 'anthropic' && modelId === OPUS_DEFAULT_ID) {
     return { ...getModelById(OPUS_DEFAULT_ID)! };
   }
   return modelId;
@@ -1920,14 +1919,14 @@ function migrateLegacyOpusToDefaultOpus(config: StoredConfig): boolean {
   let changed = false;
 
   for (const connection of config.llmConnections) {
-    if (connection.providerType !== 'anthropic' && connection.providerType !== 'pi') continue;
+    if ((connection.providerType as string) !== 'anthropic' && connection.providerType !== 'pi') continue;
 
     if (connection.defaultModel) {
       let normalizedDefault = normalizeConnectionModelId(connection, connection.defaultModel);
       // The previous direct-Anthropic default was Opus 4.7. Move existing
       // direct-Anthropic defaults to Opus 4.8 while keeping 4.7 in the model list.
       // Pi stays on 4.7 until the current Pi catalog exposes 4.8.
-      if (connection.providerType === 'anthropic' && normalizedDefault === OPUS_FALLBACK_ID) {
+      if ((connection.providerType as string) === 'anthropic' && normalizedDefault === OPUS_FALLBACK_ID) {
         normalizedDefault = OPUS_DEFAULT_ID;
       }
       if (normalizedDefault !== connection.defaultModel) {
@@ -2008,7 +2007,7 @@ function restoreOpus46ToAnthropicConnections(config: StoredConfig): boolean {
   let changed = false;
 
   for (const connection of config.llmConnections ?? []) {
-    if (connection.providerType !== 'anthropic') continue;
+    if ((connection.providerType as string) !== 'anthropic') continue;
     if (!Array.isArray(connection.models) || connection.models.length === 0) continue;
 
     // Idempotent shape repair: normalize any bare-string 'claude-opus-4-6'
@@ -2056,7 +2055,7 @@ function migrateSonnet45ToSonnet46(config: StoredConfig): boolean {
 
   for (const connection of config.llmConnections) {
     // Only migrate direct Anthropic connections (not compat/third-party)
-    if (connection.providerType !== 'anthropic') continue;
+    if ((connection.providerType as string) !== 'anthropic') continue;
 
     // Migrate defaultModel
     if (connection.defaultModel === SONNET_45_ID) {
@@ -2248,9 +2247,9 @@ function migrateModelDefaultsToConnections(config: StoredConfig): boolean {
   if (configAny.modelDefaults.anthropic) {
     const defaultSlug = config.defaultLlmConnection;
     const anthropicConn = config.llmConnections.find(c =>
-      c.slug === defaultSlug && c.providerType === 'anthropic'
+      c.slug === defaultSlug && (c.providerType as string) === 'anthropic'
     ) || config.llmConnections.find(c =>
-      c.providerType === 'anthropic'
+      (c.providerType as string) === 'anthropic'
     );
     if (anthropicConn) {
       anthropicConn.defaultModel = configAny.modelDefaults.anthropic;
@@ -2449,9 +2448,10 @@ export function migrateLegacyLlmConnectionsConfig(): void {
       migrated = {
         slug: 'claude-max',
         name: 'Claude Max',
-        providerType: 'anthropic',
+        providerType: 'pi',
+        piAuthProvider: 'anthropic',
         authType: 'oauth',
-        models: getDefaultModelsForConnection('anthropic'),
+        models: getDefaultModelsForConnection('pi', 'anthropic'),
         createdAt: Date.now(),
       };
     } else if (legacyAuthType === 'codex_oauth') {
@@ -2495,9 +2495,10 @@ export function migrateLegacyLlmConnectionsConfig(): void {
         migrated = {
           slug: 'anthropic-api',
           name: 'Anthropic (API Key)',
-          providerType: 'anthropic',
+          providerType: 'pi',
+          piAuthProvider: 'anthropic',
           authType: 'api_key',
-          models: getDefaultModelsForConnection('anthropic'),
+          models: getDefaultModelsForConnection('pi', 'anthropic'),
           createdAt: Date.now(),
         };
       }
@@ -2612,67 +2613,8 @@ function ensureDefaultLlmConnection(config: StoredConfig): boolean {
   return false;
 }
 
-/**
- * Migrate legacy global credentials to LLM connection-scoped credentials.
- * This ensures that credentials saved before the LLM connections system
- * are available through the new connection-based auth.
- *
- * Called on app startup (async operation, credentials use encrypted storage).
- *
- * Migration mapping:
- * - claude_oauth::global → llm_oauth::claude-max
- * - anthropic_api_key::global → llm_api_key::anthropic-api
- *
- * After successful migration, legacy credentials are deleted to prevent
- * stale data and reduce credential store clutter.
- */
+/** PI-only installs intentionally do not import legacy Claude credentials. */
 export async function migrateLegacyCredentials(): Promise<void> {
-  const manager = getCredentialManager();
-  const debug = (await import('../utils/debug.ts')).debug;
-
-  // Migrate Claude OAuth: claude_oauth::global → llm_oauth::claude-max
-  const legacyClaudeOAuth = await manager.getClaudeOAuthCredentials();
-  if (legacyClaudeOAuth?.accessToken) {
-    // Only migrate if llm_oauth::claude-max doesn't exist yet
-    const existingLlmOAuth = await manager.getLlmOAuth('claude-max');
-    if (!existingLlmOAuth) {
-      await manager.setLlmOAuth('claude-max', {
-        accessToken: legacyClaudeOAuth.accessToken,
-        refreshToken: legacyClaudeOAuth.refreshToken,
-        expiresAt: legacyClaudeOAuth.expiresAt,
-      });
-      debug('[storage] Migrated legacy Claude OAuth to llm_oauth::claude-max');
-
-      // Delete legacy credential after successful migration
-      // Global credentials use just the type - the key format is {type}::global
-      try {
-        await manager.delete({ type: 'claude_oauth' });
-        debug('[storage] Deleted legacy claude_oauth::global credential');
-      } catch (error) {
-        debug('[storage] Failed to delete legacy claude_oauth::global:', error);
-      }
-    }
-  }
-
-  // Migrate Anthropic API key: anthropic_api_key::global → llm_api_key::anthropic-api
-  const legacyApiKey = await manager.getApiKey();
-  if (legacyApiKey) {
-    // Only migrate if llm_api_key::anthropic-api doesn't exist yet
-    const existingLlmApiKey = await manager.getLlmApiKey('anthropic-api');
-    if (!existingLlmApiKey) {
-      await manager.setLlmApiKey('anthropic-api', legacyApiKey);
-      debug('[storage] Migrated legacy Anthropic API key to llm_api_key::anthropic-api');
-
-      // Delete legacy credential after successful migration
-      // Global credentials use just the type - the key format is {type}::global
-      try {
-        await manager.delete({ type: 'anthropic_api_key' });
-        debug('[storage] Deleted legacy anthropic_api_key::global credential');
-      } catch (error) {
-        debug('[storage] Failed to delete legacy anthropic_api_key::global:', error);
-      }
-    }
-  }
 }
 
 /**
@@ -2774,12 +2716,6 @@ export function updateLlmConnection(slug: string, updates: Partial<Omit<LlmConne
     customEndpoint: updates.customEndpoint !== undefined ? updates.customEndpoint : existing.customEndpoint,
     // Mid-stream send behavior (steer vs queue) — read via resolveMidStreamBehavior()
     midStreamBehavior: updates.midStreamBehavior !== undefined ? updates.midStreamBehavior : existing.midStreamBehavior,
-    // Resolved Anthropic OAuth identity (issue #838) — preserved across unrelated saves
-    oauthAccountUuid: updates.oauthAccountUuid !== undefined ? updates.oauthAccountUuid : existing.oauthAccountUuid,
-    oauthAccountEmail: updates.oauthAccountEmail !== undefined ? updates.oauthAccountEmail : existing.oauthAccountEmail,
-    oauthOrganizationUuid: updates.oauthOrganizationUuid !== undefined ? updates.oauthOrganizationUuid : existing.oauthOrganizationUuid,
-    oauthOrganizationName: updates.oauthOrganizationName !== undefined ? updates.oauthOrganizationName : existing.oauthOrganizationName,
-    oauthProfileVerifiedAt: updates.oauthProfileVerifiedAt !== undefined ? updates.oauthProfileVerifiedAt : existing.oauthProfileVerifiedAt,
     // Timestamps
     lastUsedAt: updates.lastUsedAt !== undefined ? updates.lastUsedAt : existing.lastUsedAt,
   };

@@ -101,6 +101,21 @@ export function removeSkillGroup(
   }
 }
 
+export function reorderSkillGroups(
+  groups: readonly SkillGroup[],
+  groupId: string,
+  targetGroupId: string,
+): SkillGroup[] {
+  const fromIndex = groups.findIndex(group => group.id === groupId)
+  const toIndex = groups.findIndex(group => group.id === targetGroupId)
+  if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return [...groups]
+
+  const next = [...groups]
+  const [movedGroup] = next.splice(fromIndex, 1)
+  next.splice(toIndex, 0, movedGroup)
+  return next
+}
+
 export function assignSkillGroup(
   assignments: Readonly<SkillGroupAssignments>,
   skillKey: string,
@@ -254,6 +269,15 @@ export function useSkillFavorites(workspaceId?: string) {
     notifyChanged()
   }, [notifyChanged, workspaceId])
 
+  const reorderGroups = React.useCallback((groupId: string, targetGroupId: string) => {
+    if (!workspaceId) return
+    const current = getStoredSkillGroups(workspaceId)
+    const next = reorderSkillGroups(current, groupId, targetGroupId)
+    if (next.every((group, index) => group.id === current[index]?.id)) return
+    storage.set(storage.KEYS.skillGroups, next, workspaceId)
+    notifyChanged()
+  }, [notifyChanged, workspaceId])
+
   const setSkillGroup = React.useCallback((
     skill: Pick<LoadedSkill, 'slug' | 'source'>,
     groupId?: string,
@@ -284,6 +308,7 @@ export function useSkillFavorites(workspaceId?: string) {
     createGroup,
     renameGroup,
     deleteGroup,
+    reorderGroups,
     setSkillGroup,
   }
 }

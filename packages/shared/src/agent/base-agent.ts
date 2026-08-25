@@ -1,7 +1,7 @@
 /**
  * BaseAgent Abstract Class
  *
- * Shared base class for all AI agent backends (ClaudeAgent, PiAgent).
+ * Provider-neutral orchestration base used by the PI backend.
  * Extracts common functionality including:
  * - Model/thinking configuration
  * - Permission mode management (via PermissionManager)
@@ -44,7 +44,7 @@ import type {
   RecoveryMessage,
 } from './backend/types.ts';
 import { AbortReason } from './backend/types.ts';
-import type { AuthRequest } from './session-scoped-tools.ts';
+import type { AuthRequest } from '@craft-agent/session-tools-core';
 import type { Workspace } from '../config/storage.ts';
 
 // Core modules
@@ -202,8 +202,7 @@ export abstract class BaseAgent implements AgentBackend {
   // + forceAbort + auto_retry pipeline used for tool-call errors).
   //
   // When a session-scoped tool (source_test) successfully activates a new source
-  // mid-turn, the Claude SDK's mcpServers is already frozen for the current query
-  // (and Pi's tool registry is only refreshed between turns). The only way to
+  // mid-turn, PI's tool registry is only refreshed between turns. The only way to
   // expose the new tools is to end the current turn and auto-resend the user's
   // original message with a "[{slug} activated]" suffix — same as what happens
   // when a model directly calls an unknown tool on an inactive source.
@@ -397,9 +396,6 @@ export abstract class BaseAgent implements AgentBackend {
    * Instead, PiAgent detects session MCP tool completions from its own event
    * stream and calls THIS shared method to fire the appropriate callback.
    *
-   * ClaudeAgent doesn't need this — its session-scoped tools run in-process
-   * via Claude Agent SDK, so the callback registry works directly.
-   *
    * CALLBACKS FIRED:
    * - SubmitPlan → this.onPlanSubmitted(planPath)
    *   → Electron reads plan file, shows plan card, calls interruptForHandoff(PlanSubmitted)
@@ -549,7 +545,7 @@ export abstract class BaseAgent implements AgentBackend {
    */
   updateWorkingDirectory(path: string): void {
     this.workingDirectory = path;
-    // Persist to session config for storage and consistency with ClaudeAgent
+    // Persist to session config so runtime and stored state remain consistent.
     if (this.config.session) {
       this.config.session.workingDirectory = path;
     }
@@ -690,10 +686,7 @@ export abstract class BaseAgent implements AgentBackend {
   }
 
   /**
-   * Get mini agent configuration for provider-specific application.
-   * Returns centralized config that each backend interprets appropriately:
-   * - ClaudeAgent: Uses tools array, mcpServers filter, maxThinkingTokens: 0
-   * - PiAgent: Applies tool filter + minimizeThinking via runtime config
+   * Get mini agent configuration for the PI runtime.
    */
   getMiniAgentConfig(): MiniAgentConfig {
     const enabled = this.isMiniAgent();
@@ -1095,7 +1088,7 @@ ${formattedMessages}
   /**
    * Run a simple text completion using the agent's auth infrastructure.
    * No tools, no system prompt - just text in → text out.
-   * Each backend implements using its own SDK (Claude SDK query() or Codex app-server).
+   * Implemented by PI using its one-shot completion path.
    *
    * @param prompt - The prompt to send
    * @returns The model's response text, or null if completion fails
@@ -1106,9 +1099,7 @@ ${formattedMessages}
    * Execute an LLM query using the agent's auth infrastructure.
    * Used by call_llm tool (via queryFn callback) and potentially by runMiniCompletion.
    *
-   * Each backend implements this using its own SDK/session mechanism:
-   * - ClaudeAgent: SDK query() with OAuth
-   * - PiAgent: One-shot completion via Pi SDK in the subprocess
+   * Implemented as a one-shot PI completion in the subprocess.
    *
    * @param request - The query request (prompt, model, systemPrompt, etc.)
    * @returns The model's response text and optional token usage

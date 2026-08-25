@@ -10,25 +10,15 @@ import type { AuthType, Workspace } from '../config/types.ts';
 /**
  * Unified authentication state
  */
-/** Migration info when user needs to re-authenticate */
-export interface MigrationInfo {
-  reason: 'legacy_token';
-  message: string;
-}
-
 export interface AuthState {
-  /** Claude API billing configuration */
+  /** Active PI connection configuration. */
   billing: {
     /** Configured billing type, or null if not yet configured */
     type: AuthType | null;
     /** True if we have the required credentials for the configured billing type */
     hasCredentials: boolean;
-    /** Anthropic API key (if using api_key auth type) */
+    /** API key for the active connection, when applicable. */
     apiKey: string | null;
-    /** Claude Max OAuth token (if using oauth_token auth type) */
-    claudeOAuthToken: string | null;
-    /** Migration info if user needs to re-authenticate */
-    migrationRequired?: MigrationInfo;
   };
 
   /** Workspace/MCP configuration */
@@ -48,8 +38,6 @@ export interface SetupNeeds {
   needsCredentials: boolean;
   /** Everything complete → go straight to App */
   isFullyConfigured: boolean;
-  /** User has legacy tokens that need migration */
-  needsMigration?: MigrationInfo;
 }
 
 /**

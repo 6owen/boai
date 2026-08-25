@@ -77,9 +77,7 @@ function buildModelCatalog(connections: LlmConnectionWithStatus[]): {
     })
     if (models.length === 0) continue
     for (const m of models) modelToConnection.set(m.id, conn.slug)
-    // Provider key drives the brand icon: 'anthropic' resolves directly; Pi
-    // connections resolve through their piAuthProvider (see resolveProviderIcon in TaskTile).
-    const provider = conn.providerType === 'anthropic' ? 'anthropic' : conn.piAuthProvider || conn.providerType
+    const provider = conn.piAuthProvider || conn.providerType
     groups.push({ provider, label: conn.name, models })
   }
 

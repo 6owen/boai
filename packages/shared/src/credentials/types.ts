@@ -7,8 +7,6 @@
  * Credential key format: "{type}::{scope...}"
  *
  * Examples:
- *   - anthropic_api_key::global
- *   - claude_oauth::global
  *   - source_oauth::{workspaceId}::{sourceId}
  *   - source_bearer::{workspaceId}::{sourceId}
  *
@@ -17,10 +15,6 @@
 
 /** Types of credentials we store */
 export type CredentialType =
-  // Global credentials (legacy, kept for backwards compatibility)
-  | 'anthropic_api_key'  // Anthropic API key for Claude
-  | 'claude_oauth'       // Claude OAuth token (Max subscription)
-  // LLM connection credentials (keyed by connection slug)
   | 'llm_api_key'        // API key for LLM connection
   | 'llm_oauth'          // OAuth token for LLM connection
   | 'llm_iam'            // AWS IAM credentials (accessKeyId + secretAccessKey)
@@ -37,8 +31,6 @@ export type CredentialType =
 
 /** Valid credential types for validation */
 const VALID_CREDENTIAL_TYPES: readonly CredentialType[] = [
-  'anthropic_api_key',
-  'claude_oauth',
   'llm_api_key',
   'llm_oauth',
   'llm_iam',

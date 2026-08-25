@@ -13,10 +13,8 @@
 // injected at app startup via registerPiModelResolver().
 import {
   type ModelDefinition,
-  ANTHROPIC_MODELS,
   normalizeDeprecatedModelId,
 } from './models';
-import type { CredentialManager } from '../credentials/manager.ts';
 
 // ============================================================
 // Pi Model Resolver (dependency injection to avoid Pi SDK in renderer)
@@ -42,7 +40,6 @@ export function registerPiModelResolver(resolver: PiModelResolver): void {
  * Provider type determines which backend/SDK implementation to use.
  * This is separate from auth mechanism - a provider may support multiple auth types.
  *
- * - 'anthropic': Direct Anthropic API (api.anthropic.com) — uses Claude Agent SDK
  * - 'pi': Pi unified LLM API (20+ providers via @earendil-works/pi-ai)
  * - 'pi_compat': Pi with custom endpoint (Ollama, self-hosted models, Anthropic-compat endpoints)
  *
@@ -50,7 +47,6 @@ export function registerPiModelResolver(resolver: PiModelResolver): void {
  * by migrateLegacyProviderTypes() in storage.ts.
  */
 export type LlmProviderType =
-  | 'anthropic'
   | 'pi'
   | 'pi_compat';
 
@@ -189,16 +185,6 @@ export interface LlmConnection {
    */
   midStreamBehavior?: MidStreamBehavior;
 
-  // --- Resolved Anthropic OAuth identity (issue #838) ---
-  // Captured from the token-exchange response; lets the UI flag two Claude
-  // connections that resolve to the same underlying account. All optional and
-  // fail-soft — absent identity simply means nothing is shown.
-  oauthAccountUuid?: string;
-  oauthAccountEmail?: string;
-  oauthOrganizationUuid?: string;
-  oauthOrganizationName?: string;
-  oauthProfileVerifiedAt?: number; // epoch ms
-
   // --- Timestamps ---
 
   /** Timestamp when connection was created */
@@ -304,14 +290,7 @@ function findSmallModel(
   // Provider-aware keyword search
   const keywords: string[] = [];
 
-  if (isAnthropicProvider(connection.providerType)) {
-    keywords.push('haiku');
-  } else if (isPiProvider(connection.providerType)) {
-    keywords.push('mini', 'flash');
-  } else {
-    // Aggregator providers (copilot, etc.) — try all common small-model keywords
-    keywords.push('mini', 'haiku', 'flash');
-  }
+  keywords.push('mini', 'haiku', 'flash');
 
   if (keywords.length > 0) {
     const match = connection.models.find(m => {
@@ -429,16 +408,6 @@ export function isCompatProvider(providerType: LlmProviderType): boolean {
 }
 
 /**
- * Check if a provider type uses the Anthropic Claude Agent SDK.
- * Only direct Anthropic API connections use the Claude SDK.
- * @param providerType - Provider type to check
- * @returns true if this provider uses the Anthropic SDK
- */
-export function isAnthropicProvider(providerType: LlmProviderType): boolean {
-  return providerType === 'anthropic';
-}
-
-/**
  * Check if a connection points to a local model runtime (loopback URL).
  */
 export function isLocalConnection(conn: Pick<LlmConnection, 'baseUrl'>): boolean {
@@ -472,8 +441,8 @@ export function isPiProvider(providerType: LlmProviderType): boolean {
  *   (delivers after the current tool finishes, keeps full context). No
  *   downside to defaulting to immediate steering.
  */
-export function defaultMidStreamBehavior(providerType: LlmProviderType): MidStreamBehavior {
-  return providerType === 'anthropic' ? 'queue' : 'steer';
+export function defaultMidStreamBehavior(_providerType: LlmProviderType): MidStreamBehavior {
+  return 'steer';
 }
 
 /**
@@ -580,8 +549,7 @@ export function getModelsForProviderType(providerType: LlmProviderType, piAuthPr
     return _piModelResolver(piAuthProvider);
   }
 
-  // Anthropic uses Claude models with bare Anthropic IDs.
-  return ANTHROPIC_MODELS;
+  return [];
 }
 
 /**
@@ -650,8 +618,7 @@ export function getDefaultModelsForConnection(providerType: LlmProviderType, piA
     return models;
   }
   if (providerType === 'pi_compat') return [];  // Dynamic — user specifies
-  // anthropic
-  return ANTHROPIC_MODELS;
+  return [];
 }
 
 /**
@@ -734,7 +701,6 @@ export function isValidProviderAuthCombination(
   authType: LlmAuthType
 ): boolean {
   const validCombinations: Record<LlmProviderType, LlmAuthType[]> = {
-    anthropic: ['api_key', 'oauth'],
     pi: ['api_key', 'oauth', 'iam_credentials', 'environment', 'none'],
     pi_compat: ['api_key_with_endpoint', 'none'],
   };
@@ -878,7 +844,7 @@ export function normalizeBedrockModelId(
 export function migrateConnectionType(legacyType: LlmConnectionType): LlmProviderType {
   switch (legacyType) {
     case 'anthropic':
-      return 'anthropic';
+      return 'pi';
     case 'openai':
       return 'pi';
     case 'openai-compat':
@@ -907,157 +873,6 @@ export function migrateAuthType(
     case 'none':
       return 'none';
   }
-}
-
-// ============================================================
-// Auth Environment Variable Resolution
-// ============================================================
-
-const CLAUDE_BEDROCK_ROUTING_ENV_KEYS = [
-  'CLAUDE_CODE_USE_BEDROCK',
-  'AWS_BEARER_TOKEN_BEDROCK',
-  'ANTHROPIC_BEDROCK_BASE_URL',
-] as const
-
-const CLAUDE_BEDROCK_ROUTING_ENV_KEY_SET = new Set<string>(
-  CLAUDE_BEDROCK_ROUTING_ENV_KEYS,
-)
-
-const MANAGED_ANTHROPIC_AUTH_ENV_KEYS = [
-  'ANTHROPIC_API_KEY',
-  'CLAUDE_CODE_OAUTH_TOKEN',
-  'ANTHROPIC_BASE_URL',
-  ...CLAUDE_BEDROCK_ROUTING_ENV_KEYS,
-  'AWS_REGION',
-  'AWS_ACCESS_KEY_ID',
-  'AWS_SECRET_ACCESS_KEY',
-  'AWS_SESSION_TOKEN',
-] as const
-
-function getRuntimeEnvValue(key: string): string | undefined {
-  if (typeof process === 'undefined' || !process?.env) {
-    return undefined
-  }
-  return process.env[key]
-}
-
-const MANAGED_ANTHROPIC_AUTH_ENV_BASELINE: Record<string, string | undefined> =
-  Object.fromEntries(
-    MANAGED_ANTHROPIC_AUTH_ENV_KEYS.map((key) => [
-      key,
-      CLAUDE_BEDROCK_ROUTING_ENV_KEY_SET.has(key)
-        ? undefined
-        : getRuntimeEnvValue(key),
-    ]),
-  )
-
-export function clearClaudeBedrockRoutingEnvVars(
-  targetEnv: Record<string, string | undefined> = process.env,
-): void {
-  for (const key of CLAUDE_BEDROCK_ROUTING_ENV_KEYS) {
-    delete targetEnv[key]
-  }
-}
-
-export function resetManagedAnthropicAuthEnvVars(): void {
-  if (typeof process === 'undefined' || !process?.env) {
-    return
-  }
-
-  for (const key of MANAGED_ANTHROPIC_AUTH_ENV_KEYS) {
-    const originalValue = MANAGED_ANTHROPIC_AUTH_ENV_BASELINE[key]
-    if (originalValue === undefined) {
-      delete process.env[key]
-    } else {
-      process.env[key] = originalValue
-    }
-  }
-}
-
-/**
- * Result of resolving auth env vars for an LLM connection.
- */
-export interface ResolvedAuthEnvVars {
-  /** Environment variables to set (e.g., ANTHROPIC_API_KEY, CLAUDE_CODE_OAUTH_TOKEN) */
-  envVars: Record<string, string>;
-  /** Whether credentials were successfully resolved */
-  success: boolean;
-  /** Warning message if auth resolution encountered issues */
-  warning?: string;
-}
-
-/**
- * Resolve authentication environment variables for an LLM connection.
- *
- * Provider-agnostic: switches on providerType to determine which env vars
- * to set and how to retrieve credentials. Shared by:
- * - `SessionManager.reinitializeAuth()` (applies to process.env)
- * - `ClaudeAgent.postInit()` (applies to process.env + envOverrides)
- *
- * Providers that handle auth internally (openai, copilot, pi) return
- * empty envVars — their auth is managed in postInit() via native mechanisms.
- *
- * @param connection - The LLM connection config
- * @param connectionSlug - Connection slug for credential lookup
- * @param credentialManager - Credential manager instance
- * @param getValidOAuthToken - Function to get a valid (refreshed) OAuth token
- * @returns Resolved env vars and status
- */
-export async function resolveAuthEnvVars(
-  connection: LlmConnection,
-  connectionSlug: string,
-  credentialManager: CredentialManager,
-  getValidOAuthToken: (slug: string) => Promise<{ accessToken?: string | null }>,
-): Promise<ResolvedAuthEnvVars> {
-  const envVars: Record<string, string> = {};
-
-  // Only Anthropic-SDK-based providers use env var auth
-  // OpenAI (Codex), Copilot, and Pi handle auth internally in their postInit()
-  if (!isAnthropicProvider(connection.providerType)) {
-    return { envVars, success: true };
-  }
-
-  // Set base URL if configured
-  if (connection.baseUrl) {
-    envVars.ANTHROPIC_BASE_URL = connection.baseUrl;
-  }
-
-  const authType = connection.authType;
-
-  if (authType === 'api_key' || authType === 'api_key_with_endpoint' || authType === 'bearer_token') {
-    const apiKey = await credentialManager.getLlmApiKey(connectionSlug);
-    if (apiKey) {
-      envVars.ANTHROPIC_API_KEY = apiKey;
-    } else if (connection.baseUrl) {
-      // Keyless provider (e.g. Ollama)
-      envVars.ANTHROPIC_API_KEY = 'not-needed';
-    } else {
-      return { envVars, success: false, warning: `No API key found for: ${connectionSlug}` };
-    }
-  } else if (authType === 'oauth') {
-    if (connection.providerType === 'anthropic') {
-      // Anthropic OAuth uses getValidClaudeOAuthToken which handles token refresh
-      const tokenResult = await getValidOAuthToken(connectionSlug);
-      if (tokenResult.accessToken) {
-        envVars.CLAUDE_CODE_OAUTH_TOKEN = tokenResult.accessToken;
-      } else {
-        return { envVars, success: false, warning: `Failed to get OAuth token for: ${connectionSlug}` };
-      }
-    } else {
-      // Fallback OAuth path (should not be reached after legacy migration)
-      const llmOAuth = await credentialManager.getLlmOAuth(connectionSlug);
-      if (llmOAuth?.accessToken) {
-        envVars.CLAUDE_CODE_OAUTH_TOKEN = llmOAuth.accessToken;
-      } else {
-        return { envVars, success: false, warning: `No OAuth token found for: ${connectionSlug}` };
-      }
-    }
-  } else if (authType === 'environment') {
-    // Environment auth — credentials come from process.env, nothing to inject
-    return { envVars, success: true };
-  }
-
-  return { envVars, success: true };
 }
 
 /**

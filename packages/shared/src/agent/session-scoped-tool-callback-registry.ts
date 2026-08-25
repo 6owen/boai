@@ -1,9 +1,7 @@
 /**
  * Session-Scoped Tool Callback Registry
  *
- * Extracted from session-scoped-tools.ts to break the dependency between
- * the callback registry (shared by Claude + Pi paths) and the Claude SDK
- * adapter layer (only used by ClaudeAgent).
+ * Provider-neutral callback registry used by the PI subprocess proxy layer.
  *
  * The registry is a simple Map keyed by sessionId. Each backend registers
  * callbacks when a session starts and merges additional callbacks (e.g.
@@ -11,10 +9,14 @@
  */
 
 import type { LLMQueryRequest, LLMQueryResult } from './llm-tool.ts';
-import type { SpawnSessionFn } from './spawn-session-tool.ts';
-import type { BrowserPaneFns } from './browser-tools.ts';
+import type { SpawnSessionHelpResult, SpawnSessionResult } from './base-agent.ts';
+import type { BrowserPaneFns } from './browser-tool-types.ts';
 import type { AuthRequest } from '@craft-agent/session-tools-core';
 import { debug } from '../utils/debug.ts';
+
+export type SpawnSessionFn = (
+  input: Record<string, unknown>,
+) => Promise<SpawnSessionResult | SpawnSessionHelpResult>;
 
 /**
  * Callbacks that can be registered per-session
@@ -72,7 +74,7 @@ export interface SessionScopedToolCallbacks {
   /**
    * Activate a source in the running session (source_test auto-enable flow).
    * Wired by SessionManager to the per-session onSourceActivationRequest callback
-   * plus a backend-aware readiness signal (Pi vs Claude).
+   * plus the PI backend readiness signal.
    */
   activateSourceInSessionFn?: (sourceSlug: string) => Promise<{
     ok: boolean;

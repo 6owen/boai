@@ -110,7 +110,7 @@ interface SortableListProps<T extends SortableItemData> {
   /** Array of items to render (must have unique `id` fields) */
   items: T[]
   /** Called with the new ordered array after a drop */
-  onReorder: (items: T[]) => void
+  onReorder: (items: T[], move: { activeId: string; overId: string }) => void
   /** Render function for each item. `isDragging` is true when this item is the ghost. */
   renderItem: (item: T, isDragging: boolean) => React.ReactNode
   /** Render the drag overlay content (floating clone). Falls back to renderItem. */
@@ -162,7 +162,10 @@ export function SortableList<T extends SortableItemData>({
     const newIndex = items.findIndex(item => item.id === over.id)
 
     if (oldIndex !== -1 && newIndex !== -1) {
-      onReorder(arrayMove(items, oldIndex, newIndex))
+      onReorder(arrayMove(items, oldIndex, newIndex), {
+        activeId: String(active.id),
+        overId: String(over.id),
+      })
     }
   }, [items, onReorder])
 

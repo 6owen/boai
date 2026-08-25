@@ -2,9 +2,7 @@
  * Agent Factory
  *
  * Creates the appropriate AI agent based on configuration.
- * Supports two agents:
- * - ClaudeAgent (Anthropic) - Default, using @anthropic-ai/claude-agent-sdk
- * - PiAgent (Pi) - Using @earendil-works/pi-ai SDK
+ * BoAI uses a single PI backend. Model/provider routing happens inside PI.
  *
  * All agents implement AgentBackend directly.
  *
@@ -23,7 +21,6 @@ import type {
   CoreBackendConfig,
   BackendHostRuntimeContext,
 } from './types.ts';
-import { ClaudeAgent } from '../claude-agent.ts';
 import { PiAgent } from '../pi-agent.ts';
 import {
   getLlmConnection,
@@ -36,10 +33,9 @@ import type { LlmConnectionType, CustomEndpointConfig } from '../../config/llm-c
 import {
   isValidProviderAuthCombination,
 } from '../../config/llm-connections.ts';
-import { parseValidationError, type LlmValidationResult } from '../../config/llm-validation.ts';
 import type { ModelFetchResult } from '../../config/model-fetcher.ts';
 // Model resolution utilities
-import { getModelProvider, DEFAULT_MODEL, normalizeDeprecatedModelId } from '../../config/models.ts';
+import { normalizeDeprecatedModelId } from '../../config/models.ts';
 import { homedir } from 'node:os';
 import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -57,11 +53,9 @@ import {
   resolveBackendHostTooling as resolveHostToolingPaths,
   resolveBackendRuntimePaths,
 } from './internal/runtime-resolver.ts';
-import { anthropicDriver } from './internal/drivers/anthropic.ts';
 import { piDriver } from './internal/drivers/pi.ts';
 
 const DRIVER_REGISTRY: Record<AgentProvider, ProviderDriver> = {
-  anthropic: anthropicDriver,
   pi: piDriver,
 };
 
@@ -94,16 +88,8 @@ function resolveDriverRuntime(
  * @param authType - The stored authentication type
  * @returns The detected provider
  */
-export function detectProvider(authType: string): AgentProvider {
-  switch (authType) {
-    case 'api_key':
-    case 'oauth_token':
-      return 'anthropic';
-
-    // Default to Anthropic for unknown types
-    default:
-      return 'anthropic';
-  }
+export function detectProvider(_authType: string): AgentProvider {
+  return 'pi';
 }
 
 /**
@@ -130,19 +116,7 @@ export function detectProvider(authType: string): AgentProvider {
  * ```
  */
 export function createBackend(config: BackendConfig): AgentBackend {
-  switch (config.provider) {
-    case 'anthropic':
-      // ClaudeAgent implements AgentBackend directly
-      return new ClaudeAgent(config);
-
-    case 'pi':
-      // PiAgent implements AgentBackend directly
-      // Auth is API key based via Pi's AuthStorage
-      return new PiAgent(config);
-
-    default:
-      throw new Error(`Unknown provider: ${config.provider}`);
-  }
+  return new PiAgent(config);
 }
 
 /**
@@ -190,8 +164,7 @@ export function createBackendFromResolvedContext(args: {
 
 /**
  * Initialize backend host runtime wiring once at app startup.
- * Keeps runtime/bootstrap details (Claude SDK executable, Pi interceptor bundle)
- * behind backend internals.
+ * Keeps PI runtime/bootstrap details behind backend internals.
  */
 export function initializeBackendHostRuntime(args: {
   hostRuntime: BackendHostRuntimeContext;
@@ -221,7 +194,7 @@ export function resolveBackendHostTooling(args: {
  * @returns Array of provider identifiers that have working implementations
  */
 export function getAvailableProviders(): AgentProvider[] {
-  return ['anthropic', 'pi'];
+  return ['pi'];
 }
 
 /**
@@ -241,20 +214,14 @@ export function isProviderAvailable(provider: AgentProvider): boolean {
 /**
  * Map LlmProviderType to AgentProvider (SDK selection).
  *
- * AgentProvider determines which backend class to instantiate:
- * - 'anthropic' → ClaudeAgent
- * - 'pi' → PiAgent
+ * AgentProvider selects the PI backend. Model suppliers are represented by
+ * `piAuthProvider` on the connection, not by separate backend classes.
  *
  * @param providerType - The full provider type from LLM connection
  * @returns The agent provider for SDK selection
  */
 export function providerTypeToAgentProvider(providerType: LlmProviderType): AgentProvider {
   switch (providerType) {
-    // Anthropic SDK backend (direct API only)
-    case 'anthropic':
-      return 'anthropic';
-
-    // Pi backends (includes former bedrock/vertex/anthropic_compat via migration)
     case 'pi':
     case 'pi_compat':
       return 'pi';
@@ -262,7 +229,7 @@ export function providerTypeToAgentProvider(providerType: LlmProviderType): Agen
     default:
       // Exhaustive check
       const _exhaustive: never = providerType;
-      return 'anthropic';
+      return 'pi';
   }
 }
 
@@ -276,12 +243,11 @@ export function providerTypeToAgentProvider(providerType: LlmProviderType): Agen
 export function connectionTypeToProvider(connectionType: LlmConnectionType): AgentProvider {
   switch (connectionType) {
     case 'anthropic':
-      return 'anthropic';
     case 'openai':
     case 'openai-compat':
-      return 'pi'; // Legacy OpenAI connections are now routed through Pi
+      return 'pi';
     default:
-      return 'anthropic';
+      return 'pi';
   }
 }
 
@@ -360,9 +326,7 @@ export function resolveBackendContext(args: {
     args.workspaceDefaultConnectionSlug
   );
 
-  const provider = connection
-    ? providerTypeToAgentProvider(connection.providerType || 'anthropic')
-    : 'anthropic';
+  const provider: AgentProvider = 'pi';
 
   const authType = connection
     ? connectionAuthTypeToBackendAuthType(connection.authType)
@@ -389,23 +353,17 @@ export function resolveSetupTestConnectionHint(args: {
   piAuthProvider?: string;
   customEndpoint?: CustomEndpointConfig;
 }): Pick<LlmConnection, 'providerType' | 'piAuthProvider' | 'customEndpoint'> {
-  if (args.provider === 'pi') {
-    if (args.customEndpoint && args.baseUrl?.trim()) {
-      return {
-        providerType: 'pi_compat',
-        piAuthProvider: args.customEndpoint.api === 'anthropic-messages' ? 'anthropic' : 'openai',
-        customEndpoint: args.customEndpoint,
-      };
-    }
-
+  if (args.customEndpoint && args.baseUrl?.trim()) {
     return {
-      providerType: 'pi',
-      piAuthProvider: args.piAuthProvider,
+      providerType: 'pi_compat',
+      piAuthProvider: args.customEndpoint.api === 'anthropic-messages' ? 'anthropic' : 'openai',
+      customEndpoint: args.customEndpoint,
     };
   }
 
   return {
-    providerType: args.baseUrl ? 'pi_compat' : 'anthropic',
+    providerType: 'pi',
+    piAuthProvider: args.piAuthProvider,
   };
 }
 
@@ -487,7 +445,7 @@ export async function validateStoredBackendConnection(args: {
     });
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
-    return { success: false, error: parseValidationError(msg) };
+    return { success: false, error: msg.slice(0, 300) };
   }
 }
 
@@ -503,7 +461,7 @@ export function createConfigFromConnection(
   baseConfig: Omit<BackendConfig, 'provider' | 'authType' | 'providerType'>
 ): BackendConfig {
   // Use new providerType if available, fall back to legacy type
-  const providerType = connection.providerType || (connection.type ? connectionTypeToProvider(connection.type) as unknown as LlmProviderType : 'anthropic');
+  const providerType = connection.providerType || 'pi';
   const provider = providerTypeToAgentProvider(providerType);
 
   return {
@@ -548,14 +506,14 @@ export function createBackendFromConnection(
 
   const context: ResolvedBackendContext = {
     connection,
-    provider: providerTypeToAgentProvider(connection.providerType || 'anthropic'),
+    provider: 'pi',
     authType: connectionAuthTypeToBackendAuthType(connection.authType),
     resolvedModel: resolveModelForProvider(
-      providerTypeToAgentProvider(connection.providerType || 'anthropic'),
+      'pi',
       baseConfig.model,
       connection
     ),
-    capabilities: BACKEND_CAPABILITIES[providerTypeToAgentProvider(connection.providerType || 'anthropic')],
+    capabilities: BACKEND_CAPABILITIES.pi,
   };
 
   if (hostRuntime) {
@@ -586,7 +544,6 @@ export const BACKEND_CAPABILITIES: Record<AgentProvider, {
   /** Whether the backend needs an HTTP pool server (external subprocess can't access McpClientPool directly) */
   needsHttpPoolServer: boolean;
 }> = {
-  anthropic: { needsHttpPoolServer: false },
   pi: { needsHttpPoolServer: false },
 };
 
@@ -600,12 +557,8 @@ export const BACKEND_CAPABILITIES: Record<AgentProvider, {
  * - anthropic: undefined (Claude uses env vars, not explicit authType)
  * - pi: 'api_key'
  */
-export function getDefaultAuthType(provider: AgentProvider): LlmAuthType | undefined {
-  switch (provider) {
-    case 'anthropic': return undefined;
-    case 'pi':        return 'api_key';
-    default:          return undefined;
-  }
+export function getDefaultAuthType(_provider: AgentProvider): LlmAuthType {
+  return 'api_key';
 }
 
 // ============================================================
@@ -629,21 +582,15 @@ export function resolveModelForProvider(
   managedModel: string | undefined,
   connection: LlmConnection | null
 ): string {
-  // Cross-provider guard: if the model belongs to a different provider, fall back
-  // to the connection's default. This prevents e.g. sending a Claude model to Pi.
   if (managedModel) {
     managedModel = normalizeDeprecatedModelId(managedModel);
-    const modelProvider = getModelProvider(managedModel);
-    if (modelProvider && modelProvider !== provider) {
-      managedModel = undefined; // Clear — will fall through to connection default
-    }
   }
 
   let connectionDefault = connection?.defaultModel
     ? normalizeDeprecatedModelId(connection.defaultModel)
     : undefined;
 
-  if (provider === 'pi' && connection?.models?.length) {
+  if (connection?.models?.length) {
     const connectionModelIds = connection.models.map(m => typeof m === 'string' ? m : m.id);
     if (managedModel && !connectionModelIds.includes(managedModel)) {
       managedModel = undefined;
@@ -653,12 +600,7 @@ export function resolveModelForProvider(
     }
   }
 
-  switch (provider) {
-    case 'pi':
-      return managedModel || connectionDefault || '';
-    default:
-      return managedModel || connectionDefault || DEFAULT_MODEL;
-  }
+  return managedModel || connectionDefault || '';
 }
 
 // ============================================================
@@ -758,12 +700,6 @@ export async function testBackendConnection(args: {
         session: { id: `test-${now}`, workspaceRootPath: cwd, createdAt: 0, lastUsedAt: 0 },
         isHeadless: true,
         miniModel: testModel,
-        envOverrides: args.provider === 'anthropic'
-          ? {
-            ANTHROPIC_API_KEY: trimmedKey,
-            ...(args.baseUrl?.trim() ? { ANTHROPIC_BASE_URL: args.baseUrl.trim() } : {}),
-          }
-          : undefined,
       },
       hostRuntime: args.hostRuntime,
       providerOptions: { piAuthProvider: args.connection?.piAuthProvider },
@@ -830,28 +766,8 @@ export async function testBackendConnection(args: {
  * @returns Validation result
  */
 export async function validateConnection(
-  connection: LlmConnection,
-  credentials: { apiKey?: string; oauthToken?: string },
-): Promise<LlmValidationResult> {
-  const provider = providerTypeToAgentProvider(connection.providerType);
-
-  switch (provider) {
-    case 'anthropic': {
-      // Anthropic-based providers can be validated via the Claude Agent SDK
-      const { validateAnthropicConnection } = await import('../../config/llm-validation.ts');
-      return validateAnthropicConnection({
-        model: connection.defaultModel || DEFAULT_MODEL,
-        apiKey: credentials.apiKey,
-        oauthToken: credentials.oauthToken,
-        baseUrl: connection.baseUrl,
-      });
-    }
-
-    case 'pi':
-      // Pi validates on connect via its auth storage — no pre-flight check available
-      return { success: true };
-
-    default:
-      return { success: true };
-  }
+  _connection: LlmConnection,
+  _credentials: { apiKey?: string; oauthToken?: string },
+): Promise<{ success: boolean; error?: string }> {
+  return { success: true };
 }

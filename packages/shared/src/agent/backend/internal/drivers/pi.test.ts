@@ -30,6 +30,7 @@ describe('piDriver.buildRuntime custom endpoint models', () => {
         piServerPath: '/tmp/pi-agent-server.js',
         interceptorBundlePath: '/tmp/interceptor.cjs',
         nodeRuntimePath: '/usr/bin/node',
+        useElectronNode: true,
       },
     });
 
@@ -38,5 +39,6 @@ describe('piDriver.buildRuntime custom endpoint models', () => {
       { id: 'text-only-model', supportsImages: false },
       'plain-model',
     ]);
+    expect(runtime.paths?.electronNode).toBe(true);
   });
 });

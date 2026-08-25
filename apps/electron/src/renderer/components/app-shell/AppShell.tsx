@@ -419,6 +419,7 @@ function AppShellContent({
     createGroup: createSkillGroup,
     renameGroup: renameSkillGroup,
     deleteGroup: deleteSkillGroup,
+    reorderGroups: reorderSkillGroups,
     setSkillGroup,
   } = useSkillFavorites(activeWorkspaceId || undefined)
   const ownSkills = React.useMemo(
@@ -1530,6 +1531,7 @@ function AppShellContent({
                       onCreateGroup={createSkillGroup}
                       onRenameGroup={renameSkillGroup}
                       onDeleteGroup={deleteSkillGroup}
+                      onReorderGroup={reorderSkillGroups}
                     />
                   )}
                 </>
@@ -1627,6 +1629,7 @@ function AppShellContent({
                 groups={skillGroups}
                 groupAssignments={skillGroupAssignments}
                 onAssignGroup={setSkillGroup}
+                onReorderGroup={reorderSkillGroups}
                 onSkillClick={handleSkillSelect}
                 selectedSkillSlug={isSkillsNavigation(navState) && navState.details?.type === 'skill' ? navState.details.skillSlug : null}
               />

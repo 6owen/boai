@@ -67,6 +67,65 @@ function EmptyRows({ children }: { children: React.ReactNode }) {
   )
 }
 
+function SkeletonBlock({ className }: { className: string }) {
+  return <div aria-hidden="true" className={`rounded bg-foreground/[0.08] ${className}`} />
+}
+
+function SkillStatsSkeleton({ title }: { title: string }) {
+  return (
+    <Info_Page>
+      <Info_Page.Header title={title} centerTitle />
+      <Info_Page.Content>
+        <div
+          aria-busy="true"
+          className="animate-pulse space-y-6 motion-reduce:animate-none"
+        >
+          <div className="flex items-start justify-between gap-6 px-1">
+            <div className="space-y-2">
+              <SkeletonBlock className="h-4 w-52 max-w-full" />
+              <SkeletonBlock className="h-3 w-80 max-w-full" />
+            </div>
+            <SkeletonBlock className="h-8 w-44 shrink-0 rounded-[9px]" />
+          </div>
+
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            {Array.from({ length: 4 }, (_, index) => (
+              <div key={index} className="rounded-[8px] bg-background px-4 py-3 shadow-minimal">
+                <SkeletonBlock className="h-3 w-20" />
+                <SkeletonBlock className="mt-2 h-6 w-12" />
+              </div>
+            ))}
+          </div>
+
+          {Array.from({ length: 2 }, (_, sectionIndex) => (
+            <div key={sectionIndex} className="space-y-3">
+              <SkeletonBlock className="h-4 w-28" />
+              <div className="overflow-hidden rounded-[8px] bg-background shadow-minimal">
+                {Array.from({ length: 3 }, (_, rowIndex) => (
+                  <div
+                    key={rowIndex}
+                    className="flex gap-4 border-b border-border/30 px-4 py-3 last:border-b-0"
+                  >
+                    <SkeletonBlock className="h-4 w-5 shrink-0" />
+                    <div className="flex-1 space-y-2">
+                      <div className="flex justify-between gap-4">
+                        <SkeletonBlock className="h-4 w-36 max-w-[55%]" />
+                        <SkeletonBlock className="h-3 w-20" />
+                      </div>
+                      <SkeletonBlock className="h-1.5 w-full rounded-full" />
+                      <SkeletonBlock className="h-3 w-28" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </Info_Page.Content>
+    </Info_Page>
+  )
+}
+
 export default function SkillStatsPage({
   stats,
   range,
@@ -113,8 +172,12 @@ export default function SkillStatsPage({
     [dateFormatter, t],
   )
 
+  if (isLoading && !stats) {
+    return <SkillStatsSkeleton title={t('skillStats.title')} />
+  }
+
   return (
-    <Info_Page loading={isLoading} error={error ?? undefined}>
+    <Info_Page error={error ?? undefined}>
       <Info_Page.Header title={t('skillStats.title')} centerTitle />
 
       <Info_Page.Content>

@@ -4,7 +4,6 @@ import { Key, Monitor } from "lucide-react"
 import { BoAILogo } from "@/components/icons/BoAILogo"
 import { StepFormLayout } from "./primitives"
 
-import claudeIcon from "@/assets/provider-icons/claude.svg"
 import openaiIcon from "@/assets/provider-icons/openai.svg"
 import copilotIcon from "@/assets/provider-icons/copilot.svg"
 
@@ -12,7 +11,7 @@ import copilotIcon from "@/assets/provider-icons/copilot.svg"
  * The high-level provider choice the user makes on first launch.
  * This maps to one or more ApiSetupMethods downstream.
  */
-export type ProviderChoice = 'claude' | 'chatgpt' | 'copilot' | 'api_key' | 'local'
+export type ProviderChoice = 'chatgpt' | 'copilot' | 'api_key' | 'local'
 
 interface ProviderOption {
   id: ProviderChoice
@@ -22,7 +21,6 @@ interface ProviderOption {
 }
 
 const PROVIDER_ICONS: Record<ProviderChoice, React.ReactNode> = {
-  claude: <img src={claudeIcon} alt="" className="size-5 rounded-[3px]" />,
   chatgpt: <img src={openaiIcon} alt="" className="size-5 rounded-[3px]" />,
   copilot: <img src={copilotIcon} alt="" className="size-5 rounded-[3px]" />,
   api_key: <Key className="size-5" />,
@@ -46,12 +44,6 @@ export function ProviderSelectStep({ onSelect, onSkip }: ProviderSelectStepProps
   const { t } = useTranslation()
 
   const PROVIDER_OPTIONS: ProviderOption[] = [
-    {
-      id: 'claude',
-      name: t("onboarding.providerSelect.claudeProMax"),
-      description: t("onboarding.providerSelect.claudeProMaxDesc"),
-      icon: PROVIDER_ICONS.claude,
-    },
     {
       id: 'chatgpt',
       name: t("onboarding.providerSelect.codexChatGPT"),

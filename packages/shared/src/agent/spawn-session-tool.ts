@@ -9,7 +9,6 @@
  * - Default: Creates a session and sends the prompt (fire-and-forget)
  */
 
-import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import type { SpawnSessionResult, SpawnSessionHelpResult } from './base-agent.ts';
 
@@ -38,9 +37,9 @@ export interface SpawnSessionToolOptions {
 }
 
 export function createSpawnSessionTool(options: SpawnSessionToolOptions) {
-  return tool(
-    'spawn_session',
-    `Create a new session that runs independently with its own prompt, connection, model, and sources.
+  return {
+    name: 'spawn_session',
+    description: `Create a new session that runs independently with its own prompt, connection, model, and sources.
 
 Use this to delegate tasks to parallel sessions — research, analysis, drafts, or any work that benefits from separate context.
 
@@ -53,7 +52,7 @@ thinkingLevel is silently ignored on non-reasoning models (e.g. gpt-4o, gemini-2
 
 The spawned session appears in the session list and runs fire-and-forget.
 Only use 'attachments' for existing file paths on disk — the tool reads them automatically.`,
-    {
+    inputSchema: {
       help: z.boolean().optional()
         .describe('If true, returns available connections, models, and sources instead of creating a session'),
       prompt: z.string().optional()
@@ -82,7 +81,7 @@ Only use 'attachments' for existing file paths on disk — the tool reads them a
       })).optional()
         .describe('Files to include with the prompt'),
     },
-    async (args) => {
+    handler: async (args: Record<string, unknown>) => {
       const spawnFn = options.getSpawnSessionFn();
       if (!spawnFn) {
         return errorResponse('spawn_session is not available in this context.');
@@ -99,6 +98,6 @@ Only use 'attachments' for existing file paths on disk — the tool reads them a
         }
         throw error;
       }
-    }
-  );
+    },
+  };
 }

@@ -14,7 +14,6 @@ import {
   ApiKeyInput,
   type ApiKeyStatus,
   type ApiKeySubmitData,
-  OAuthConnect,
   type OAuthStatus,
 } from "../apisetup"
 import type { CustomEndpointApi } from '@config/llm-connections'
@@ -28,10 +27,6 @@ interface CredentialsStepProps {
   onSubmit: (data: ApiKeySubmitData) => void
   onStartOAuth?: (methodOverride?: ApiSetupMethod) => void
   onBack: () => void
-  // Two-step OAuth flow
-  isWaitingForCode?: boolean
-  onSubmitAuthCode?: (code: string) => void
-  onCancelOAuth?: () => void
   // Device flow (Copilot)
   copilotDeviceCode?: { userCode: string; verificationUri: string }
   // Edit mode (pre-fill existing connection values)
@@ -52,14 +47,10 @@ export function CredentialsStep({
   onSubmit,
   onStartOAuth,
   onBack,
-  isWaitingForCode,
-  onSubmitAuthCode,
-  onCancelOAuth,
   copilotDeviceCode,
   editInitialValues,
 }: CredentialsStepProps) {
   const { t } = useTranslation()
-  const isClaudeOAuth = apiSetupMethod === 'claude_oauth'
   const isChatGptOAuth = apiSetupMethod === 'pi_chatgpt_oauth'
   const isCopilotOAuth = apiSetupMethod === 'pi_copilot_oauth'
   const isAnthropicApiKey = apiSetupMethod === 'anthropic_api_key'
@@ -190,70 +181,6 @@ export function CredentialsStep({
             </div>
           )}
         </div>
-      </StepFormLayout>
-    )
-  }
-
-  // --- Claude OAuth flow ---
-  if (isClaudeOAuth) {
-    // Waiting for authorization code entry
-    if (isWaitingForCode) {
-      return (
-        <StepFormLayout
-          title={t("onboarding.credentials.enterAuthCode")}
-          description={t("onboarding.credentials.copyCodeInstruction")}
-          actions={
-            <>
-              <BackButton onClick={onCancelOAuth} disabled={status === 'validating'}>{t("common.cancel")}</BackButton>
-              <ContinueButton
-                type="submit"
-                form="auth-code-form"
-                disabled={false}
-                loading={status === 'validating'}
-                loadingText={t("common.connecting")}
-              />
-            </>
-          }
-        >
-          <OAuthConnect
-            status={status as OAuthStatus}
-            errorMessage={errorMessage}
-            isWaitingForCode={true}
-            onStartOAuth={onStartOAuth!}
-            onSubmitAuthCode={onSubmitAuthCode}
-            onCancelOAuth={onCancelOAuth}
-          />
-        </StepFormLayout>
-      )
-    }
-
-    return (
-      <StepFormLayout
-        title={t("onboarding.credentials.connectClaude")}
-        description={t("onboarding.credentials.claudeSubscriptionDesc")}
-        actions={
-          <>
-            <BackButton onClick={onBack} disabled={status === 'validating'} />
-            <ContinueButton
-              onClick={() => onStartOAuth?.()}
-              className="gap-2"
-              loading={status === 'validating'}
-              loadingText={t("common.connecting")}
-            >
-              <ExternalLink className="size-4" />
-              {t("onboarding.credentials.signInClaude")}
-            </ContinueButton>
-          </>
-        }
-      >
-        <OAuthConnect
-          status={status as OAuthStatus}
-          errorMessage={errorMessage}
-          isWaitingForCode={false}
-          onStartOAuth={onStartOAuth!}
-          onSubmitAuthCode={onSubmitAuthCode}
-          onCancelOAuth={onCancelOAuth}
-        />
       </StepFormLayout>
     )
   }

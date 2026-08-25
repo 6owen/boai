@@ -142,11 +142,9 @@ if (isDebugMode) {
 // These are available to all agent Bash sessions via CRAFT_UV, CRAFT_SCRIPTS env vars
 // and PATH prepend. uv auto-downloads Python 3.12 on first use (~5s, then cached).
 {
-  // In packaged app: resources are at process.resourcesPath/app/resources/
-  // In dev: resources are at __dirname/../resources/ (sibling of dist/)
-  const resourcesBase = app.isPackaged
-    ? join(process.resourcesPath, 'app')
-    : join(__dirname, '..')
+  // Runtime assets are staged beside main.cjs at dist/resources in both
+  // packaged and development builds.
+  const resourcesBase = __dirname
   const platformKey = `${process.platform}-${process.arch}`
   const uvPlatformDir = join(resourcesBase, 'resources', 'bin', platformKey)
   const uvBinary = join(uvPlatformDir, process.platform === 'win32' ? 'uv.exe' : 'uv')
@@ -162,12 +160,6 @@ if (isDebugMode) {
   process.env.CRAFT_APP_ROOT = app.isPackaged ? app.getAppPath() : process.cwd()
 
   process.env.CRAFT_UV = bundledUvExists ? uvBinary : (fallbackUv ?? uvBinary)
-
-  // Bun runtime (packaged builds should prefer bundled runtime over PATH)
-  const bunBinary = join(resourcesBase, 'vendor', 'bun', process.platform === 'win32' ? 'bun.exe' : 'bun')
-  if (existsSync(bunBinary)) {
-    process.env.CRAFT_BUN = bunBinary
-  }
 
   process.env.CRAFT_SCRIPTS = scriptsDir
   process.env.CRAFT_COMMANDS_ENTRY = app.isPackaged
@@ -394,6 +386,7 @@ app.whenReady().then(async () => {
       appRootPath: app.isPackaged ? app.getAppPath() : process.cwd(),
       resourcesPath: process.resourcesPath,
       isPackaged: app.isPackaged,
+      isElectron: true,
     },
   })
 
@@ -487,6 +480,7 @@ app.whenReady().then(async () => {
       isDebugMode,
       getLogFilePath,
       captureError: (err) => Sentry.captureException(err),
+      skillUsageWorkerPath: join(__dirname, 'skill-usage-worker.cjs'),
     })
 
     // Bootstrap IPC handlers — preload uses sendSync for window-local details
@@ -550,17 +544,15 @@ app.whenReady().then(async () => {
     })
 
     if (!isClientOnly) {
-      // Restore persisted Git Bash path on Windows (must happen before any SDK subprocess spawn)
+      // Validate the persisted Windows shell path before PI subprocesses use it.
       if (process.platform === 'win32') {
         const { getGitBashPath, clearGitBashPath } = await import('@craft-agent/shared/config')
         const gitBashPath = getGitBashPath()
         if (gitBashPath) {
           const validation = await validateGitBashPath(gitBashPath)
           if (validation.valid) {
-            process.env.CLAUDE_CODE_GIT_BASH_PATH = validation.path
           } else {
             clearGitBashPath()
-            delete process.env.CLAUDE_CODE_GIT_BASH_PATH
             mainLog.warn(`Cleared invalid persisted Git Bash path: ${gitBashPath}`)
           }
         }

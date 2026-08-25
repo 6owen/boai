@@ -9,6 +9,8 @@
  */
 
 import { describe, it, expect, afterEach } from 'bun:test'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Subprocess } from 'bun'
 import WebSocket from 'ws'
@@ -21,18 +23,20 @@ interface SpawnedServer {
   url: string
   token: string
   healthPort: number
+  dataRoot: string
   proc: Subprocess
   stop: () => Promise<void>
 }
 
 async function spawnTestServer(extraEnv?: Record<string, string>): Promise<SpawnedServer> {
   const token = crypto.randomUUID() + crypto.randomUUID() // 72 chars, well above 16 minimum
-  const { CLAUDECODE: _, ...parentEnv } = process.env
+  const dataRoot = mkdtempSync(join(tmpdir(), 'boai-server-smoke-'))
 
   const proc = Bun.spawn(['bun', 'run', SERVER_ENTRY], {
     env: {
-      ...parentEnv,
+      ...process.env,
       ...extraEnv,
+      BOAI_HOME: dataRoot,
       CRAFT_SERVER_TOKEN: token,
       CRAFT_RPC_PORT: '0',
       CRAFT_RPC_HOST: '127.0.0.1',
@@ -64,10 +68,12 @@ async function spawnTestServer(extraEnv?: Record<string, string>): Promise<Spawn
             url,
             token,
             healthPort: 0, // health port not printed; we skip health test if 0
+            dataRoot,
             proc,
             stop: async () => {
               proc.kill('SIGTERM')
               await proc.exited
+              rmSync(dataRoot, { recursive: true, force: true })
             },
           })
           return
@@ -150,10 +156,11 @@ describe('headless server smoke test', () => {
 
   it('rejects short token at startup', async () => {
     const token = 'short'
-    const { CLAUDECODE: _, ...parentEnv } = process.env
+    const dataRoot = mkdtempSync(join(tmpdir(), 'boai-server-smoke-'))
     const proc = Bun.spawn(['bun', 'run', SERVER_ENTRY], {
       env: {
-        ...parentEnv,
+        ...process.env,
+        BOAI_HOME: dataRoot,
         CRAFT_SERVER_TOKEN: token,
         CRAFT_RPC_PORT: '0',
         CRAFT_RPC_HOST: '127.0.0.1',
@@ -163,6 +170,7 @@ describe('headless server smoke test', () => {
     })
 
     const exitCode = await proc.exited
+    rmSync(dataRoot, { recursive: true, force: true })
     expect(exitCode).not.toBe(0)
   }, TEST_TIMEOUT)
 
@@ -177,6 +185,7 @@ describe('headless server smoke test', () => {
     server.proc.kill('SIGTERM')
     const exitCode = await server.proc.exited
     expect(exitCode).toBe(0)
+    rmSync(server.dataRoot, { recursive: true, force: true })
 
     // Mark as stopped so afterEach doesn't double-kill
     server = null

@@ -401,7 +401,7 @@ export const onboardingComponents: ComponentEntry[] = [
       {
         name: 'Credentials - OAuth',
         props: {
-          state: createOnboardingState({ step: 'credentials', apiSetupMethod: 'claude_oauth' }),
+          state: createOnboardingState({ step: 'credentials', apiSetupMethod: 'pi_chatgpt_oauth' }),
         },
       },
       {

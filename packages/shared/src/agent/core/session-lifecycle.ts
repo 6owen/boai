@@ -4,11 +4,9 @@
  * Shared session lifecycle types and utilities for agent implementations.
  * Provides common abort reasons, session state, and cleanup patterns.
  *
- * The actual abort implementation is provider-specific:
- * - ClaudeAgent uses AbortController with the Claude SDK
- * - PiAgent signals the pi-agent-server subprocess via JSONL
+ * PiAgent signals the pi-agent-server subprocess via JSONL.
  *
- * This module provides the shared types and utilities that both use.
+ * This module keeps lifecycle state separate from the subprocess transport.
  */
 
 // ============================================================

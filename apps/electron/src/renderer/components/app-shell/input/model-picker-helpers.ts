@@ -42,8 +42,8 @@ export function groupConnectionsByProvider<T extends LlmConnection>(
     'BoAI Backend': [],
   }
   for (const conn of connections) {
-    const provider = conn.providerType || 'anthropic'
-    if (provider === 'anthropic') {
+    const provider = conn.providerType || 'pi'
+    if (provider === 'pi' && conn.piAuthProvider === 'anthropic') {
       groups['Anthropic'].push(conn)
     } else if (provider === 'pi_compat' && isLocalConnection(conn)) {
       groups['Local'].push(conn)

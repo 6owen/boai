@@ -20,7 +20,7 @@ import {
   type BackendHostRuntimeContext,
   type PostInitResult,
 } from '@craft-agent/shared/agent/backend'
-import { getLlmConnection, getLlmConnections, getDefaultLlmConnection, getDefaultThinkingLevel, resetManagedAnthropicAuthEnvVars, resolveMidStreamBehavior, getPersistedUiLanguage, resolveTitleLanguageName } from '@craft-agent/shared/config'
+import { getLlmConnection, getLlmConnections, getDefaultLlmConnection, getDefaultThinkingLevel, resolveMidStreamBehavior, getPersistedUiLanguage, resolveTitleLanguageName } from '@craft-agent/shared/config'
 import type { MidStreamBehavior } from '@craft-agent/shared/config'
 import { PrivilegedExecutionBroker } from '@craft-agent/server-core/services'
 import { isValidWorkingDirectory } from '../utils/path-validation'
@@ -77,8 +77,6 @@ import { loadWorkspaceSources, loadAllSources, getSourcesBySlugs, isSourceUsable
 import { listTaskSlugs, parseTaskSpec, uniqueTaskSlug } from '@craft-agent/shared/tasks'
 import { createTaskFromSpec, resolveCreateTaskProjectId } from '../tasks'
 import { ConfigWatcher, type ConfigWatcherCallbacks } from '@craft-agent/shared/config'
-import { getValidClaudeOAuthToken } from '@craft-agent/shared/auth'
-import { resolveAuthEnvVars } from '@craft-agent/shared/config'
 import { toolMetadataStore, getLastApiError } from '@craft-agent/shared/interceptor'
 import { isParentTaskTool } from '@craft-agent/shared/utils/toolNames'
 import { restoreFiles } from '@craft-agent/shared/utils/bundle-files'
@@ -159,6 +157,7 @@ function buildBackendHostRuntimeContext(): BackendHostRuntimeContext {
     appRootPath: _platform.appRootPath,
     resourcesPath: _platform.resourcesPath,
     isPackaged: _platform.isPackaged,
+    isElectron: _platform.isElectron,
   }
 }
 
@@ -275,85 +274,6 @@ export async function copyPiTurnAnchorsForBranch(
     JSON.stringify({ version: PI_TURN_ANCHORS_VERSION, anchors: filtered }),
     'utf-8',
   )
-}
-
-const CLAUDE_TURN_ANCHORS_VERSION = 1
-const CLAUDE_TURN_ANCHORS_FILE = 'claude-turn-anchors.json'
-
-interface ClaudeTurnAnchorRecord {
-  sdkSessionId: string
-  sdkMessageUuid: string
-}
-
-interface ClaudeTurnAnchorsIndex {
-  version: number
-  anchors: Record<string, ClaudeTurnAnchorRecord>
-}
-
-function getClaudeTurnAnchorsPath(sessionPath: string): string {
-  return join(sessionPath, 'meta', CLAUDE_TURN_ANCHORS_FILE)
-}
-
-function isClaudeMessageUuid(turnId: string): boolean {
-  return /^msg_[A-Za-z0-9]+$/.test(turnId)
-}
-
-async function loadClaudeTurnAnchors(sessionPath: string): Promise<ClaudeTurnAnchorsIndex> {
-  const filePath = getClaudeTurnAnchorsPath(sessionPath)
-  try {
-    const raw = await readFile(filePath, 'utf-8')
-    const parsed = JSON.parse(raw) as Partial<ClaudeTurnAnchorsIndex>
-    const anchors = (parsed.anchors && typeof parsed.anchors === 'object') ? parsed.anchors : {}
-    const normalized: Record<string, ClaudeTurnAnchorRecord> = {}
-
-    for (const [messageId, value] of Object.entries(anchors)) {
-      if (!messageId || typeof messageId !== 'string') continue
-      if (!value || typeof value !== 'object') continue
-      const sdkSessionId = (value as { sdkSessionId?: unknown }).sdkSessionId
-      const sdkMessageUuid = (value as { sdkMessageUuid?: unknown }).sdkMessageUuid
-      if (typeof sdkSessionId === 'string' && sdkSessionId && typeof sdkMessageUuid === 'string' && sdkMessageUuid) {
-        normalized[messageId] = { sdkSessionId, sdkMessageUuid }
-      }
-    }
-
-    return {
-      version: CLAUDE_TURN_ANCHORS_VERSION,
-      anchors: normalized,
-    }
-  } catch {
-    return {
-      version: CLAUDE_TURN_ANCHORS_VERSION,
-      anchors: {},
-    }
-  }
-}
-
-async function getClaudeTurnAnchor(sessionPath: string, messageId: string): Promise<ClaudeTurnAnchorRecord | undefined> {
-  if (!messageId) return undefined
-  const index = await loadClaudeTurnAnchors(sessionPath)
-  return index.anchors[messageId]
-}
-
-async function saveClaudeTurnAnchor(
-  sessionPath: string,
-  messageId: string,
-  sdkSessionId: string,
-  sdkMessageUuid: string,
-): Promise<void> {
-  if (!messageId || !sdkSessionId || !sdkMessageUuid) return
-
-  const index = await loadClaudeTurnAnchors(sessionPath)
-  const previous = index.anchors[messageId]
-  if (previous && previous.sdkSessionId === sdkSessionId && previous.sdkMessageUuid === sdkMessageUuid) return
-
-  index.anchors[messageId] = {
-    sdkSessionId,
-    sdkMessageUuid,
-  }
-
-  const filePath = getClaudeTurnAnchorsPath(sessionPath)
-  await mkdir(join(sessionPath, 'meta'), { recursive: true })
-  await writeFile(filePath, JSON.stringify(index), 'utf-8')
 }
 
 /**
@@ -1752,46 +1672,9 @@ export class SessionManager implements ISessionManager {
    * @param connectionSlug - Optional connection slug to use (overrides default)
    */
   async reinitializeAuth(connectionSlug?: string): Promise<void> {
-    try {
-      const manager = getCredentialManager()
-
-      // Get the connection to use (explicit parameter or default)
-      const slug = connectionSlug || getDefaultLlmConnection()
-      if (!slug) {
-        sessionLog.warn('No LLM connection slug available for reinitializeAuth')
-      }
-      const connection = slug ? getLlmConnection(slug) : null
-
-      // Restore managed auth env vars to their baseline before applying this connection.
-      resetManagedAnthropicAuthEnvVars()
-
-      if (!connection) {
-        sessionLog.error(`No LLM connection found for slug: ${slug}`)
-        resetSummarizationClient()
-        return
-      }
-
-      sessionLog.info(`Reinitializing auth for connection: ${slug} (${connection.authType})`)
-
-      // Resolve auth env vars via shared utility (provider-agnostic)
-      const result = await resolveAuthEnvVars(connection, slug!, manager, getValidClaudeOAuthToken)
-
-      if (!result.success) {
-        sessionLog.error(`Auth resolution failed for ${slug}: ${result.warning}`)
-      } else {
-        // Apply resolved env vars to process.env
-        for (const [key, value] of Object.entries(result.envVars)) {
-          process.env[key] = value
-        }
-        sessionLog.info(`Auth env vars set for connection: ${slug}`)
-      }
-
-      // Reset cached summarization client so it picks up new credentials/base URL
-      resetSummarizationClient()
-    } catch (error) {
-      sessionLog.error('Failed to reinitialize auth:', error)
-      throw error
-    }
+    const slug = connectionSlug || getDefaultLlmConnection()
+    sessionLog.info(`Refreshing PI authentication context${slug ? ` for connection: ${slug}` : ''}`)
+    resetSummarizationClient()
   }
 
   async initialize(): Promise<void> {
@@ -2630,34 +2513,6 @@ export class SessionManager implements ISessionManager {
                 branchFromSessionId: options.branchFromSessionId,
                 branchFromMessageId: options.branchFromMessageId,
               })
-            }
-          }
-        } else if (sourceBackendContext.provider === 'anthropic') {
-          if (branchFromSessionPath && branchFromSdkSessionId) {
-            const anchor = await getClaudeTurnAnchor(branchFromSessionPath, options.branchFromMessageId)
-            if (!anchor) {
-              sessionLog.warn('Claude branch anchor missing: falling back to full-history fork for this branch', {
-                workspaceId,
-                branchFromSessionId: options.branchFromSessionId,
-                branchFromMessageId: options.branchFromMessageId,
-              })
-            } else if (!anchor.sdkMessageUuid || !isClaudeMessageUuid(anchor.sdkMessageUuid)) {
-              sessionLog.warn('Claude branch anchor malformed: falling back to full-history fork for this branch', {
-                workspaceId,
-                branchFromSessionId: options.branchFromSessionId,
-                branchFromMessageId: options.branchFromMessageId,
-                anchorSdkSessionId: anchor.sdkSessionId,
-              })
-            } else if (anchor.sdkSessionId !== branchFromSdkSessionId) {
-              sessionLog.warn('Claude branch anchor lineage mismatch: falling back to full-history fork for this branch', {
-                workspaceId,
-                branchFromSessionId: options.branchFromSessionId,
-                branchFromMessageId: options.branchFromMessageId,
-                anchorSdkSessionId: anchor.sdkSessionId,
-                parentSdkSessionId: branchFromSdkSessionId,
-              })
-            } else {
-              branchFromSdkTurnId = anchor.sdkMessageUuid
             }
           }
         } else {
@@ -4304,7 +4159,7 @@ export class SessionManager implements ISessionManager {
           // Both backends need the current turn to end before new tools are visible:
           // Claude SDK freezes mcpServers at query() start; Pi only picks up new proxy
           // tool defs on the next handlePrompt (`toolsChanged` flag in pi-agent-server).
-          // Mark a pending restart on the agent — ClaudeAgent/PiAgent consume it after
+          // Mark a pending restart on the agent — PiAgent consumes it after
           // the next tool_result, yield source_activated, and forceAbort. The
           // `source_activated` handler in this class then schedules a server-side
           // resend of the original user message with a "[{slug} activated]" suffix —
@@ -7425,16 +7280,6 @@ export class SessionManager implements ISessionManager {
           managed.lastFinalMessageId = assistantMessage.id
 
           const sessionPath = getSessionStoragePath(managed.workspace.rootPath, sessionId)
-
-          // Claude branch-cutoff support: persist message UUID + SDK session lineage in sidecar.
-          // Used to guard resumeSessionAt so we only send anchors valid for the parent SDK session.
-          if (event.turnId && managed.sdkSessionId && isClaudeMessageUuid(event.turnId)) {
-            try {
-              await saveClaudeTurnAnchor(sessionPath, assistantMessage.id, managed.sdkSessionId, event.turnId)
-            } catch (error) {
-              sessionLog.warn(`Failed to persist Claude turn anchor for session ${sessionId}:`, error)
-            }
-          }
 
           // Pi branch-cutoff support: remember the SDK message id → Craft
           // assistant message id mapping. The actual anchor arrives as a

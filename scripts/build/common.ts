@@ -311,98 +311,7 @@ export async function installDependencies(config: BuildConfig): Promise<void> {
 }
 
 /**
- * Per-platform optional-dep package name for the native `claude` binary.
- * Since SDK 0.2.113 the SDK ships only `sdk.mjs` + types; the native CLI
- * lives in a per-arch sibling package (`@anthropic-ai/claude-agent-sdk-{platform}-{arch}`).
- */
-function platformBinaryPkg(config: BuildConfig): string {
-  const { platform, arch } = config;
-  if (platform === 'darwin') return `claude-agent-sdk-darwin-${arch}`;
-  if (platform === 'win32') return `claude-agent-sdk-win32-${arch}`;
-  if (platform === 'linux') return `claude-agent-sdk-linux-${arch}`;
-  throw new Error(`Unsupported platform for SDK binary lookup: ${platform}`);
-}
-
-function nativeBinaryName(config: BuildConfig): string {
-  return config.platform === 'win32' ? 'claude.exe' : 'claude';
-}
-
-/**
- * Copy SDK from root node_modules:
- *   1. The thin core (`claude-agent-sdk`) — universal sdk.mjs + types.
- *   2. The matching arch's binary package, staged at the stable alias
- *      `claude-agent-sdk-binary/` so electron-builder.yml stays arch-agnostic
- *      and the runtime resolver finds the binary regardless of host arch.
- */
-export function copySDK(config: BuildConfig): void {
-  const { rootDir, electronDir } = config;
-  const sdkScope = join(electronDir, 'node_modules', '@anthropic-ai');
-
-  const sdkSource = join(rootDir, 'node_modules', '@anthropic-ai', 'claude-agent-sdk');
-  const sdkDest = join(sdkScope, 'claude-agent-sdk');
-
-  if (!existsSync(sdkSource)) {
-    throw new Error(`SDK core not found at ${sdkSource}. Run 'bun install' first.`);
-  }
-
-  console.log('Copying SDK core...');
-  mkdirSync(sdkScope, { recursive: true });
-  if (existsSync(sdkDest)) {
-    rmSync(sdkDest, { recursive: true, force: true });
-  }
-  cpSync(sdkSource, sdkDest, { recursive: true, dereference: true });
-
-  const pkg = platformBinaryPkg(config);
-  const binSource = join(rootDir, 'node_modules', '@anthropic-ai', pkg);
-  if (!existsSync(binSource)) {
-    throw new Error(
-      `SDK native binary package not found at ${binSource}. ` +
-      `For cross-arch builds run \`npm pack @anthropic-ai/${pkg}@<sdk-version>\` ` +
-      `to fetch it, or use the platform build script (build-dmg.sh / build-linux.sh / build-win.ps1) ` +
-      `which handles the cross-fetch automatically.`,
-    );
-  }
-
-  const aliasDest = join(sdkScope, 'claude-agent-sdk-binary');
-  console.log(`Staging SDK native binary (${pkg}) as claude-agent-sdk-binary alias...`);
-  if (existsSync(aliasDest)) {
-    rmSync(aliasDest, { recursive: true, force: true });
-  }
-  cpSync(binSource, aliasDest, { recursive: true, dereference: true });
-}
-
-/**
- * Verify the native binary was copied correctly (real file, expected size).
- * Since SDK 0.2.113 the binary is ~210 MB; anything under 50 MB is suspect.
- */
-export function verifySDKCopy(config: BuildConfig): void {
-  const { electronDir } = config;
-  const binaryPath = join(
-    electronDir,
-    'node_modules', '@anthropic-ai', 'claude-agent-sdk-binary',
-    nativeBinaryName(config),
-  );
-
-  if (!existsSync(binaryPath)) {
-    throw new Error(`SDK verification failed: native binary not found at ${binaryPath}`);
-  }
-
-  const stats = lstatSync(binaryPath);
-  if (stats.isSymbolicLink()) {
-    throw new Error('SDK verification failed: native binary is a symlink (should be real file)');
-  }
-
-  const size = stats.size;
-  if (size < 50_000_000) {
-    throw new Error(`SDK verification failed: native binary too small (${size} bytes, expected ~210 MB)`);
-  }
-
-  console.log(`  SDK copy verified: native binary is ${(size / 1024 / 1024).toFixed(1)} MB`);
-}
-
-/**
- * Copy @vscode/ripgrep into the staged node_modules. Replaces the previous
- * `vendor/ripgrep/<platform>/rg` shipped by the SDK before 0.2.113.
+ * Copy @vscode/ripgrep into the staged node_modules.
  */
 export function copyRipgrep(config: BuildConfig): void {
   const { rootDir, electronDir } = config;
@@ -595,17 +504,16 @@ export function buildMcpServers(config: BuildConfig): void {
     throw new Error(`Session MCP server output not found at ${sessionOut}`);
   }
 
-  // Pi agent server uses --target=bun --format=esm because its Pi SDK deps are ESM-only.
-  // --target=node --format=cjs leaves ESM deps as external require() calls that fail at runtime.
-  // koffi is marked external because it's a native N-API module — bun can't inline .node binaries
-  // and inlining its JS breaks the native binary resolution paths.
+  // Build the canonical Node 22 ESM bundle used by Electron and headless packaging.
+  // koffi remains external so its target-specific N-API binary can be staged beside it.
   // Optional: skip if package directory is missing (e.g., not synced to OSS).
   if (existsSync(join(piDir, 'src'))) {
     mkdirSync(join(piDir, 'dist'), { recursive: true });
-    execSync(
-      `bun build ${join(piDir, 'src', 'index.ts')} --outdir ${join(piDir, 'dist')} --target bun --format esm --external koffi`,
-      { cwd: rootDir, stdio: 'inherit', shell: true }
-    );
+    execSync('bun run scripts/build-pi-agent-server.ts', {
+      cwd: rootDir,
+      stdio: 'inherit',
+      shell: true,
+    });
     if (!existsSync(piOut)) {
       throw new Error(`Pi agent server output not found at ${piOut}`);
     }

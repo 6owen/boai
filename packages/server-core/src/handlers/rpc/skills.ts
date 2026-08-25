@@ -1,8 +1,7 @@
 import { join, resolve } from 'path'
 import { existsSync, readdirSync, statSync } from 'fs'
 import { RPC_CHANNELS, type SkillFile } from '@craft-agent/shared/protocol'
-import { getLlmConnections, getWorkspaceByNameOrId } from '@craft-agent/shared/config'
-import { listSessions, loadSession } from '@craft-agent/shared/sessions'
+import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
 import type {
   DeleteSkillRequest,
   InstallSkillRequest,
@@ -14,15 +13,12 @@ import type { ExportOwnSkillLibraryRequest } from '@craft-agent/shared/personal-
 
 const SKILLS_UPDATE_ALL_TIMEOUT_MS = 10 * 60_000
 import {
-  aggregateSkillUsage,
   annotateManagedSkills,
-  detectInstalledSkillAgents,
   loadAllSkills,
-  mergeSystemSkillUsage,
-  scanCodexSkillUsage,
   SkillsCliService,
 } from '@craft-agent/shared/skills'
 import type { RpcServer } from '@craft-agent/server-core/transport'
+import { computeSkillUsageStats } from '@craft-agent/server-core/services/skill-usage-stats'
 import type { HandlerDeps } from '../handler-deps'
 
 export const HANDLED_CHANNELS = [
@@ -153,46 +149,10 @@ export function registerSkillsHandlers(
       throw new Error('Invalid Skill usage range')
     }
 
-    const sessions = listSessions(workspace.rootPath).flatMap((metadata) => {
-      const session = loadSession(workspace.rootPath, metadata.id)
-      return session ? [session] : []
-    })
-    const connections = new Map(getLlmConnections().map(connection => [connection.slug, connection]))
-    const knownSkillSlugs = loadAllSkills(workspace.rootPath).map(skill => skill.slug)
-
-    const now = Date.now()
-    const boaiStats = aggregateSkillUsage(sessions, {
-      range,
-      now,
-      limit: Math.max(10, knownSkillSlugs.length),
-      knownSkillSlugs,
-      resolveAgentSource: (session) => {
-        if (!session.llmConnection) return undefined
-        const connection = connections.get(session.llmConnection)
-        if (!connection) return undefined
-        return {
-          label: connection.name,
-          provider: connection.piAuthProvider ?? connection.providerType,
-        }
-      },
-    })
-    const installedAgents = detectInstalledSkillAgents()
-    const hasCodex = installedAgents.some(agent => agent.agentId === 'codex')
-    const cutoff = range === '7d'
-      ? now - 7 * 24 * 60 * 60 * 1000
-      : range === '30d'
-        ? now - 30 * 24 * 60 * 60 * 1000
-        : undefined
-    const externalEvents = hasCodex
-      ? scanCodexSkillUsage({ knownSkillSlugs, cutoff })
-      : []
-
-    return mergeSystemSkillUsage(boaiStats, externalEvents, {
-      installedAgents,
-      observableAgentIds: hasCodex ? ['codex'] : [],
-      range,
-      now,
-    })
+    if (deps.platform.getSkillUsageStats) {
+      return deps.platform.getSkillUsageStats(workspace.rootPath, range)
+    }
+    return computeSkillUsageStats(workspace.rootPath, range)
   })
 
   // Discover every valid SKILL.md before the user chooses what to install.

@@ -1,6 +1,6 @@
 # Craft Agents Electron App
 
-The primary desktop interface for Craft Agents, built with Electron + React. Provides a multi-session inbox with chat interface for interacting with Claude via Craft workspaces.
+The primary desktop interface for BoAI, built with Electron + React. It provides a multi-session inbox and a PI-backed agent workspace.
 
 ## Quick Start
 
@@ -48,37 +48,13 @@ apps/electron/
 
 ## Key Learnings & Gotchas
 
-### 1. SDK Path Resolution (CRITICAL)
+### 1. PI Runtime Resolution
 
-The Claude Agent SDK (`@anthropic-ai/claude-agent-sdk`) spawns a native `claude` binary from a per-platform optional dependency (`@anthropic-ai/claude-agent-sdk-{platform}-{arch}`). Packaged Electron builds must point the SDK at the staged binary because normal optional-dependency resolution does not work inside the packaged resource layout.
+The packaged app runs `dist/resources/pi-agent-server/index.js` with Electron's embedded Node runtime (`ELECTRON_RUN_AS_NODE=1`). `runtime-resolver.ts` resolves that bundle and the optional network interceptor; the artifact validator rejects bundled Bun and any Claude Agent SDK runtime.
 
-**Runtime resolution:** `packages/shared/src/agent/backend/internal/runtime-resolver.ts` probes the build-script alias first:
+Authentication is connection-scoped and passed to the PI subprocess by `PiAgent`. Do not put provider credentials in global Electron environment variables.
 
-```text
-node_modules/@anthropic-ai/claude-agent-sdk-binary/{claude,claude.exe}
-```
-
-and falls back to the real per-arch package in dev. Once resolved, `applyAnthropicRuntimeBootstrap()` calls `setPathToClaudeCodeExecutable(path)` before any Claude agents are created.
-
-### 2. Authentication Environment Setup (CRITICAL)
-
-The SDK requires authentication environment variables to be set BEFORE creating agents. The Electron app must do this explicitly during initialization.
-
-```typescript
-import { getAuthState } from '../../../src/auth/state'
-
-// In initialize():
-const authState = await getAuthState()
-const { billing } = authState
-
-if (billing.type === 'oauth_token' && billing.claudeOAuthToken) {
-  process.env.CLAUDE_CODE_OAUTH_TOKEN = billing.claudeOAuthToken
-} else if (billing.apiKey) {
-  process.env.ANTHROPIC_API_KEY = billing.apiKey
-}
-```
-
-### 3. AgentEvent Type Mismatches
+### 2. AgentEvent Type Mismatches
 
 The `AgentEvent` types from `CraftAgent` use different property names than you might expect:
 
@@ -103,30 +79,27 @@ const toolName = managed.pendingTools.get(event.toolUseId) || 'unknown'
 managed.pendingTools.delete(event.toolUseId)
 ```
 
-### 4. CraftAgent Constructor
+### 3. Agent Construction
 
-`CraftAgent` expects the full `Workspace` object, not just the ID:
+Agent construction expects the full `Workspace` object, not just the ID:
 
 ```typescript
 // Wrong:
-new CraftAgent({ workspaceId: workspace.id, model })
+createAgent({ workspaceId: workspace.id, model })
 
 // Correct:
-new CraftAgent({ workspace, model })
+createAgent({ provider: 'pi', workspace, model })
 ```
 
-### 5. esbuild Configuration
+### 4. esbuild Configuration
 
-Only `electron` is externalized. The SDK is bundled into `main.js`:
+Only `electron` is externalized from the main-process bundle:
 
 ```json
 "electron:build:main": "esbuild ... --external:electron"
 ```
 
-This means:
-- SDK code is inlined (~950KB)
-- SDK's runtime path resolution breaks (see #1)
-- Native modules would need explicit externalization
+PI runs in its separate Node bundle, so it is not duplicated into `main.cjs`.
 
 ## Environment Variables
 

@@ -1,0 +1,180 @@
+{
+  "artifactPath": "apps/electron/release/mac-arm64/BoAI.app",
+  "totalBytes": 377635253,
+  "fileCount": 581,
+  "categories": {
+    "frameworks": 222389215,
+    "claude": 0,
+    "bundledBun": 0,
+    "sourceMaps": 0,
+    "locales": 1075286,
+    "renderer": 20425241,
+    "main": 44693598,
+    "piAgentServer": 23646212,
+    "runtimeResources": 75984966
+  },
+  "largestFiles": [
+    {
+      "path": "Contents/Frameworks/Electron Framework.framework/Versions/A/Electron Framework",
+      "bytes": 174325136
+    },
+    {
+      "path": "Contents/Resources/app/dist/main.cjs",
+      "bytes": 44693598
+    },
+    {
+      "path": "Contents/Resources/app/dist/resources/bin/darwin-arm64/uv",
+      "bytes": 44288240
+    },
+    {
+      "path": "Contents/Resources/app/dist/resources/pi-agent-server/index.js",
+      "bytes": 23646212
+    },
+    {
+      "path": "Contents/Frameworks/Electron Framework.framework/Versions/A/Libraries/libvk_swiftshader.dylib",
+      "bytes": 16757712
+    },
+    {
+      "path": "Contents/Frameworks/Electron Framework.framework/Versions/A/Resources/icudtl.dat",
+      "bytes": 10467680
+    },
+    {
+      "path": "Contents/Frameworks/Electron Framework.framework/Versions/A/Libraries/libGLESv2.dylib",
+      "bytes": 7124320
+    },
+    {
+      "path": "Contents/Resources/messaging-whatsapp-worker/worker.cjs",
+      "bytes": 6303023
+    },
+    {
+      "path": "Contents/Frameworks/Electron Framework.framework/Versions/A/Resources/resources.pak",
+      "bytes": 6300004
+    },
+    {
+      "path": "Contents/Resources/app/dist/resources/session-mcp-server/index.js",
+      "bytes": 4551684
+    },
+    {
+      "path": "Contents/Resources/app/node_modules/@vscode/ripgrep/bin/rg",
+      "bytes": 4547536
+    },
+    {
+      "path": "Contents/Resources/app/dist/renderer/assets/index-DMWLG657.js",
+      "bytes": 4510872
+    },
+    {
+      "path": "Contents/Frameworks/Electron Framework.framework/Versions/A/Libraries/libffmpeg.dylib",
+      "bytes": 2195632
+    },
+    {
+      "path": "Contents/Resources/app/dist/renderer/assets/sonner-m6nl9EoY.js",
+      "bytes": 1944607
+    },
+    {
+      "path": "Contents/Resources/Assets.car",
+      "bytes": 1269192
+    },
+    {
+      "path": "Contents/Resources/app/dist/resources/source.png",
+      "bytes": 1235613
+    },
+    {
+      "path": "Contents/Frameworks/Electron Framework.framework/Versions/A/Helpers/chrome_crashpad_handler",
+      "bytes": 1213152
+    },
+    {
+      "path": "Contents/Resources/app/dist/renderer/assets/pdf.worker.min-qwK7q_zL.mjs",
+      "bytes": 1046214
+    },
+    {
+      "path": "Contents/Resources/icon.icns",
+      "bytes": 884635
+    },
+    {
+      "path": "Contents/Resources/app/dist/renderer/assets/boai-mascot-CPLjC3_0.png",
+      "bytes": 866972
+    }
+  ],
+  "largestDirectories": [
+    {
+      "path": "Contents",
+      "bytes": 377635253
+    },
+    {
+      "path": "Contents/Frameworks",
+      "bytes": 222389215
+    },
+    {
+      "path": "Contents/Frameworks/Electron Framework.framework",
+      "bytes": 220672354
+    },
+    {
+      "path": "Contents/Frameworks/Electron Framework.framework/Versions",
+      "bytes": 220672354
+    },
+    {
+      "path": "Contents/Frameworks/Electron Framework.framework/Versions/A",
+      "bytes": 220672354
+    },
+    {
+      "path": "Contents/Resources",
+      "bytes": 155031756
+    },
+    {
+      "path": "Contents/Resources/app",
+      "bytes": 146574792
+    },
+    {
+      "path": "Contents/Resources/app/dist",
+      "bytes": 142002798
+    },
+    {
+      "path": "Contents/Resources/app/dist/resources",
+      "bytes": 75984966
+    },
+    {
+      "path": "Contents/Resources/app/dist/resources/bin",
+      "bytes": 44289961
+    },
+    {
+      "path": "Contents/Resources/app/dist/resources/bin/darwin-arm64",
+      "bytes": 44288240
+    },
+    {
+      "path": "Contents/Frameworks/Electron Framework.framework/Versions/A/Libraries",
+      "bytes": 26204494
+    },
+    {
+      "path": "Contents/Resources/app/dist/resources/pi-agent-server",
+      "bytes": 23646212
+    },
+    {
+      "path": "Contents/Resources/app/dist/renderer",
+      "bytes": 20425241
+    },
+    {
+      "path": "Contents/Resources/app/dist/renderer/assets",
+      "bytes": 20416934
+    },
+    {
+      "path": "Contents/Frameworks/Electron Framework.framework/Versions/A/Resources",
+      "bytes": 18923983
+    },
+    {
+      "path": "Contents/Resources/messaging-whatsapp-worker",
+      "bytes": 6303023
+    },
+    {
+      "path": "Contents/Resources/app/node_modules",
+      "bytes": 4570114
+    },
+    {
+      "path": "Contents/Resources/app/node_modules/@vscode",
+      "bytes": 4570114
+    },
+    {
+      "path": "Contents/Resources/app/node_modules/@vscode/ripgrep",
+      "bytes": 4570114
+    }
+  ]
+}

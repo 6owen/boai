@@ -1,5 +1,5 @@
 import { RPC_CHANNELS, type LlmConnectionSetup } from '@craft-agent/shared/protocol'
-import { getLlmConnections, getLlmConnection, addLlmConnection, updateLlmConnection, deleteLlmConnection, getDefaultLlmConnection, setDefaultLlmConnection, touchLlmConnection, isCompatProvider, isAnthropicProvider, getDefaultModelsForConnection, getDefaultModelForConnection, type LlmConnection, type LlmConnectionWithStatus, toBedrockNativeId, deriveBedrockRegionPrefix } from '@craft-agent/shared/config'
+import { getLlmConnections, getLlmConnection, addLlmConnection, updateLlmConnection, deleteLlmConnection, getDefaultLlmConnection, setDefaultLlmConnection, touchLlmConnection, isCompatProvider, getDefaultModelsForConnection, getDefaultModelForConnection, type LlmConnection, type LlmConnectionWithStatus, toBedrockNativeId, deriveBedrockRegionPrefix } from '@craft-agent/shared/config'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
 import { setSetupDeferred } from '@craft-agent/shared/config/storage'
 import {
@@ -89,20 +89,6 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
       if (setup.baseUrl !== undefined) {
         updates.baseUrl = setup.baseUrl?.trim() || undefined
 
-        // Only mutate providerType for API key connections (not OAuth connections)
-        if (isAnthropicProvider(connection.providerType) && connection.authType !== 'oauth') {
-          if (hasConfiguredBaseUrl) {
-            updates.providerType = 'pi_compat'
-            updates.authType = 'api_key_with_endpoint'
-            updates.customEndpoint = { api: 'anthropic-messages' }
-          } else {
-            updates.providerType = 'anthropic'
-            updates.authType = 'api_key'
-            updates.models = getDefaultModelsForConnection('anthropic')
-            updates.defaultModel = getDefaultModelForConnection('anthropic')
-          }
-        }
-
         // Pi API key flow: store baseUrl on the connection (Pi SDK doesn't use it yet,
         // but it's persisted for future backend support)
 
@@ -169,23 +155,6 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
       // providerType stays 'pi' (Bedrock routes through Pi SDK).
       if (setup.bedrockAuthMethod) {
         updates.authType = setup.bedrockAuthMethod
-      }
-
-      // Resolved Anthropic OAuth identity (issue #838). Threaded through SETUP so
-      // it persists on both the new-connection path (addLlmConnection) and the
-      // re-auth path (updateLlmConnection) via the shared pendingConnection/updates
-      // flow below. Fail-soft: only stamp when at least one identity block arrived.
-      const oauthIdentity = setup.oauthIdentity
-      if (oauthIdentity?.account || oauthIdentity?.organization) {
-        // Set only fields that are actually present, so `updates` never carries an
-        // explicit `undefined` (matches the guarded-assignment style used above and
-        // keeps the update intent clean). Missing sub-fields are simply not touched;
-        // on re-auth the storage allowlist then preserves any prior value.
-        if (oauthIdentity.account?.uuid) updates.oauthAccountUuid = oauthIdentity.account.uuid
-        if (oauthIdentity.account?.emailAddress) updates.oauthAccountEmail = oauthIdentity.account.emailAddress
-        if (oauthIdentity.organization?.uuid) updates.oauthOrganizationUuid = oauthIdentity.organization.uuid
-        if (oauthIdentity.organization?.name) updates.oauthOrganizationName = oauthIdentity.organization.name
-        updates.oauthProfileVerifiedAt = Date.now()
       }
 
       const effectiveProviderType = updates.providerType ?? connection.providerType
@@ -546,8 +515,7 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error)
       deps.platform.logger?.info(`[LLM_CONNECTION_TEST] Error for ${slug}: ${msg.slice(0, 500)}`)
-      const { parseValidationError } = await import('@craft-agent/shared/config')
-      return { success: false, error: parseValidationError(msg) }
+      return { success: false, error: parseTestConnectionError(msg) }
     }
   })
 

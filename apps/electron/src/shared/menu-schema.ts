@@ -395,10 +395,11 @@ const SETTINGS_ICONS: Record<SettingsSubpage, string> = {
  * User-facing settings pages. Workspace and embedded-server configuration
  * remain registered for backwards-compatible deep links and internal use, but
  * BoAI intentionally presents a single implicit workspace and does not expose
- * either surface in normal navigation.
+ * either surface in normal navigation. Labels remain registered as well, but
+ * its management UI is temporarily hidden until the feature is needed again.
  */
 export const SETTINGS_ITEMS: SettingsMenuItem[] = SETTINGS_PAGES
-  .filter(page => page.id !== 'workspace' && page.id !== 'server')
+  .filter(page => page.id !== 'workspace' && page.id !== 'server' && page.id !== 'labels')
   .map(page => ({
     id: page.id,
     labelKey: page.labelKey,

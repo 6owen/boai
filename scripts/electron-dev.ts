@@ -4,10 +4,12 @@
  */
 
 import { spawn, type Subprocess } from "bun";
-import { existsSync, rmSync, cpSync, readFileSync, statSync, mkdirSync } from "fs";
+import { existsSync, rmSync, readFileSync, statSync, mkdirSync } from "fs";
 import { join, basename } from "path";
 import * as esbuild from "esbuild";
 import { downloadUv, type Platform, type Arch } from "./build/common";
+import { buildPiAgentServer as buildPiAgentServerBundle } from "./build-pi-agent-server.ts";
+import { stageElectronResources } from "./electron-build-resources.ts";
 
 const ROOT_DIR = join(import.meta.dir, "..");
 const ELECTRON_DIR = join(ROOT_DIR, "apps/electron");
@@ -191,12 +193,7 @@ function cleanViteCache(): void {
 
 // Copy resources to dist
 function copyResources(): void {
-  const srcDir = join(ELECTRON_DIR, "resources");
-  const destDir = join(ELECTRON_DIR, "dist/resources");
-  if (existsSync(srcDir)) {
-    cpSync(srcDir, destDir, { recursive: true, force: true });
-    console.log("📦 Copied resources to dist");
-  }
+  stageElectronResources(ROOT_DIR);
 }
 
 // Build the WhatsApp worker bundle (dist/worker.cjs). Runs the canonical
@@ -296,15 +293,7 @@ function getElectronEnv(): Record<string, string> {
 
 // Externals for the main-process bundle.
 // - `electron`: the runtime, not bundleable.
-// - `@anthropic-ai/claude-agent-sdk`: SDK 0.3.x is pure ESM and calls
-//   `createRequire(import.meta.url)` at module-init; esbuild's CJS bundling
-//   leaves the synthesized `import_meta.url` undefined and the bundled
-//   main.cjs throws ERR_INVALID_ARG_VALUE on load. Externalize so Node loads
-//   the SDK natively as ESM. Electron 39 = Node 22.x supports `require()` of
-//   TLA-free ESM, so the runtime `require('@anthropic-ai/claude-agent-sdk')`
-//   resolves correctly. Mirror of the same flag in `scripts/electron-build-main.ts`
-//   and `apps/electron/package.json` build:main.
-const MAIN_BUNDLE_EXTERNALS = ["electron", "@anthropic-ai/claude-agent-sdk"];
+const MAIN_BUNDLE_EXTERNALS = ["electron"];
 
 // Run a one-shot esbuild using the JavaScript API
 async function runEsbuild(
@@ -332,23 +321,9 @@ async function runEsbuild(
   }
 }
 
-// Build Pi agent server using bun instead of esbuild.
-// The Pi SDK (@earendil-works/pi-coding-agent) is ESM-only, and esbuild with
-// packages:external leaves ESM imports as require() calls that fail at runtime.
-// Bun's bundler handles ESM→ESM bundling correctly.
 async function buildPiAgentServer(): Promise<{ success: boolean; error?: string }> {
   try {
-    const proc = spawn({
-      cmd: ["bun", "build", "src/index.ts", "--outdir=dist", "--target=bun", "--format=esm"],
-      cwd: PI_AGENT_SERVER_DIR,
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    const stderr = await new Response(proc.stderr).text();
-    const exitCode = await proc.exited;
-    if (exitCode !== 0) {
-      return { success: false, error: stderr };
-    }
+    await buildPiAgentServerBundle({ rootDir: ROOT_DIR, outfile: PI_AGENT_SERVER_OUTPUT });
     return { success: true };
   } catch (err) {
     return { success: false, error: String(err) };
@@ -432,10 +407,10 @@ async function main(): Promise<void> {
 
   await ensureBundledUvForCurrentPlatform();
 
-  copyResources();
-
   // Build MCP servers for Codex sessions
   await buildMcpServers();
+
+  copyResources();
 
   // Build WhatsApp worker bundle so the adapter can spawn it on demand
   await buildWaWorker();

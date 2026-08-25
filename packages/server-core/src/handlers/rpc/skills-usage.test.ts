@@ -7,6 +7,14 @@ import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import type { SkillUsageStats } from '@craft-agent/shared/skills/types'
 
 const SKILLS_HANDLER_URL = pathToFileURL(join(import.meta.dir, 'skills.ts')).href
+const WORKER_CLIENT_URL = pathToFileURL(join(
+  import.meta.dir,
+  '../../../../../apps/electron/src/main/workers/skill-usage-worker-client.ts',
+)).href
+const WORKER_ENTRY_URL = pathToFileURL(join(
+  import.meta.dir,
+  '../../../../../apps/electron/src/main/workers/skill-usage-worker.ts',
+)).href
 const tempDirs: string[] = []
 
 interface HandlerResult {
@@ -14,11 +22,13 @@ interface HandlerResult {
   registered: string[]
   result?: SkillUsageStats
   error?: string
+  synchronousCallMs?: number
 }
 
 interface WorkspaceFixtureOptions {
   content?: string
   knownSkillSlugs?: readonly string[]
+  sessionCount?: number
 }
 
 function setupWorkspace(
@@ -28,8 +38,9 @@ function setupWorkspace(
   const configDir = mkdtempSync(join(tmpdir(), 'boai-skill-usage-rpc-'))
   tempDirs.push(configDir)
   const workspaceRoot = join(configDir, 'workspaces', 'personal-ai')
-  const sessionDir = join(workspaceRoot, 'sessions', 'session-1')
-  mkdirSync(sessionDir, { recursive: true })
+  const sessionCount = options.sessionCount ?? 1
+  const sessionsDir = join(workspaceRoot, 'sessions')
+  mkdirSync(sessionsDir, { recursive: true })
 
   writeFileSync(join(workspaceRoot, 'config.json'), JSON.stringify({
     id: 'workspace-config-1',
@@ -73,43 +84,49 @@ function setupWorkspace(
     ].join('\n'))
   }
 
-  const header = {
-    id: 'session-1',
-    workspaceRootPath: workspaceRoot,
-    createdAt: now - 60_000,
-    lastUsedAt: now,
-    lastMessageAt: now - 1_000,
-    llmConnection: 'work-anthropic',
-    model: 'claude-sonnet-4-5',
-    tokenUsage: {
-      inputTokens: 0,
-      outputTokens: 0,
-      totalTokens: 0,
-      contextTokens: 0,
-      costUsd: 0,
-    },
-    messageCount: 1,
-    lastMessageRole: 'user',
+  for (let index = 0; index < sessionCount; index += 1) {
+    const sessionId = `session-${index + 1}`
+    const sessionDir = join(sessionsDir, sessionId)
+    mkdirSync(sessionDir, { recursive: true })
+
+    const header = {
+      id: sessionId,
+      workspaceRootPath: workspaceRoot,
+      createdAt: now - 60_000,
+      lastUsedAt: now,
+      lastMessageAt: now - 1_000,
+      llmConnection: 'work-anthropic',
+      model: 'claude-sonnet-4-5',
+      tokenUsage: {
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+        contextTokens: 0,
+        costUsd: 0,
+      },
+      messageCount: 1,
+      lastMessageRole: 'user',
+    }
+    const userMessage = {
+      id: `message-${index + 1}`,
+      type: 'user',
+      content: options.content ?? '[skill:commit] save the changes',
+      timestamp: now - 1_000,
+      ...(options.content ? {} : {
+        badges: [{
+          type: 'skill',
+          label: 'Commit',
+          rawText: '[skill:commit]',
+          start: 0,
+          end: 14,
+        }],
+      }),
+    }
+    writeFileSync(
+      join(sessionDir, 'session.jsonl'),
+      `${JSON.stringify(header)}\n${JSON.stringify(userMessage)}\n`,
+    )
   }
-  const userMessage = {
-    id: 'message-1',
-    type: 'user',
-    content: options.content ?? '[skill:commit] save the changes',
-    timestamp: now - 1_000,
-    ...(options.content ? {} : {
-      badges: [{
-        type: 'skill',
-        label: 'Commit',
-        rawText: '[skill:commit]',
-        start: 0,
-        end: 14,
-      }],
-    }),
-  }
-  writeFileSync(
-    join(sessionDir, 'session.jsonl'),
-    `${JSON.stringify(header)}\n${JSON.stringify(userMessage)}\n`,
-  )
 
   return { configDir, workspaceRoot }
 }
@@ -122,6 +139,9 @@ function invokeUsageHandler(
   const script = `
     import { RPC_CHANNELS } from '@craft-agent/shared/protocol';
     import { registerSkillsHandlers } from ${JSON.stringify(SKILLS_HANDLER_URL)};
+    import { SkillUsageWorkerClient } from ${JSON.stringify(WORKER_CLIENT_URL)};
+
+    const skillUsageWorker = new SkillUsageWorkerClient(new URL(${JSON.stringify(WORKER_ENTRY_URL)}));
 
     const handlers = new Map();
     const server = {
@@ -145,6 +165,9 @@ function invokeUsageHandler(
           async getMetadata() { return null; },
           async process() { return Buffer.from(''); },
         },
+        getSkillUsageStats(workspaceRootPath, range) {
+          return skillUsageWorker.getStats(workspaceRootPath, range);
+        },
       },
     };
 
@@ -155,17 +178,21 @@ function invokeUsageHandler(
       payload = { ok: false, error: 'GET_USAGE_STATS handler not registered' };
     } else {
       try {
-        const result = await handler(
+        const callStartedAt = performance.now();
+        const resultPromise = handler(
           { clientId: 'test-client', workspaceId: ${JSON.stringify(workspaceId)}, webContentsId: 1 },
           ${JSON.stringify(workspaceId)},
           ${JSON.stringify(range)},
         );
-        payload = { ok: true, result };
+        const synchronousCallMs = performance.now() - callStartedAt;
+        const result = await resultPromise;
+        payload = { ok: true, result, synchronousCallMs };
       } catch (error) {
         payload = { ok: false, error: error instanceof Error ? error.message : String(error) };
       }
     }
     payload.registered = [...handlers.keys()];
+    await skillUsageWorker.dispose();
     console.log('__SKILL_USAGE_RESULT__' + JSON.stringify(payload));
   `
   const run = Bun.spawnSync([process.execPath, '--eval', script], {
@@ -270,5 +297,15 @@ describe('Skill usage RPC handler', () => {
       ok: false,
       error: 'Workspace not found',
     })
+  })
+
+  it('returns control before scanning a large session history', () => {
+    const { configDir } = setupWorkspace({ sessionCount: 600 })
+
+    const response = invokeUsageHandler(configDir, 'workspace-1', '30d')
+
+    expect(response.ok).toBe(true)
+    expect(response.synchronousCallMs).toBeLessThan(30)
+    expect(response.result?.totals.sessions).toBe(600)
   })
 })

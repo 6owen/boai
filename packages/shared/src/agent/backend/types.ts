@@ -17,7 +17,7 @@ import type { FileAttachment } from '../../utils/files.ts';
 import type { ThinkingLevel } from '../thinking-levels.ts';
 import type { PermissionMode } from '../mode-manager.ts';
 import type { LoadedSource } from '../../sources/types.ts';
-import type { AuthRequest } from '../session-scoped-tools.ts';
+import type { AuthRequest } from '@craft-agent/session-tools-core';
 import type { McpClientPool } from '../../mcp/mcp-pool.ts';
 import type { Workspace } from '../../config/storage.ts';
 import type { SessionConfig as Session } from '../../sessions/storage.ts';
@@ -46,11 +46,8 @@ export interface BackendRuntimeUpdate {
   };
 }
 
-/**
- * Provider identifier for AI backends.
- * @deprecated Use ModelProvider from config/models.ts instead
- */
-export type AgentProvider = ModelProvider;
+/** The only application agent backend. Model vendors remain a separate concept. */
+export type AgentProvider = 'pi';
 
 
 // ============================================================
@@ -155,6 +152,8 @@ export interface BackendHostRuntimeContext {
   resourcesPath?: string;
   /** Whether the host app is running as a packaged build */
   isPackaged: boolean;
+  /** Whether process.execPath is an Electron executable that can run as Node */
+  isElectron?: boolean;
   /** Optional runtime override for Node/Bun executable */
   nodeRuntimePath?: string;
   /** Optional interceptor bundle override (CJS bundle loaded via --require) */
@@ -638,10 +637,8 @@ export interface AgentBackend {
  */
 export interface BackendConfig extends CoreBackendConfig {
   /**
-   * Provider/SDK to use for this backend.
-   * Determines which agent class is instantiated:
-   * - 'anthropic' → ClaudeAgent (Anthropic SDK)
-   * - 'pi' → PiAgent (Pi via @earendil-works/pi-coding-agent)
+   * Backend implementation to use. BoAI is PI-only; upstream model suppliers
+   * are selected separately through the connection's `piAuthProvider`.
    */
   provider: AgentProvider;
 

@@ -6,12 +6,51 @@
  * - Ripgrep path resolution with system rg fallback
  */
 import { describe, it, expect, afterEach } from 'bun:test';
-import { mkdirSync, writeFileSync, rmSync, chmodSync } from 'node:fs';
+import { chmodSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { resolveBackendRuntimePaths } from '../internal/runtime-resolver.ts';
 import { resolveBackendHostTooling } from '../factory.ts';
 import type { BackendHostRuntimeContext } from '../types.ts';
+
+describe('resolve PI Node runtime', () => {
+  const tmpBase = join(tmpdir(), `node-runtime-resolver-test-${Date.now()}`);
+
+  afterEach(() => {
+    try { rmSync(tmpBase, { recursive: true, force: true }); } catch {}
+  });
+
+  it('uses the Electron executable in Node mode instead of a packaged Bun', () => {
+    const appRoot = join(tmpBase, 'electron-app');
+    const legacyBun = join(appRoot, 'vendor', 'bun', process.platform === 'win32' ? 'bun.exe' : 'bun');
+    mkdirSync(join(legacyBun, '..'), { recursive: true });
+    writeFileSync(legacyBun, 'legacy bun');
+
+    const paths = resolveBackendRuntimePaths({
+      appRootPath: appRoot,
+      resourcesPath: appRoot,
+      isPackaged: true,
+      isElectron: true,
+    });
+
+    expect(paths.nodeRuntimePath).toBe(process.execPath);
+    expect(paths.useElectronNode).toBe(true);
+    expect(paths.bundledRuntimePath).toBeUndefined();
+  });
+
+  it('honors an explicit Node override without Electron Node mode', () => {
+    const paths = resolveBackendRuntimePaths({
+      appRootPath: tmpBase,
+      resourcesPath: tmpBase,
+      isPackaged: true,
+      isElectron: true,
+      nodeRuntimePath: '/opt/boai/node',
+    });
+
+    expect(paths.nodeRuntimePath).toBe('/opt/boai/node');
+    expect(paths.useElectronNode).toBe(false);
+  });
+});
 
 describe('resolveServerPath fallback', () => {
   const tmpBase = join(tmpdir(), `resolver-test-${Date.now()}`);
@@ -121,53 +160,6 @@ describe('resolveRipgrepPath', () => {
       // Must be a vendored path, not a system PATH resolution
       expect(result.ripgrepPath).toContain('node_modules');
     }
-  });
-});
-
-describe('resolveClaudeBinaryPath (native binary, SDK ≥ 0.2.113)', () => {
-  const tmpBase = join(tmpdir(), `claude-bin-resolver-test-${Date.now()}`);
-
-  afterEach(() => {
-    try { rmSync(tmpBase, { recursive: true, force: true }); } catch {}
-  });
-
-  it('finds the per-platform native binary in the optional-dep package', () => {
-    const appRoot = join(tmpBase, 'app');
-    const arch = process.arch === 'arm64' ? 'arm64' : 'x64';
-    const platformPkg = process.platform === 'win32'
-      ? `claude-agent-sdk-win32-${arch}`
-      : process.platform === 'darwin'
-        ? `claude-agent-sdk-darwin-${arch}`
-        : `claude-agent-sdk-linux-${arch}`;
-    const binaryName = process.platform === 'win32' ? 'claude.exe' : 'claude';
-    const binDir = join(appRoot, 'node_modules', '@anthropic-ai', platformPkg);
-    mkdirSync(binDir, { recursive: true });
-    const binPath = join(binDir, binaryName);
-    writeFileSync(binPath, '#!/bin/sh\n');
-    chmodSync(binPath, 0o755);
-
-    const hostRuntime: BackendHostRuntimeContext = {
-      appRootPath: appRoot,
-      resourcesPath: appRoot,
-      isPackaged: true,
-    };
-
-    const paths = resolveBackendRuntimePaths(hostRuntime);
-    expect(paths.claudeCliPath).toBe(binPath);
-  });
-
-  it('returns undefined when the platform package is missing', () => {
-    const appRoot = join(tmpBase, 'no-binary');
-    mkdirSync(appRoot, { recursive: true });
-
-    const hostRuntime: BackendHostRuntimeContext = {
-      appRootPath: appRoot,
-      resourcesPath: appRoot,
-      isPackaged: true,
-    };
-
-    const paths = resolveBackendRuntimePaths(hostRuntime);
-    expect(paths.claudeCliPath).toBeUndefined();
   });
 });
 

@@ -6,6 +6,7 @@
  */
 
 import type { PlatformServices } from '../runtime/platform'
+import { SkillUsageWorkerClient } from './workers/skill-usage-worker-client'
 
 export interface ElectronPlatformOptions {
   app: Electron.App
@@ -16,21 +17,27 @@ export interface ElectronPlatformOptions {
   isDebugMode: boolean
   getLogFilePath?: () => string | undefined
   captureError?: (error: Error) => void
+  skillUsageWorkerPath: string
 }
 
 export function createElectronPlatform(opts: ElectronPlatformOptions): PlatformServices {
   const { app, nativeImage, shell, nativeTheme, logger } = opts
+  const skillUsageWorker = new SkillUsageWorkerClient(opts.skillUsageWorkerPath)
 
   return {
     appRootPath: app.isPackaged ? app.getAppPath() : process.cwd(),
     resourcesPath: process.resourcesPath,
     isPackaged: app.isPackaged,
+    isElectron: true,
     appVersion: app.getVersion(),
     openExternal: (url) => shell.openExternal(url),
     openPath: (p) => shell.openPath(p).then(() => {}),
     showItemInFolder: (p) => shell.showItemInFolder(p),
     quit: () => app.quit(),
     systemDarkMode: () => nativeTheme.shouldUseDarkColors,
+    getSkillUsageStats: (workspaceRootPath, range) => (
+      skillUsageWorker.getStats(workspaceRootPath, range)
+    ),
     imageProcessor: {
       async getMetadata(buffer) {
         const img = nativeImage.createFromBuffer(buffer)

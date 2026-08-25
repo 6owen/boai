@@ -33,7 +33,7 @@ describe('resolveSlugForMethod', () => {
 
   it('works for all setup methods', () => {
     const methods: ApiSetupMethod[] = [
-      'anthropic_api_key', 'claude_oauth',
+      'anthropic_api_key',
       'pi_chatgpt_oauth', 'pi_copilot_oauth', 'pi_api_key',
     ]
     for (const method of methods) {
@@ -60,18 +60,6 @@ describe('apiSetupMethodToConnectionSetup', () => {
     expect(setup.baseUrl).toBe('https://custom.api')
     expect(setup.defaultModel).toBe('claude-sonnet-4-6')
     expect(setup.models).toEqual(['model-a'])
-  })
-
-  it('claude_oauth includes only credential', () => {
-    const setup = apiSetupMethodToConnectionSetup(
-      'claude_oauth',
-      { credential: 'oauth-token-123' },
-      null,
-      new Set(),
-    )
-    expect(setup.slug).toBe('claude-max')
-    expect(setup.credential).toBe('oauth-token-123')
-    expect(setup.baseUrl).toBeUndefined()
   })
 
   it('pi_chatgpt_oauth maps to chatgpt-plus slug', () => {
@@ -111,14 +99,14 @@ describe('apiSetupMethodToConnectionSetup', () => {
     expect(setup.slug).toBe('existing-connection')
   })
 
-  it('generates unique slug when base is taken', () => {
+  it('generates a unique PI OAuth slug when the base is taken', () => {
     const setup = apiSetupMethodToConnectionSetup(
-      'claude_oauth',
+      'pi_chatgpt_oauth',
       {},
       null,
-      new Set(['claude-max']),
+      new Set(['chatgpt-plus']),
     )
-    expect(setup.slug).toBe('claude-max-2')
+    expect(setup.slug).toBe('chatgpt-plus-2')
   })
 })
 

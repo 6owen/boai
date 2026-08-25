@@ -6,6 +6,8 @@
  * app/shell/nativeImage. On headless Node, they use sharp/pino/etc.
  */
 
+import type { SkillUsageRange, SkillUsageStats } from '@craft-agent/shared/skills'
+
 export interface Logger {
   info(...args: unknown[]): void
   warn(...args: unknown[]): void
@@ -41,6 +43,8 @@ export interface PlatformServices {
   appRootPath: string
   resourcesPath: string
   isPackaged: boolean
+  /** True when process.execPath points at Electron and can be reused as Node. */
+  isElectron?: boolean
 
   // -- App metadata --
   appVersion: string
@@ -56,6 +60,13 @@ export interface PlatformServices {
   // -- App lifecycle (no-ops on headless) --
   quit?(): void
   systemDarkMode?(): boolean
+
+  // -- Background computation --
+  /** Run filesystem-heavy Skill statistics outside the host event loop. */
+  getSkillUsageStats?(
+    workspaceRootPath: string,
+    range: SkillUsageRange,
+  ): Promise<SkillUsageStats>
 
   // -- Observability --
   logger: Logger

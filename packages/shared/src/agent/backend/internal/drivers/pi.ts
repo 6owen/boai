@@ -231,6 +231,7 @@ export const piDriver: ProviderDriver = {
       piServer: resolvedPaths.piServerPath,
       interceptor: resolvedPaths.interceptorBundlePath,
       node: resolvedPaths.nodeRuntimePath,
+      electronNode: resolvedPaths.useElectronNode,
     },
     piAuthProvider: providerOptions?.piAuthProvider || context.connection?.piAuthProvider,
     baseUrl: context.connection?.baseUrl,

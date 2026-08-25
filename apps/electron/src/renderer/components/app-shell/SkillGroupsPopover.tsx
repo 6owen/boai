@@ -1,9 +1,10 @@
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
-import { Check, Folder, Folders, Pencil, Plus, Trash2, X } from 'lucide-react'
+import { Check, Folder, Folders, GripVertical, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { HeaderIconButton } from '@/components/ui/HeaderIconButton'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { SortableList } from '@/components/ui/sortable-list'
 import { cn } from '@/lib/utils'
 import { normalizeSkillGroupName, type SkillGroup } from '@/hooks/useSkillCollections'
 
@@ -13,6 +14,7 @@ interface SkillGroupsPopoverProps {
   onCreateGroup: (name: string) => void
   onRenameGroup: (groupId: string, name: string) => void
   onDeleteGroup: (groupId: string) => void
+  onReorderGroup: (groupId: string, targetGroupId: string) => void
 }
 
 export function SkillGroupsPopover({
@@ -21,6 +23,7 @@ export function SkillGroupsPopover({
   onCreateGroup,
   onRenameGroup,
   onDeleteGroup,
+  onReorderGroup,
 }: SkillGroupsPopoverProps) {
   const { t } = useTranslation()
   const [open, setOpen] = React.useState(false)
@@ -154,83 +157,124 @@ export function SkillGroupsPopover({
               <Folders className="h-5 w-5" />
               <span className="text-xs">{t('skillsGroups.empty')}</span>
             </button>
-          ) : groups.map(group => (
-            <div
-              key={group.id}
-              className="group flex min-h-9 items-center gap-2 rounded-[6px] px-2 transition-colors hover:bg-foreground/[0.04] focus-within:bg-foreground/[0.04]"
-            >
-              <Folder className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-              {editingId === group.id ? (
-                <form
-                  className="flex min-w-0 flex-1 items-center gap-1 py-1"
-                  onSubmit={(event) => {
-                    event.preventDefault()
-                    submitRename()
+          ) : (
+            <SortableList
+              items={[...groups]}
+              onReorder={(_nextGroups, move) => onReorderGroup(move.activeId, move.overId)}
+              renderItem={group => (
+                <SkillGroupRow
+                  group={group}
+                  count={groupCounts[group.id] ?? 0}
+                  editing={editingId === group.id}
+                  editName={editName}
+                  editInputRef={editInputRef}
+                  onEditNameChange={setEditName}
+                  onSubmitRename={submitRename}
+                  onCancelRename={() => {
+                    setEditingId(undefined)
+                    setEditName('')
                   }}
-                >
-                  <Input
-                    ref={editInputRef}
-                    value={editName}
-                    maxLength={40}
-                    aria-label={t('skillsGroups.rename')}
-                    onChange={event => setEditName(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Escape') {
-                        setEditingId(undefined)
-                        setEditName('')
-                      }
-                    }}
-                    className="h-7 min-w-0 flex-1 text-sm"
-                  />
-                  <GroupEditButton
-                    label={t('common.save')}
-                    type="submit"
-                    disabled={!normalizeSkillGroupName(editName)}
-                  >
-                    <Check className="h-3.5 w-3.5" />
-                  </GroupEditButton>
-                  <GroupEditButton
-                    label={t('common.cancel')}
-                    onClick={() => {
-                      setEditingId(undefined)
-                      setEditName('')
-                    }}
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </GroupEditButton>
-                </form>
-              ) : (
-                <>
-                  <span className="min-w-0 flex-1 truncate text-sm">{group.name}</span>
-                  <span className="text-[11px] tabular-nums text-muted-foreground/70">
-                    {groupCounts[group.id] ?? 0}
-                  </span>
-                  <div className="flex opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-                    <GroupEditButton
-                      label={t('skillsGroups.rename')}
-                      onClick={() => {
-                        setCreating(false)
-                        setEditingId(group.id)
-                        setEditName(group.name)
-                      }}
-                    >
-                      <Pencil className="h-3 w-3" />
-                    </GroupEditButton>
-                    <GroupEditButton
-                      label={t('skillsGroups.delete')}
-                      destructive
-                      onClick={() => onDeleteGroup(group.id)}
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </GroupEditButton>
-                  </div>
-                </>
+                  onStartRename={() => {
+                    setCreating(false)
+                    setEditingId(group.id)
+                    setEditName(group.name)
+                  }}
+                  onDelete={() => onDeleteGroup(group.id)}
+                />
               )}
-            </div>
-          ))}
+              renderOverlay={group => (
+                <div className="flex min-h-9 items-center gap-2 rounded-[6px] bg-background px-2">
+                  <Folder className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <span className="min-w-0 flex-1 truncate text-sm">{group.name}</span>
+                  <GripVertical className="h-3.5 w-3.5 text-muted-foreground/50" />
+                </div>
+              )}
+            />
+          )}
         </div>
       </PopoverContent>
     </Popover>
+  )
+}
+
+function SkillGroupRow({
+  group,
+  count,
+  editing,
+  editName,
+  editInputRef,
+  onEditNameChange,
+  onSubmitRename,
+  onCancelRename,
+  onStartRename,
+  onDelete,
+}: {
+  group: SkillGroup
+  count: number
+  editing: boolean
+  editName: string
+  editInputRef: React.RefObject<HTMLInputElement>
+  onEditNameChange: (name: string) => void
+  onSubmitRename: () => void
+  onCancelRename: () => void
+  onStartRename: () => void
+  onDelete: () => void
+}) {
+  const { t } = useTranslation()
+
+  return (
+    <div className="group flex min-h-9 items-center gap-2 rounded-[6px] px-2 transition-colors hover:bg-foreground/[0.04] focus-within:bg-foreground/[0.04]">
+      <GripVertical className="h-3.5 w-3.5 shrink-0 text-muted-foreground/45" />
+      <Folder className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+      {editing ? (
+        <form
+          data-no-dnd="true"
+          className="flex min-w-0 flex-1 items-center gap-1 py-1"
+          onSubmit={(event) => {
+            event.preventDefault()
+            onSubmitRename()
+          }}
+        >
+          <Input
+            ref={editInputRef}
+            value={editName}
+            maxLength={40}
+            aria-label={t('skillsGroups.rename')}
+            onChange={event => onEditNameChange(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') onCancelRename()
+            }}
+            className="h-7 min-w-0 flex-1 text-sm"
+          />
+          <GroupEditButton
+            label={t('common.save')}
+            type="submit"
+            disabled={!normalizeSkillGroupName(editName)}
+          >
+            <Check className="h-3.5 w-3.5" />
+          </GroupEditButton>
+          <GroupEditButton label={t('common.cancel')} onClick={onCancelRename}>
+            <X className="h-3.5 w-3.5" />
+          </GroupEditButton>
+        </form>
+      ) : (
+        <>
+          <span className="min-w-0 flex-1 truncate text-sm">{group.name}</span>
+          <span className="text-[11px] tabular-nums text-muted-foreground/70">{count}</span>
+          <div
+            data-no-dnd="true"
+            className="flex opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+          >
+            <GroupEditButton label={t('skillsGroups.rename')} onClick={onStartRename}>
+              <Pencil className="h-3 w-3" />
+            </GroupEditButton>
+            <GroupEditButton label={t('skillsGroups.delete')} destructive onClick={onDelete}>
+              <Trash2 className="h-3 w-3" />
+            </GroupEditButton>
+          </div>
+        </>
+      )}
+    </div>
   )
 }
 
@@ -246,6 +290,7 @@ function GroupEditButton({
   return (
     <button
       type="button"
+      data-no-dnd="true"
       aria-label={label}
       title={label}
       className={cn(

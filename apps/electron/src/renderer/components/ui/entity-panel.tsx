@@ -42,6 +42,12 @@ export interface EntityPanelProps<T> {
   /** Extra data/aria attributes merged onto the inner list container.
    *  Use to set `data-list-role` so compact-mode CSS can target the right list. */
   containerProps?: Record<string, string>
+  /** Optional domain-specific wrapper around a rendered group. */
+  wrapGroup?: (group: EntityListGroup<T>, content: React.ReactNode) => React.ReactNode
+  /** Optional domain-specific wrapper around a rendered group header. */
+  wrapGroupHeader?: (group: EntityListGroup<T>, content: React.ReactNode) => React.ReactNode
+  /** Optional domain-specific wrapper around a rendered item. */
+  wrapItem?: (item: T, content: React.ReactNode) => React.ReactNode
 }
 
 export function EntityPanel<T>({
@@ -59,6 +65,9 @@ export function EntityPanel<T>({
   emptyState,
   className,
   containerProps,
+  wrapGroup,
+  wrapGroupHeader,
+  wrapItem,
 }: EntityPanelProps<T>) {
   const selectionStore = selection.useSelectionStore()
   const interactions = useEntityListInteractions<T>({
@@ -121,6 +130,9 @@ export function EntityPanel<T>({
       onToggleCollapse={onToggleCollapse}
       onCollapseAll={onCollapseAll}
       onExpandAll={onExpandAll}
+      wrapGroup={wrapGroup}
+      wrapGroupHeader={wrapGroupHeader}
+      wrapItem={wrapItem}
       getKey={getId}
       containerRef={interactions.listProps.containerRef}
       containerProps={mergedContainerProps}

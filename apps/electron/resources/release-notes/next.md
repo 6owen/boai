@@ -8,6 +8,8 @@ This file accumulates release notes for the next unreleased version. PRs that ad
 
 ## Improvements
 
+- **更轻量的桌面安装包**：精简构建资源与语言包，并改用 Electron 内置的 Node.js 运行 PI，不再随桌面应用附带 Bun。
+
 ## Bug Fixes
 
 ## Breaking Changes

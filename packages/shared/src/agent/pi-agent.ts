@@ -60,9 +60,9 @@ import {
   registerSessionScopedToolCallbacks,
   mergeSessionScopedToolCallbacks,
   unregisterSessionScopedToolCallbacks,
-  setLastPlanFilePath,
   getSessionScopedToolCallbacks,
-} from './session-scoped-tools.ts';
+} from './session-scoped-tool-callback-registry.ts';
+import { setLastPlanFilePath } from './session-tool-state.ts';
 import { attachSessionSelfManagementBindings } from './session-self-management-bindings.ts';
 
 // Session tool proxy definitions (for registering with subprocess)
@@ -95,7 +95,7 @@ import { parseError, type AgentError } from './errors.ts';
 // Centralized PreToolUse pipeline
 import { runPreToolUseChecks, type PreToolUseCheckResult } from './core/pre-tool-use.ts';
 import { getRtkPath } from './core/rtk-detector.ts';
-import { getRtkEnabled, getBrowserToolEnabled } from '../config/storage.ts';
+import { getRtkEnabled, getBrowserToolEnabled, getGitBashPath } from '../config/storage.ts';
 import type { RtkContext } from './core/rtk-rewrite.ts';
 
 // Workspace slug extraction for skill qualification
@@ -193,7 +193,7 @@ export class PiAgent extends BaseAgent {
 
   /**
    * Look up the bound project (if any) and return a snapshot for system-prompt injection.
-   * Mirrors ClaudeAgent.resolveProjectContext — safe to call on every turn since the
+   * Safe to call on every turn since the
    * project config file is small.
    */
   private resolveProjectContext(): ProjectPromptContext | null {
@@ -432,7 +432,10 @@ export class PiAgent extends BaseAgent {
     const nodePath = runtime.paths?.node || process.execPath;
     const cwd = this.resolvedCwd();
 
-    this.debug(`Spawning Pi subprocess: ${nodePath} ${piServerPath}`);
+    const useElectronNode = runtime.paths?.electronNode === true;
+    this.debug(
+      `Spawning Pi subprocess with ${useElectronNode ? 'Electron Node' : 'Node'}: ${nodePath} ${piServerPath}`,
+    );
     this.resetSubprocessErrorDedup();
 
     // Set up ready promise before spawning
@@ -474,7 +477,6 @@ export class PiAgent extends BaseAgent {
     // are valid, and non-local endpoints should fail explicitly instead of using unrelated creds.
     const piAuth = await this.getPiAuth();
     const isCustomEndpointMode = !!runtime.customEndpoint;
-    const legacyApiKey = (!piAuth && !isCustomEndpointMode) ? await this.getApiKey() : undefined;
     if (isCustomEndpointMode && !piAuth) {
       this.debug('Custom endpoint mode: no provider credential configured, sending empty API key');
     }
@@ -491,6 +493,12 @@ export class PiAgent extends BaseAgent {
         ...getProxyEnvVars(),
         ...this.config.envOverrides,
         ...awsEnv,
+        // Pi requires a Bash-compatible shell on Windows. Reuse the path selected
+        // by BoAI's Windows onboarding instead of the removed Claude Code env var.
+        ...(process.platform === 'win32' && getGitBashPath()
+          ? { CRAFT_PI_SHELL_PATH: getGitBashPath() }
+          : {}),
+        ...(useElectronNode ? { ELECTRON_RUN_AS_NODE: '1' } : {}),
         // Pass session dir for cross-process toolMetadataStore
         ...(sessionDir ? { CRAFT_SESSION_DIR: sessionDir } : {}),
         // Propagate debug mode
@@ -543,7 +551,7 @@ export class PiAgent extends BaseAgent {
     // Send init command (flat structure matching subprocess InboundMessage type)
     this.send({
       type: 'init',
-      apiKey: legacyApiKey || '',
+      apiKey: '',
       model: this._model,
       cwd,
       thinkingLevel: this._thinkingLevel,
@@ -840,38 +848,6 @@ export class PiAgent extends BaseAgent {
       if (PiAgent.globalRefreshMutex.get(slug) === refreshPromise) {
         PiAgent.globalRefreshMutex.delete(slug);
       }
-    }
-  }
-
-  /**
-   * Retrieve API key from the credential manager for subprocess injection.
-   * Legacy fallback when piAuthProvider is not set.
-   * The subprocess expects a single API key string (passed via init.apiKey).
-   */
-  private async getApiKey(): Promise<string | null> {
-    try {
-      const credentialManager = getCredentialManager();
-      const slug = this.config.connectionSlug || 'pi';
-
-      // Try LLM OAuth first (for OAuth-based connections)
-      const oauth = await credentialManager.getLlmOAuth(slug);
-      if (oauth?.accessToken) {
-        this.debug('Retrieved API key from LLM OAuth');
-        return oauth.accessToken;
-      }
-
-      // Try Anthropic API key
-      const apiKey = await credentialManager.getApiKey();
-      if (apiKey) {
-        this.debug('Retrieved Anthropic API key');
-        return apiKey;
-      }
-
-      this.debug('No API keys found for Pi agent');
-      return null;
-    } catch (error) {
-      this.debug(`Failed to retrieve API key: ${error}`);
-      return null;
     }
   }
 

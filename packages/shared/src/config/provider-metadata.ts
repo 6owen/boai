@@ -73,16 +73,13 @@ const PROVIDER_METADATA: Record<string, ProviderMetadata> = {
 /**
  * Look up provider metadata by provider type and optional piAuthProvider.
  *
- * For direct Anthropic connections: getProviderMetadata('anthropic')
- * For Pi connections: getProviderMetadata('pi', 'openai') or getProviderMetadata('pi', 'amazon-bedrock')
+ * PI routes to the upstream provider selected by `piAuthProvider`.
  */
 export function getProviderMetadata(
   providerType: string,
   piAuthProvider?: string,
 ): ProviderMetadata | undefined {
-  if (providerType === 'anthropic') {
-    return PROVIDER_METADATA.anthropic
-  }
+  void providerType
   if (piAuthProvider) {
     return PROVIDER_METADATA[piAuthProvider]
   }

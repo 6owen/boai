@@ -6,7 +6,8 @@ import { SUPPORTED_LANGUAGE_CODES, LANGUAGES } from "../languages";
 import { getDateLocale } from "../date-locale";
 
 // ---------------------------------------------------------------------------
-// Registry completeness — every locale file on disk must be in the registry
+// Registry completeness — every supported locale must have a file on disk.
+// Retired translations may remain in source control without entering bundles.
 // ---------------------------------------------------------------------------
 
 const LOCALES_DIR = join(import.meta.dir, "../locales");
@@ -16,13 +17,6 @@ const localeFilesOnDisk = readdirSync(LOCALES_DIR)
 
 describe("locale registry completeness", () => {
   const registryCodes = Object.keys(LOCALE_REGISTRY);
-
-  it("every locale file on disk is registered in LOCALE_REGISTRY", () => {
-    const unregistered = localeFilesOnDisk.filter(
-      (code) => !registryCodes.includes(code),
-    );
-    expect(unregistered).toEqual([]);
-  });
 
   it("every registry entry has a locale file on disk", () => {
     const missingFiles = registryCodes.filter(
@@ -58,6 +52,10 @@ describe("locale registry entries", () => {
 // ---------------------------------------------------------------------------
 
 describe("derived exports", () => {
+  it("ships only English and Simplified Chinese", () => {
+    expect(SUPPORTED_LANGUAGE_CODES).toEqual(["en", "zh-Hans"]);
+  });
+
   it("SUPPORTED_LANGUAGE_CODES matches registry keys", () => {
     const registryCodes = Object.keys(LOCALE_REGISTRY).sort() as string[];
     const supported = ([...SUPPORTED_LANGUAGE_CODES] as string[]).sort();
@@ -90,29 +88,14 @@ describe("getDateLocale", () => {
     expect(locale.code).toBe("en-US");
   });
 
-  it("es resolves to Spanish", () => {
-    const locale = getDateLocale("es");
-    expect(locale.code).toBe("es");
-  });
-
   it("zh-Hans resolves to Simplified Chinese", () => {
     const locale = getDateLocale("zh-Hans");
     expect(locale.code).toBe("zh-CN");
   });
 
-  it("hu resolves to Hungarian", () => {
-    const locale = getDateLocale("hu");
-    expect(locale.code).toBe("hu");
-  });
-
-  it("de resolves to German", () => {
-    const locale = getDateLocale("de");
-    expect(locale.code).toBe("de");
-  });
-
-  it("pl resolves to Polish", () => {
-    const locale = getDateLocale("pl");
-    expect(locale.code).toBe("pl");
+  it("a retired locale falls back to English", () => {
+    const locale = getDateLocale("es");
+    expect(locale.code).toBe("en-US");
   });
 
   it("unknown locale falls back to English", () => {

@@ -72,6 +72,12 @@ export interface EntityListProps<T> {
   onCollapseAll?: () => void
   /** Expand all collapsible groups */
   onExpandAll?: () => void
+  /** Optional domain-specific wrapper around a rendered group (for example, a drop target). */
+  wrapGroup?: (group: EntityListGroup<T>, content: React.ReactNode) => React.ReactNode
+  /** Optional domain-specific wrapper around a rendered group header. */
+  wrapGroupHeader?: (group: EntityListGroup<T>, content: React.ReactNode) => React.ReactNode
+  /** Optional domain-specific wrapper around a rendered item (for example, a draggable). */
+  wrapItem?: (item: T, content: React.ReactNode) => React.ReactNode
 }
 
 // ============================================================================
@@ -161,6 +167,9 @@ export function EntityList<T>({
   onToggleCollapse,
   onCollapseAll,
   onExpandAll,
+  wrapGroup,
+  wrapGroupHeader,
+  wrapItem,
 }: EntityListProps<T>) {
   // Determine if we have content
   const hasGroups = groups && groups.length > 0
@@ -190,34 +199,46 @@ export function EntityList<T>({
             {hasGroups
               ? groups!.map((group) => {
                   const isCollapsed = group.collapsible && collapsedGroups?.has(group.key)
+                  const groupHeader = group.collapsible && onToggleCollapse ? (
+                    <CollapsibleGroupHeader
+                      label={group.label}
+                      isCollapsed={!!isCollapsed}
+                      itemCount={isCollapsed ? (group.collapsedCount ?? 0) : group.items.length}
+                      onToggle={() => onToggleCollapse(group.key)}
+                      onCollapseAll={onCollapseAll}
+                      onExpandAll={onExpandAll}
+                    />
+                  ) : (
+                    <SectionHeader label={group.label} />
+                  )
+                  const groupContent = (
+                    <>
+                      {wrapGroupHeader ? wrapGroupHeader(group, groupHeader) : groupHeader}
+                      {group.items.map((item, indexInGroup) => {
+                        const itemContent = renderItem(item, indexInGroup, indexInGroup === 0)
+                        return (
+                          <React.Fragment key={getKey(item)}>
+                            {wrapItem ? wrapItem(item, itemContent) : itemContent}
+                          </React.Fragment>
+                        )
+                      })}
+                    </>
+                  )
 
                   return (
                     <div key={group.key}>
-                      {group.collapsible && onToggleCollapse ? (
-                        <CollapsibleGroupHeader
-                          label={group.label}
-                          isCollapsed={!!isCollapsed}
-                          itemCount={isCollapsed ? (group.collapsedCount ?? 0) : group.items.length}
-                          onToggle={() => onToggleCollapse(group.key)}
-                          onCollapseAll={onCollapseAll}
-                          onExpandAll={onExpandAll}
-                        />
-                      ) : (
-                        <SectionHeader label={group.label} />
-                      )}
-                      {group.items.map((item, indexInGroup) =>
-                        <React.Fragment key={getKey(item)}>
-                          {renderItem(item, indexInGroup, indexInGroup === 0)}
-                        </React.Fragment>
-                      )}
+                      {wrapGroup ? wrapGroup(group, groupContent) : groupContent}
                     </div>
                   )
                 })
-              : items?.map((item, index) =>
-                  <React.Fragment key={getKey(item)}>
-                    {renderItem(item, index, index === 0)}
-                  </React.Fragment>
-                )
+              : items?.map((item, index) => {
+                  const itemContent = renderItem(item, index, index === 0)
+                  return (
+                    <React.Fragment key={getKey(item)}>
+                      {wrapItem ? wrapItem(item, itemContent) : itemContent}
+                    </React.Fragment>
+                  )
+                })
             }
           </div>
           {footer}

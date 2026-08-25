@@ -4,7 +4,6 @@ import {
   getDefaultModelsForConnection,
   getDefaultModelForConnection,
   isCompatProvider,
-  isAnthropicProvider,
   isPiProvider,
   toBedrockNativeId,
   fromBedrockNativeId,
@@ -18,16 +17,6 @@ import { ANTHROPIC_MODELS, getModelDisplayName, getModelContextWindow, getModelS
 // ============================================================
 
 describe('getDefaultModelsForConnection', () => {
-  it('anthropic returns ANTHROPIC_MODELS (ModelDefinition[])', () => {
-    const models = getDefaultModelsForConnection('anthropic')
-    expect(models).toEqual(ANTHROPIC_MODELS)
-    expect(models.length).toBeGreaterThan(0)
-    // Verify they are ModelDefinition objects, not strings
-    const first = models[0]!
-    expect(typeof first).toBe('object')
-    expect(typeof (first as any).id).toBe('string')
-  })
-
   it('pi with piAuthProvider returns filtered models including Opus 4.6', () => {
     const models = getDefaultModelsForConnection('pi', 'anthropic')
     expect(models.length).toBeGreaterThan(0)
@@ -51,14 +40,6 @@ describe('getDefaultModelsForConnection', () => {
 // ============================================================
 
 describe('getDefaultModelForConnection', () => {
-  it('returns first model ID for anthropic', () => {
-    const modelId = getDefaultModelForConnection('anthropic')
-    expect(typeof modelId).toBe('string')
-    expect(modelId.length).toBeGreaterThan(0)
-    // Should match the first ANTHROPIC_MODELS entry
-    expect(modelId).toBe(ANTHROPIC_MODELS[0]!.id)
-  })
-
   // Regression: Pi 'anthropic' default must be present in its own model list
   it('regression: Pi anthropic default is in its own model list', () => {
     const defaultModel = getDefaultModelForConnection('pi', 'anthropic')
@@ -96,22 +77,8 @@ describe('isCompatProvider', () => {
     expect(isCompatProvider('pi_compat')).toBe(true)
   })
 
-  it('returns false for anthropic', () => {
-    expect(isCompatProvider('anthropic')).toBe(false)
-  })
-
   it('returns false for pi', () => {
     expect(isCompatProvider('pi')).toBe(false)
-  })
-})
-
-describe('isAnthropicProvider', () => {
-  it('returns true for anthropic', () => {
-    expect(isAnthropicProvider('anthropic')).toBe(true)
-  })
-
-  it('returns false for pi', () => {
-    expect(isAnthropicProvider('pi')).toBe(false)
   })
 })
 
@@ -124,9 +91,6 @@ describe('isPiProvider', () => {
     expect(isPiProvider('pi_compat')).toBe(true)
   })
 
-  it('returns false for anthropic', () => {
-    expect(isPiProvider('anthropic')).toBe(false)
-  })
 })
 
 // ============================================================
@@ -335,8 +299,8 @@ describe('Claude Fable 5', () => {
     expect(isClaudeModel('claude-fable-5')).toBe(true)
   })
 
-  it('does NOT become the Anthropic default (Opus 4.8 stays default)', () => {
-    expect(getDefaultModelForConnection('anthropic')).toBe('claude-opus-4-8')
+  it('does NOT become the PI Anthropic default', () => {
+    expect(getDefaultModelForConnection('pi', 'anthropic')).not.toBe('pi/claude-fable-5')
   })
 
   it('round-trips through the Bedrock inference-profile mapping', () => {

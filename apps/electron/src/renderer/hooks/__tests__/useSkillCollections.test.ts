@@ -7,6 +7,7 @@ import {
   isSelfAuthoredSkill,
   isSkillInOwnCollection,
   removeSkillGroup,
+  reorderSkillGroups,
   renameSkillGroup,
 } from '../useSkillCollections'
 
@@ -80,5 +81,20 @@ describe('skill collections', () => {
       groups: [{ id: 'writing', name: '写文章' }],
       assignments: {},
     })
+  })
+
+  it('reorders skill groups while preserving their contents', () => {
+    const groups = [
+      { id: 'mine', name: '我的' },
+      { id: 'development', name: '开发' },
+      { id: 'docs', name: '文档' },
+    ]
+
+    expect(reorderSkillGroups(groups, 'docs', 'mine')).toEqual([
+      { id: 'docs', name: '文档' },
+      { id: 'mine', name: '我的' },
+      { id: 'development', name: '开发' },
+    ])
+    expect(reorderSkillGroups(groups, 'missing', 'mine')).toEqual(groups)
   })
 })

@@ -559,7 +559,9 @@ async function ensureSession(): Promise<AgentSession> {
   //     then `.has(name)` returns false for every string lookup → zero tools active.
   const builtinDefs = [
     createReadToolDefinition(cwd),
-    createBashToolDefinition(cwd),
+    createBashToolDefinition(cwd, {
+      shellPath: process.env.CRAFT_PI_SHELL_PATH || undefined,
+    }),
     createEditToolDefinition(cwd),
     createWriteToolDefinition(cwd),
     createGrepToolDefinition(cwd),

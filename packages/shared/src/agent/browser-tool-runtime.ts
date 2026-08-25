@@ -6,7 +6,7 @@ import type {
   BrowserPaneFns,
   BrowserScreenshotRegionArgs,
   BrowserWaitArgs,
-} from './browser-tools.ts';
+} from './browser-tool-types.ts';
 
 export interface BrowserCommandImage {
   data: string;

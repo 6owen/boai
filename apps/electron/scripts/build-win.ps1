@@ -7,22 +7,6 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ElectronDir = Split-Path -Parent $ScriptDir
 $RootDir = Split-Path -Parent (Split-Path -Parent $ElectronDir)
 
-function Get-Sha256Hash {
-    param([Parameter(Mandatory = $true)][string]$Path)
-
-    $sha256 = [System.Security.Cryptography.SHA256]::Create()
-    $stream = [System.IO.File]::OpenRead($Path)
-    try {
-        return ([System.BitConverter]::ToString($sha256.ComputeHash($stream))).Replace("-", "").ToLowerInvariant()
-    } finally {
-        $stream.Dispose()
-        $sha256.Dispose()
-    }
-}
-
-# Configuration
-$BunVersion = "bun-v1.3.10"  # Pinned version for reproducible builds
-
 Write-Host "=== Building BoAI Windows Installer using electron-builder ===" -ForegroundColor Cyan
 
 # Debug: System information
@@ -105,128 +89,19 @@ foreach ($folder in $foldersToClean) {
 }
 
 # 2. Install dependencies
-Write-Host "Installing dependencies..."
-Push-Location $RootDir
-try {
-    bun install
-} finally {
-    Pop-Location
-}
-
-# 3. Download Bun binary for Windows
-# Use baseline build - works on all x64 CPUs (no AVX2 requirement)
-Write-Host "Downloading Bun $BunVersion for Windows x64 (baseline)..."
-New-Item -ItemType Directory -Force -Path "$ElectronDir\vendor\bun" | Out-Null
-
-$BunDownload = "bun-windows-x64-baseline"
-$TempDir = Join-Path $env:TEMP "bun-download-$(Get-Random)"
-New-Item -ItemType Directory -Force -Path $TempDir | Out-Null
-
-try {
-    # Download binary and checksums
-    $ZipUrl = "https://github.com/oven-sh/bun/releases/download/$BunVersion/$BunDownload.zip"
-    $ChecksumUrl = "https://github.com/oven-sh/bun/releases/download/$BunVersion/SHASUMS256.txt"
-
-    Write-Host "Downloading from $ZipUrl..."
-    Invoke-WebRequest -Uri $ZipUrl -OutFile "$TempDir\$BunDownload.zip"
-    Invoke-WebRequest -Uri $ChecksumUrl -OutFile "$TempDir\SHASUMS256.txt"
-
-    # Verify checksum
-    Write-Host "Verifying checksum..."
-    $ExpectedHash = (Get-Content "$TempDir\SHASUMS256.txt" | Select-String "$BunDownload.zip").ToString().Split(" ")[0]
-    $ActualHash = Get-Sha256Hash "$TempDir\$BunDownload.zip"
-
-    if ($ActualHash -ne $ExpectedHash) {
-        throw "Checksum verification failed! Expected: $ExpectedHash, Got: $ActualHash"
-    }
-    Write-Host "Checksum verified successfully" -ForegroundColor Green
-
-    # Extract and install using robocopy for better file handle management
-    Write-Host "Extracting Bun..."
-    Expand-Archive -Path "$TempDir\$BunDownload.zip" -DestinationPath $TempDir -Force
-
-    # Unblock in temp first (before copy)
-    Unblock-File -Path "$TempDir\$BunDownload\bun.exe" -ErrorAction SilentlyContinue
-
-    # Use robocopy with retries - handles transient file locks better than Copy-Item
-    # /R:5 = 5 retries, /W:3 = 3 second wait between retries, /NP = no progress, /NFL /NDL = quiet
-    Write-Host "Copying bun.exe with robocopy..."
-    $robocopyResult = robocopy "$TempDir\$BunDownload" "$ElectronDir\vendor\bun" "bun.exe" /R:5 /W:3 /NP /NFL /NDL
-    # Robocopy exit codes: 0-7 are success, 8+ are errors
-    if ($LASTEXITCODE -ge 8) {
-        throw "robocopy failed with exit code $LASTEXITCODE"
-    }
-
-    $BunExePath = "$ElectronDir\vendor\bun\bun.exe"
-    Write-Host "Bun extracted to: $BunExePath" -ForegroundColor Green
-
-    # Give Windows time to release any file handles from the copy
-    Write-Host "Waiting for file handles to release..."
-    Start-Sleep -Seconds 3
-} finally {
-    Remove-Item -Recurse -Force $TempDir -ErrorAction SilentlyContinue
-}
-
-# 4. Copy SDK from root node_modules (monorepo hoisting).
-# Since SDK 0.2.113: thin core + per-platform binary package.
-# See apps/electron/scripts/build-dmg.sh for the full rationale.
-$SdkSource = "$RootDir\node_modules\@anthropic-ai\claude-agent-sdk"
-if (-not (Test-Path $SdkSource)) {
-    Write-Host "ERROR: SDK core not found at $SdkSource" -ForegroundColor Red
-    Write-Host "Run 'bun install' from the repository root first."
-    exit 1
-}
-Write-Host "Copying SDK core..."
-New-Item -ItemType Directory -Force -Path "$ElectronDir\node_modules\@anthropic-ai" | Out-Null
-Remove-Item -Recurse -Force "$ElectronDir\node_modules\@anthropic-ai\claude-agent-sdk" -ErrorAction SilentlyContinue
-Copy-Item -Recurse -Force $SdkSource "$ElectronDir\node_modules\@anthropic-ai\"
-
-# 4a. Resolve the target arch's binary package (cross-fetch from npm if absent).
-# Target arch is hard-coded x64 - Windows arm64 is not currently shipped.
-$SdkBinPkg = "claude-agent-sdk-win32-x64"
-$SdkBinSource = "$RootDir\node_modules\@anthropic-ai\$SdkBinPkg"
-if (-not (Test-Path $SdkBinSource)) {
-    Write-Host "Cross-arch build: $SdkBinPkg not in node_modules - fetching from npm..."
-    $RootPackage = Get-Content "$RootDir\package.json" -Raw | ConvertFrom-Json
-    $SdkVersion = $RootPackage.dependencies.'@anthropic-ai/claude-agent-sdk'
-    $PkgTmp = New-Item -ItemType Directory -Path ([System.IO.Path]::Combine($env:TEMP, [System.Guid]::NewGuid().ToString()))
+if ($env:BOAI_SKIP_INSTALL -eq "1") {
+    Write-Host "Reusing existing dependencies (BOAI_SKIP_INSTALL=1)..."
+} else {
+    Write-Host "Installing dependencies..."
+    Push-Location $RootDir
     try {
-        Push-Location $PkgTmp
-        npm pack "@anthropic-ai/$SdkBinPkg@$SdkVersion" | Out-Null
-        $Tarball = Get-ChildItem -Filter "anthropic-ai-*.tgz" | Select-Object -First 1
-        tar -xzf $Tarball.Name
-        Pop-Location
-        New-Item -ItemType Directory -Force -Path $SdkBinSource | Out-Null
-        Copy-Item -Recurse -Force "$PkgTmp\package\*" $SdkBinSource
+        bun install --frozen-lockfile
     } finally {
-        Remove-Item -Recurse -Force $PkgTmp -ErrorAction SilentlyContinue
+        Pop-Location
     }
 }
 
-if (-not (Test-Path $SdkBinSource)) {
-    Write-Host "ERROR: SDK native binary package ($SdkBinPkg) not found at $SdkBinSource" -ForegroundColor Red
-    exit 1
-}
-
-Write-Host "Staging SDK native binary as claude-agent-sdk-binary alias..."
-$AliasDest = "$ElectronDir\node_modules\@anthropic-ai\claude-agent-sdk-binary"
-Remove-Item -Recurse -Force $AliasDest -ErrorAction SilentlyContinue
-New-Item -ItemType Directory -Force -Path $AliasDest | Out-Null
-Copy-Item -Recurse -Force "$SdkBinSource\*" $AliasDest
-
-$BinPath = "$AliasDest\claude.exe"
-if (-not (Test-Path $BinPath)) {
-    Write-Host "ERROR: Native binary not found at $BinPath" -ForegroundColor Red
-    exit 1
-}
-$BinSize = (Get-Item $BinPath).Length
-if ($BinSize -lt 50000000) {
-    Write-Host "ERROR: claude.exe is only $BinSize bytes (expected ~210 MB)" -ForegroundColor Red
-    exit 1
-}
-Write-Host "  Native binary: $([math]::Round($BinSize / 1MB)) MB"
-
-# 5. Copy ripgrep (sourced from @vscode/ripgrep since 0.2.113).
+# 3. Copy ripgrep used by the search service.
 $RgSource = "$RootDir\node_modules\@vscode\ripgrep"
 if (-not (Test-Path $RgSource) -or -not (Test-Path "$RgSource\bin\rg.exe")) {
     Write-Host "ERROR: @vscode/ripgrep not installed or postinstall did not run" -ForegroundColor Red
@@ -238,146 +113,21 @@ New-Item -ItemType Directory -Force -Path "$ElectronDir\node_modules\@vscode" | 
 Remove-Item -Recurse -Force "$ElectronDir\node_modules\@vscode\ripgrep" -ErrorAction SilentlyContinue
 Copy-Item -Recurse -Force $RgSource "$ElectronDir\node_modules\@vscode\"
 
-# 6. Copy network interceptor sources (for Pi subprocess; Claude no longer
-#    uses --preload - Phase 2 will move that to SDK hooks or a local proxy).
-$InterceptorSource = "$RootDir\packages\shared\src\unified-network-interceptor.ts"
-if (-not (Test-Path $InterceptorSource)) {
-    Write-Host "ERROR: Interceptor not found at $InterceptorSource" -ForegroundColor Red
-    exit 1
-}
-Write-Host "Copying interceptor (for Pi subprocess)..."
-New-Item -ItemType Directory -Force -Path "$ElectronDir\packages\shared\src" | Out-Null
-Copy-Item $InterceptorSource "$ElectronDir\packages\shared\src\"
-foreach ($dep in @("interceptor-common.ts", "feature-flags.ts", "interceptor-request-utils.ts")) {
-    $depPath = "$RootDir\packages\shared\src\$dep"
-    if (Test-Path $depPath) {
-        Copy-Item $depPath "$ElectronDir\packages\shared\src\"
-    }
-}
-
-# 6. Build Electron app
+# 5. Build Electron through the canonical cross-platform pipeline. This also
+# builds the Node PI bundle, interceptor, workers and runtime resource allowlist.
 Write-Host "Building Electron app..."
-
-# Build main process with OAuth credentials
-Write-Host "  Building main process..."
-$MainArgs = @(
-    "apps/electron/src/main/index.ts",
-    "--bundle",
-    "--platform=node",
-    "--format=cjs",
-    "--outfile=apps/electron/dist/main.cjs",
-    "--external:electron",
-    # SDK 0.3.x is pure ESM and calls createRequire(import.meta.url) at module init.
-    # esbuild's CJS bundling leaves import.meta.url undefined for inlined ESM, crashing
-    # the app on load (ERR_INVALID_ARG_VALUE). Externalize it so Node loads it natively
-    # as ESM - the SDK core is staged into the app's node_modules above (step 4).
-    # Must stay in sync with package.json build:main and scripts/electron-dev.ts.
-    "--external:@anthropic-ai/claude-agent-sdk"
-)
-# Add OAuth defines if env vars are set
-if ($env:GOOGLE_OAUTH_CLIENT_ID) {
-    $MainArgs += "--define:process.env.GOOGLE_OAUTH_CLIENT_ID=`"'$env:GOOGLE_OAUTH_CLIENT_ID'`""
-}
-if ($env:GOOGLE_OAUTH_CLIENT_SECRET) {
-    $MainArgs += "--define:process.env.GOOGLE_OAUTH_CLIENT_SECRET=`"'$env:GOOGLE_OAUTH_CLIENT_SECRET'`""
-}
-if ($env:SLACK_OAUTH_CLIENT_ID) {
-    $MainArgs += "--define:process.env.SLACK_OAUTH_CLIENT_ID=`"'$env:SLACK_OAUTH_CLIENT_ID'`""
-}
-if ($env:SLACK_OAUTH_CLIENT_SECRET) {
-    $MainArgs += "--define:process.env.SLACK_OAUTH_CLIENT_SECRET=`"'$env:SLACK_OAUTH_CLIENT_SECRET'`""
-}
-if ($env:MICROSOFT_OAUTH_CLIENT_ID) {
-    $MainArgs += "--define:process.env.MICROSOFT_OAUTH_CLIENT_ID=`"'$env:MICROSOFT_OAUTH_CLIENT_ID'`""
-}
+$env:BOAI_BUILD_PLATFORM = "win32"
+$env:BOAI_BUILD_ARCH = "x64"
 Push-Location $RootDir
 try {
-    & npx esbuild @MainArgs
-    if ($LASTEXITCODE -ne 0) { throw "Main process build failed" }
+    bun run electron:build
+    if ($LASTEXITCODE -ne 0) { throw "Electron build failed" }
 } finally {
     Pop-Location
 }
 
-# Build preload
-Write-Host "  Building preload..."
-Push-Location $RootDir
-try {
-    bun run electron:build:preload
-    if ($LASTEXITCODE -ne 0) { throw "Preload build failed" }
-} finally {
-    Pop-Location
-}
-
-# Build renderer (frontend)
-Write-Host "  Building renderer (frontend)..."
-Push-Location $RootDir
-try {
-    # Clean previous renderer build
-    $RendererDir = "$ElectronDir\dist\renderer"
-    if (Test-Path $RendererDir) { Remove-Item -Recurse -Force $RendererDir }
-
-    # Run vite build
-    npx vite build --config apps/electron/vite.config.ts
-    if ($LASTEXITCODE -ne 0) { throw "Renderer build failed" }
-
-    # Verify renderer was built
-    if (-not (Test-Path "$RendererDir\index.html")) {
-        throw "Renderer build verification failed: index.html not found"
-    }
-    Write-Host "  Renderer build verified: $RendererDir" -ForegroundColor Green
-} finally {
-    Pop-Location
-}
-
-# Copy all resources and bundled assets using the shared script.
-# Single source of truth - matches Mac/Linux build (bun run build:copy).
-# Copies: resources (icons, DMG bg), docs, tool-icons, themes, permissions, config-defaults.
-Write-Host "  Copying resources and bundled assets..."
-Push-Location $ElectronDir
-try {
-    bun scripts/copy-assets.ts
-    if ($LASTEXITCODE -ne 0) { throw "Asset copy failed" }
-    Write-Host "  Assets copied" -ForegroundColor Green
-} finally {
-    Pop-Location
-}
-
-# 7. Package with electron-builder
+# 6. Package with electron-builder
 Write-Host "Packaging app with electron-builder..."
-
-# Debug: Show bun.exe file info
-Write-Host ""
-Write-Host "=== Debug: bun.exe File Info ===" -ForegroundColor Magenta
-$BunExe = "$ElectronDir\vendor\bun\bun.exe"
-if (Test-Path $BunExe) {
-    $fileInfo = Get-Item $BunExe
-    Write-Host "Path: $($fileInfo.FullName)"
-    Write-Host "Size: $([math]::Round($fileInfo.Length / 1MB, 2)) MB"
-    Write-Host "Created: $($fileInfo.CreationTime)"
-    Write-Host "Modified: $($fileInfo.LastWriteTime)"
-    Write-Host "Attributes: $($fileInfo.Attributes)"
-
-    # Check Zone.Identifier (Mark of the Web)
-    $zoneFile = "$BunExe`:Zone.Identifier"
-    if (Test-Path $zoneFile -ErrorAction SilentlyContinue) {
-        Write-Host "Zone.Identifier: EXISTS (file may be blocked)" -ForegroundColor Yellow
-    } else {
-        Write-Host "Zone.Identifier: None (file is unblocked)"
-    }
-
-    # Check file hash
-    $hash = Get-Sha256Hash $BunExe
-    Write-Host "SHA256: $hash"
-} else {
-    Write-Host "ERROR: bun.exe not found at $BunExe" -ForegroundColor Red
-}
-
-# Debug: List vendor directory contents
-Write-Host ""
-Write-Host "=== Debug: vendor/bun Directory ===" -ForegroundColor Magenta
-Get-ChildItem "$ElectronDir\vendor\bun" -ErrorAction SilentlyContinue | ForEach-Object {
-    Write-Host "  $($_.Name) - $($_.Length) bytes"
-}
 
 # Debug: Check for processes that might have files open
 Write-Host ""
@@ -393,33 +143,6 @@ if ($relevantProcesses) {
     Write-Host "  No relevant processes found"
 }
 Write-Host ""
-
-# NOTE: bun.exe is now copied via extraResources in electron-builder.yml
-# This avoids EBUSY errors from the npm node module collector.
-# See electron-builder.yml for details.
-
-# Verify bun.exe is accessible (not locked by another process)
-Write-Host "  Verifying $BunExe is accessible..."
-$retryCount = 0
-$maxRetries = 6
-while ($retryCount -lt $maxRetries) {
-    try {
-        # Try to open the file exclusively to verify no other process has it locked
-        $stream = [System.IO.File]::Open($BunExe, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::None)
-        $stream.Close()
-        $stream.Dispose()
-        Write-Host "  File is accessible" -ForegroundColor Green
-        break
-    } catch {
-        $retryCount++
-        if ($retryCount -ge $maxRetries) {
-            Write-Host "  WARNING: File may be locked after $maxRetries attempts, proceeding anyway..." -ForegroundColor Yellow
-        } else {
-            Write-Host "  File locked, waiting 5 seconds (attempt $retryCount/$maxRetries)..." -ForegroundColor Yellow
-            Start-Sleep -Seconds 5
-        }
-    }
-}
 
 # Force garbage collection to release any managed file handles
 [System.GC]::Collect()
@@ -470,7 +193,19 @@ if (-not $builderSuccess) {
     throw "electron-builder failed after $maxBuilderRetries attempts"
 }
 
-# 8. Verify the installer was built
+# Validate and report the final unpacked application before publishing.
+$UnpackedPath = "$ElectronDir\release\win-unpacked"
+Push-Location $RootDir
+try {
+    bun scripts/validate-electron-artifact.ts $UnpackedPath
+    if ($LASTEXITCODE -ne 0) { throw "Electron artifact validation failed" }
+    bun scripts/electron-artifact-report.ts $UnpackedPath --json "$ElectronDir\release\artifact-report-win-x64.json"
+    if ($LASTEXITCODE -ne 0) { throw "Electron artifact report failed" }
+} finally {
+    Pop-Location
+}
+
+# 7. Verify the installer was built
 $InstallerPath = Get-ChildItem -Path "$ElectronDir\release" -Filter "*.exe" | Select-Object -First 1
 
 if (-not $InstallerPath) {

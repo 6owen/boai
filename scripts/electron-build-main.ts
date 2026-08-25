@@ -6,6 +6,7 @@
 import { spawn } from "bun";
 import { existsSync, readFileSync, statSync, mkdirSync } from "fs";
 import { join } from "path";
+import { buildPiAgentServer as buildPiAgentServerBundle } from "./build-pi-agent-server.ts";
 
 const ROOT_DIR = join(import.meta.dir, "..");
 const DIST_DIR = join(ROOT_DIR, "apps/electron/dist");
@@ -224,29 +225,7 @@ async function buildPiAgentServer(): Promise<void> {
     mkdirSync(distDir, { recursive: true });
   }
 
-  // Use --target=bun --format=esm because the Pi SDK (@earendil-works/pi-coding-agent)
-  // is ESM-only. --target=node --format=cjs leaves ESM deps as external require()
-  // calls that fail at runtime since there are no node_modules relative to dist/.
-  const proc = spawn({
-    cmd: [
-      "bun", "build",
-      join(PI_AGENT_SERVER_DIR, "src/index.ts"),
-      "--outfile", PI_AGENT_SERVER_OUTPUT,
-      "--target", "bun",
-      "--format", "esm",
-      "--external", "koffi",
-    ],
-    cwd: ROOT_DIR,
-    stdout: "inherit",
-    stderr: "inherit",
-  });
-
-  const exitCode = await proc.exited;
-
-  if (exitCode !== 0) {
-    console.error("❌ Pi agent server build failed with exit code", exitCode);
-    process.exit(exitCode);
-  }
+  await buildPiAgentServerBundle({ rootDir: ROOT_DIR, outfile: PI_AGENT_SERVER_OUTPUT });
 
   // Verify output exists
   if (!existsSync(PI_AGENT_SERVER_OUTPUT)) {
@@ -347,13 +326,6 @@ async function main(): Promise<void> {
       "--format=cjs",
       "--outfile=apps/electron/dist/main.cjs",
       "--external:electron",
-      // Claude Agent SDK is pure ESM (sdk.mjs) and calls `createRequire(import.meta.url)`
-      // at module init. esbuild's CJS bundling leaves the synthesized `import_meta.url`
-      // undefined for inner ESM modules, which throws ERR_INVALID_ARG_VALUE on load.
-      // Externalize so Node loads the SDK natively as ESM (with a real import.meta.url).
-      // Electron 39 ships Node 22.x which supports require() of ESM without TLA, so the
-      // bundled main.cjs's `require('@anthropic-ai/claude-agent-sdk')` works.
-      "--external:@anthropic-ai/claude-agent-sdk",
       // Replace grammY's bundled polyfills (node-fetch@2 + abort-controller@3)
       // with native Node globals. esbuild otherwise renames the polyfill's
       // `class AbortSignal` to `_AbortSignal` to dodge collision with the

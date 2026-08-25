@@ -3,7 +3,7 @@ import {
   registerSessionScopedToolCallbacks,
   mergeSessionScopedToolCallbacks,
   unregisterSessionScopedToolCallbacks,
-} from '../session-scoped-tools.ts';
+} from '../session-scoped-tool-callback-registry.ts';
 import { createClaudeContext } from '../claude-context.ts';
 import { attachSessionSelfManagementBindings } from '../session-self-management-bindings.ts';
 import type { SessionToolContext, SessionInfo } from '@craft-agent/session-tools-core';

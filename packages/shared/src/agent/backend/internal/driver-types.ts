@@ -18,6 +18,8 @@ export interface BackendRuntimePaths {
   node?: string;
   bridgeServer?: string;
   piServer?: string;
+  /** Launch the configured executable with ELECTRON_RUN_AS_NODE=1. */
+  electronNode?: boolean;
 }
 
 export interface BackendRuntimePayload extends Record<string, unknown> {
@@ -114,10 +116,5 @@ export function getBackendRuntime(config: BackendConfig): BackendRuntimePayload 
 }
 
 export function getDefaultProviderType(provider: AgentProvider): LlmProviderType {
-  switch (provider) {
-    case 'anthropic':
-      return 'anthropic';
-    case 'pi':
-      return 'pi';
-  }
+  return 'pi';
 }

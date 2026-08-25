@@ -37,8 +37,10 @@ export default defineConfig({
   base: './',
   build: {
     outDir: resolve(__dirname, 'dist/renderer'),
-    emptyDirBeforeWrite: true,
-    sourcemap: true,  // Source maps generated for debugging. Not uploaded to Sentry (see CLAUDE.md).
+    emptyOutDir: true,
+    // Release artifacts never ship source maps. If Sentry upload is enabled later,
+    // generate private maps in CI and delete them immediately after upload.
+    sourcemap: false,
     rollupOptions: {
       input: {
         main: resolve(__dirname, 'src/renderer/index.html'),

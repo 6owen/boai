@@ -14,7 +14,6 @@
  * All calls are delegated to the agent backend's queryLlm() implementation.
  */
 
-import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 
 // Tool result type - matches what the SDK expects
@@ -560,9 +559,9 @@ export function createLLMTool(options: LLMToolOptions) {
   // sessionId captured in closure for potential future use (logging, rate limiting per session)
   const { sessionId: _sessionId } = options;
 
-  return tool(
-    'call_llm',
-    `Invoke a secondary LLM for focused subtasks. Use for:
+  return {
+    name: 'call_llm',
+    description: `Invoke a secondary LLM for focused subtasks. Use for:
 - Cost optimization: use a smaller model for simple tasks (summarization, classification)
 - Structured output: JSON schema compliance via native backend support
 - Parallel processing: call multiple times in one message - all run simultaneously
@@ -571,7 +570,7 @@ export function createLLMTool(options: LLMToolOptions) {
 Put text/content directly in the 'prompt' parameter. Do NOT pass inline text via attachments.
 Only use 'attachments' for existing file paths on disk - the tool loads file content automatically.
 For large files (>2000 lines), use {path, startLine, endLine} to select a portion.`,
-    {
+    inputSchema: {
       prompt: z.string().min(1, 'Prompt cannot be empty')
         .describe('Instructions for the LLM'),
 
@@ -596,7 +595,16 @@ For large files (>2000 lines), use {path, startLine, endLine} to select a portio
       outputSchema: OutputSchemaParam.optional()
         .describe('Custom JSON Schema for structured output'),
     },
-    async (args) => {
+    handler: async (args: {
+      prompt: string;
+      attachments?: Array<string | { path: string; startLine?: number; endLine?: number }>;
+      model?: string;
+      systemPrompt?: string;
+      maxTokens?: number;
+      temperature?: number;
+      outputFormat?: keyof typeof OUTPUT_FORMATS;
+      outputSchema?: Record<string, unknown>;
+    }) => {
       // ========================================
       // VALIDATION PHASE
       // ========================================
@@ -720,6 +728,6 @@ For large files (>2000 lines), use {path, startLine, endLine} to select a portio
         throw error;
       }
     },
-    { annotations: { readOnlyHint: true } }
-  );
+    annotations: { readOnlyHint: true },
+  };
 }

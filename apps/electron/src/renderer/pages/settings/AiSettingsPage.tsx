@@ -53,7 +53,7 @@ import { toast } from 'sonner'
 /**
  * Compact token count: 1234 → "1.2K", 1234567 → "1.2M". Used by the RTK
  * efficiency meter. Locale-agnostic — the suffix is universal across the
- * 7 supported locales.
+ * English and Simplified Chinese locales.
  */
 function formatTokenCount(n: number): string {
   if (n < 1000) return String(n)
@@ -191,10 +191,9 @@ interface ConnectionRowProps {
   validationState: ValidationState
   validationError?: string
   /** True when another OAuth connection resolves to the same Anthropic account (issue #838) */
-  isDuplicateAccount?: boolean
 }
 
-function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, onSetDefault, onValidate, onReauthenticate, onEdit, onSetMidStreamBehavior, validationState, validationError, isDuplicateAccount }: ConnectionRowProps) {
+function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, onSetDefault, onValidate, onReauthenticate, onEdit, onSetMidStreamBehavior, validationState, validationError }: ConnectionRowProps) {
   const { t } = useTranslation()
   const [menuOpen, setMenuOpen] = useState(false)
   const [piBaseUrl, setPiBaseUrl] = useState<string | undefined>(undefined)
@@ -231,7 +230,6 @@ function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, 
     const provider = connection.providerType || connection.type
     const isSubscription = connection.authType === 'oauth'
     switch (provider) {
-      case 'anthropic': parts.push(isSubscription ? 'Anthropic Subscription' : 'Anthropic API'); break
       case 'pi': {
         // Show upstream provider name for API key connections (e.g. "Google AI Studio")
         const piLabel = !isSubscription && connection.piAuthProvider
@@ -253,8 +251,7 @@ function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, 
       let endpoint = connection.baseUrl
       // Use default endpoints for standard providers if no custom baseUrl
       if (!endpoint) {
-        if (provider === 'anthropic') endpoint = 'https://api.anthropic.com'
-        else if (provider === 'pi' && connection.piAuthProvider) {
+        if (provider === 'pi' && connection.piAuthProvider) {
           endpoint = piBaseUrl
         }
       }
@@ -275,13 +272,6 @@ function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, 
     return parts.join(' · ')
   }
 
-  // Resolved Anthropic identity (issue #838): render `email · org` independently of
-  // validation state. It cannot live in getDescription() — that short-circuits for
-  // validating/success/error and would hide the identity during those states.
-  const oauthIdentityLine = connection.authType === 'oauth' && connection.oauthAccountEmail
-    ? [connection.oauthAccountEmail, connection.oauthOrganizationName].filter(Boolean).join(' · ')
-    : null
-
   return (
     <SettingsRow
       label={(
@@ -294,20 +284,7 @@ function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, 
                 {t("common.default")}
               </span>
             )}
-            {isDuplicateAccount && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="inline-flex items-center" aria-label={t("settings.ai.duplicateAccount")}>
-                    <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>{t("settings.ai.duplicateAccount")}</TooltipContent>
-              </Tooltip>
-            )}
           </div>
-          {oauthIdentityLine && (
-            <span className="text-xs text-muted-foreground truncate">{oauthIdentityLine}</span>
-          )}
         </div>
       )}
       description={getDescription()}
@@ -582,9 +559,9 @@ export default function AiSettingsPage() {
     apiSetupOnboarding.reset()
 
     if (connection.authType === 'oauth') {
-      const method = connection.providerType === 'pi'
-                   ? (connection.piAuthProvider === 'github-copilot' ? 'pi_copilot_oauth' : 'pi_chatgpt_oauth')
-                   : 'claude_oauth'
+      const method = connection.piAuthProvider === 'github-copilot'
+        ? 'pi_copilot_oauth'
+        : 'pi_chatgpt_oauth'
       apiSetupOnboarding.handleStartOAuth(method, connection.slug)
     }
   }, [apiSetupOnboarding, openApiSetup])
@@ -719,17 +696,6 @@ export default function AiSettingsPage() {
     return llmConnections.find(c => c.isDefault)
   }, [llmConnections])
 
-  // Anthropic account UUIDs that resolve from 2+ connections (issue #838).
-  // Surfaces a warning when several Claude connections share one account/quota.
-  const duplicateAccountUuids = useMemo(() => {
-    const counts = new Map<string, number>()
-    for (const conn of llmConnections) {
-      const uuid = conn.oauthAccountUuid
-      if (uuid) counts.set(uuid, (counts.get(uuid) ?? 0) + 1)
-    }
-    return new Set([...counts].filter(([, n]) => n > 1).map(([uuid]) => uuid))
-  }, [llmConnections])
-
   const defaultModel = defaultConnection?.defaultModel ?? ''
 
   // App-level default handlers
@@ -829,8 +795,7 @@ export default function AiSettingsPage() {
                     options={llmConnections.map((conn) => ({
                       value: conn.slug,
                       label: conn.name,
-                      description: conn.providerType === 'anthropic' ? 'Anthropic API' :
-                                   conn.providerType === 'pi' ? 'BoAI Backend' :
+                      description: conn.providerType === 'pi' ? (PI_AUTH_PROVIDER_LABELS[conn.piAuthProvider ?? ''] ?? 'BoAI Backend') :
                                    conn.providerType === 'pi_compat' ? (conn.baseUrl?.toLowerCase().includes('manifest.build') ? 'Manifest' : 'BoAI Backend Compatible') :
                                    conn.providerType || 'Unknown',
                     }))}
@@ -887,7 +852,6 @@ export default function AiSettingsPage() {
                         onSetMidStreamBehavior={(behavior) => handleSetMidStreamBehavior(conn, behavior)}
                         validationState={validationStates[conn.slug]?.state || 'idle'}
                         validationError={validationStates[conn.slug]?.error}
-                        isDuplicateAccount={!!conn.oauthAccountUuid && duplicateAccountUuids.has(conn.oauthAccountUuid)}
                       />
                     ))
                   )}
@@ -994,9 +958,6 @@ export default function AiSettingsPage() {
                   onSubmitLocalModel={apiSetupOnboarding.handleSubmitLocalModel}
                   onStartOAuth={apiSetupOnboarding.handleStartOAuth}
                   onFinish={handleApiSetupFinish}
-                  isWaitingForCode={apiSetupOnboarding.isWaitingForCode}
-                  onSubmitAuthCode={apiSetupOnboarding.handleSubmitAuthCode}
-                  onCancelOAuth={apiSetupOnboarding.handleCancelOAuth}
                   copilotDeviceCode={apiSetupOnboarding.copilotDeviceCode}
                   editInitialValues={editInitialValues}
                   className="h-full"

@@ -75,9 +75,10 @@ describe('createBuiltInConnection', () => {
   it('creates anthropic-api with correct defaults', () => {
     const conn = createBuiltInConnection('anthropic-api')
     expect(conn.slug).toBe('anthropic-api')
-    expect(conn.providerType).toBe('anthropic')
+    expect(conn.providerType).toBe('pi')
+    expect(conn.piAuthProvider).toBe('anthropic')
     expect(conn.authType).toBe('api_key')
-    expect(conn.name).toBe('Anthropic (API Key)')
+    expect(conn.name).toBe('Anthropic via PI')
   })
 
   it('creates anthropic-api with baseUrl as compat provider', () => {
@@ -85,12 +86,6 @@ describe('createBuiltInConnection', () => {
     expect(conn.providerType).toBe('pi_compat')
     expect(conn.authType).toBe('api_key_with_endpoint')
     expect(conn.name).toBe('Custom Anthropic-Compatible')
-  })
-
-  it('creates claude-max with oauth', () => {
-    const conn = createBuiltInConnection('claude-max')
-    expect(conn.providerType).toBe('anthropic')
-    expect(conn.authType).toBe('oauth')
   })
 
   it('creates pi-api-key with pi provider', () => {
@@ -103,8 +98,9 @@ describe('createBuiltInConnection', () => {
   it('handles numeric suffix slugs (anthropic-api-2) by deriving from base template', () => {
     const conn = createBuiltInConnection('anthropic-api-2')
     expect(conn.slug).toBe('anthropic-api-2')
-    expect(conn.providerType).toBe('anthropic')
-    expect(conn.name).toBe('Anthropic (API Key) 2')
+    expect(conn.providerType).toBe('pi')
+    expect(conn.piAuthProvider).toBe('anthropic')
+    expect(conn.name).toBe('Anthropic via PI 2')
   })
 
   it('handles numeric suffix slugs (pi-api-key-3)', () => {
