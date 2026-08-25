@@ -25,6 +25,7 @@ function createMacArtifact(): string {
 
   const files: Array<[string, string]> = [
     ['dist/main.cjs', 'main'],
+    ['dist/skill-usage-worker.cjs', 'stats'],
     ['dist/renderer/index.html', '<html></html>'],
     ['dist/resources/pi-agent-server/index.js', 'pi'],
     ['node_modules/@vscode/ripgrep/bin/rg', 'rg'],
@@ -139,6 +140,25 @@ describe('Electron artifact boundary', () => {
     expect(validateElectronArtifact(artifactPath).map((issue) => issue.code)).toContain('missing-locale')
   })
 
+  test('rejects a packaged app when the Skill usage worker is missing', () => {
+    const artifactPath = createMacArtifact()
+    rmSync(
+      join(
+        artifactPath,
+        'Contents',
+        'Resources',
+        'app',
+        'dist',
+        'skill-usage-worker.cjs',
+      ),
+    )
+
+    expect(validateElectronArtifact(artifactPath)).toContainEqual(expect.objectContaining({
+      code: 'missing-runtime',
+      message: 'Skill usage worker is missing from the packaged app',
+    }))
+  })
+
   test('reports exact byte totals for the artifact and major categories', () => {
     const artifactPath = createMacArtifact()
     const mapPath = join(
@@ -157,6 +177,6 @@ describe('Electron artifact boundary', () => {
     expect(report.categories.sourceMaps).toBe(7)
     expect(report.categories.bundledBun).toBe(0)
     expect(report.categories.claude).toBe(0)
-    expect(report.totalBytes).toBe(46)
+    expect(report.totalBytes).toBe(51)
   })
 })

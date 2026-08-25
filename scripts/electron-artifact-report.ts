@@ -236,6 +236,9 @@ export function validateElectronArtifact(artifactPath: string): ArtifactValidati
   }
 
   const requiredRuntimes: Array<[string, string[]]> = [
+    ['Skill usage worker', [
+      join(appRoot, 'dist', 'skill-usage-worker.cjs'),
+    ]],
     ['PI Agent Server', [
       join(appRoot, 'dist', 'resources', 'pi-agent-server', 'index.js'),
       join(appRoot, 'resources', 'pi-agent-server', 'index.js'),

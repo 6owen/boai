@@ -1517,7 +1517,7 @@ function AppShellContent({
                     aria-label={t("common.search")}
                     onClick={() => setSearchActive(true)}
                   />
-                  {activeWorkspace && (
+                  {activeWorkspace && (isSkillStatsView || skillFilter?.collection !== 'own') && (
                     <UpdateSkillPopover
                       workspaceId={activeWorkspace.id}
                       workingDirectory={activeSessionWorkingDirectory}

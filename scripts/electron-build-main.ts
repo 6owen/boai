@@ -11,6 +11,8 @@ import { buildPiAgentServer as buildPiAgentServerBundle } from "./build-pi-agent
 const ROOT_DIR = join(import.meta.dir, "..");
 const DIST_DIR = join(ROOT_DIR, "apps/electron/dist");
 const OUTPUT_FILE = join(DIST_DIR, "main.cjs");
+const SKILL_USAGE_WORKER_SOURCE = join(ROOT_DIR, "apps/electron/src/main/workers/skill-usage-worker.ts");
+const SKILL_USAGE_WORKER_OUTPUT = join(DIST_DIR, "skill-usage-worker.cjs");
 const INTERCEPTOR_SOURCE = join(ROOT_DIR, "packages/shared/src/unified-network-interceptor.ts");
 const INTERCEPTOR_OUTPUT = join(DIST_DIR, "interceptor.cjs");
 const SESSION_TOOLS_CORE_DIR = join(ROOT_DIR, "packages/session-tools-core");
@@ -168,6 +170,46 @@ async function buildInterceptor(): Promise<void> {
   }
 
   console.log("✅ Interceptor built successfully");
+}
+
+// Build the worker loaded by SkillUsageWorkerClient at runtime. This must live
+// beside main.cjs because main/index.ts resolves it from __dirname.
+async function buildSkillUsageWorker(): Promise<void> {
+  console.log("📊 Building Skill usage worker...");
+
+  const proc = spawn({
+    cmd: [
+      "bun", "run", "esbuild",
+      SKILL_USAGE_WORKER_SOURCE,
+      "--bundle",
+      "--platform=node",
+      "--format=cjs",
+      `--outfile=${SKILL_USAGE_WORKER_OUTPUT}`,
+    ],
+    cwd: ROOT_DIR,
+    stdout: "inherit",
+    stderr: "inherit",
+  });
+
+  const exitCode = await proc.exited;
+  if (exitCode !== 0) {
+    console.error("❌ Skill usage worker build failed with exit code", exitCode);
+    process.exit(exitCode);
+  }
+
+  const stable = await waitForFileStable(SKILL_USAGE_WORKER_OUTPUT);
+  if (!stable) {
+    console.error("❌ Skill usage worker output did not stabilize");
+    process.exit(1);
+  }
+
+  const verification = await verifyJsFile(SKILL_USAGE_WORKER_OUTPUT);
+  if (!verification.valid) {
+    console.error("❌ Skill usage worker verification failed:", verification.error);
+    process.exit(1);
+  }
+
+  console.log("✅ Skill usage worker built successfully");
 }
 
 // Build the Session MCP Server (provides session-scoped tools like SubmitPlan for Codex sessions)
@@ -364,6 +406,8 @@ async function main(): Promise<void> {
     console.error("❌ Build verification failed:", verification.error);
     process.exit(1);
   }
+
+  await buildSkillUsageWorker();
 
   console.log("✅ Build complete and verified");
   process.exit(0);
