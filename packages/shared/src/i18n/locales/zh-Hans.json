@@ -1325,6 +1325,7 @@
   "skillsManager.scan": "扫描",
   "skillsManager.scanFailed": "无法扫描该来源",
   "skillsManager.scanHint": "输入来源并扫描，以查看可以安装的技能。",
+  "skillsManager.scopeChoosePath": "选择路径",
   "skillsManager.scopeGlobal": "全局",
   "skillsManager.scopeLabel": "安装位置",
   "skillsManager.scopeProject": "当前项目",

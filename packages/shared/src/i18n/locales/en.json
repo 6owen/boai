@@ -1325,6 +1325,7 @@
   "skillsManager.scan": "Scan",
   "skillsManager.scanFailed": "Could not scan this source",
   "skillsManager.scanHint": "Enter a source and scan to see the skills available to install.",
+  "skillsManager.scopeChoosePath": "Choose Path",
   "skillsManager.scopeGlobal": "Global",
   "skillsManager.scopeLabel": "Install location",
   "skillsManager.scopeProject": "Current Project",

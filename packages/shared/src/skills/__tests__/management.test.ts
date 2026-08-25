@@ -526,7 +526,11 @@ describe('annotateManagedSkills', () => {
       updatedAt: '2026-08-23T00:04:00.000Z',
       canUpdate: true,
     })
-    expect(result[1]!.management).toMatchObject({ scope: 'project', canUpdate: true })
+    expect(result[1]!.management).toMatchObject({
+      scope: 'project',
+      projectRoot,
+      canUpdate: true,
+    })
     expect(result[2]!.management).toBeUndefined()
     expect(result[3]!.management).toBeUndefined()
   })

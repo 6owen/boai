@@ -75,7 +75,7 @@ export interface InstallSkillRequest {
   source: string;
   /** Skill slug to select from the package. */
   slug: string;
-  /** Install globally or into the active project's .agents directory. */
+  /** Install globally or into the selected project's .agents directory. */
   scope: SkillManagementScope;
   /** Required when scope is project. */
   workingDirectory?: string;
@@ -118,6 +118,8 @@ export interface DeleteSkillRequest {
 export interface SkillManagementInfo {
   manager: 'skills-cli';
   scope: SkillManagementScope;
+  /** Root directory used to manage a project-scoped skill. */
+  projectRoot?: string;
   source?: string;
   sourceType?: string;
   sourceUrl?: string;

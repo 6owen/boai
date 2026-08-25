@@ -42,19 +42,13 @@ export function registerSkillsHandlers(
   deps: HandlerDeps,
   skillsCli = new SkillsCliService(),
 ): void {
-  const resolveProjectRoot = (workspaceId: string, workingDirectory?: string): string | undefined => {
+  const resolveProjectRoot = (workingDirectory?: string): string | undefined => {
     if (!workingDirectory) return undefined
     if (!existsSync(workingDirectory) || !statSync(workingDirectory).isDirectory()) {
       throw new Error('The selected project directory is not available')
     }
 
     const requestedRoot = resolve(workingDirectory)
-    const belongsToActiveSession = deps.sessionManager
-      .getSessions(workspaceId)
-      .some(session => session.workingDirectory && resolve(session.workingDirectory) === requestedRoot)
-    if (!belongsToActiveSession) {
-      throw new Error('The selected project directory is not attached to this workspace')
-    }
     return requestedRoot
   }
 
@@ -162,12 +156,12 @@ export function registerSkillsHandlers(
     return skillsCli.scan(request, workspace.rootPath)
   })
 
-  // Install a global or active-project skill using the standard skills CLI.
+  // Install a global skill or install into an explicitly selected project directory.
   server.handle(RPC_CHANNELS.skills.INSTALL, async (_ctx, workspaceId: string, request: InstallSkillRequest) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error('Workspace not found')
 
-    const viewProjectRoot = resolveProjectRoot(workspaceId, request.workingDirectory)
+    const viewProjectRoot = resolveProjectRoot(request.workingDirectory)
     const projectRoot = request.scope === 'project' ? viewProjectRoot : undefined
     if (request.scope === 'project' && !projectRoot) {
       throw new Error('Select a project before installing a project skill')
@@ -195,7 +189,7 @@ export function registerSkillsHandlers(
       return skillsCli.checkUpdates({ scope: 'global' })
     }
 
-    const viewProjectRoot = resolveProjectRoot(workspaceId, request.workingDirectory)
+    const viewProjectRoot = resolveProjectRoot(request.workingDirectory)
     const projectRoot = request.scope === 'project' ? viewProjectRoot : undefined
     if (request.scope === 'project' && !projectRoot) {
       throw new Error('Select a project before checking project skill updates')
@@ -225,7 +219,7 @@ export function registerSkillsHandlers(
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error('Workspace not found')
 
-    const viewProjectRoot = resolveProjectRoot(workspaceId, request.workingDirectory)
+    const viewProjectRoot = resolveProjectRoot(request.workingDirectory)
     const projectRoot = request.scope === 'project' ? viewProjectRoot : undefined
     if (request.scope === 'project' && !projectRoot) {
       throw new Error('Select a project before updating a project skill')
@@ -277,7 +271,7 @@ export function registerSkillsHandlers(
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error('Workspace not found')
 
-    const viewProjectRoot = resolveProjectRoot(workspaceId, request.workingDirectory)
+    const viewProjectRoot = resolveProjectRoot(request.workingDirectory)
     const projectRoot = request.scope === 'project' ? viewProjectRoot : undefined
     if (request.scope === 'project' && !projectRoot) {
       throw new Error('Select a project before uninstalling a project skill')
@@ -312,7 +306,7 @@ export function registerSkillsHandlers(
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error('Workspace not found')
 
-    const projectRoot = resolveProjectRoot(workspaceId, request.workingDirectory)
+    const projectRoot = resolveProjectRoot(request.workingDirectory)
     if (request.source === 'project' && !projectRoot) {
       throw new Error('Select a project before deleting a project skill')
     }
@@ -349,7 +343,7 @@ export function registerSkillsHandlers(
       throw new Error('Exporting a local Skill Library is not available for remote workspaces')
     }
 
-    const projectRoot = resolveProjectRoot(workspaceId, request.workingDirectory)
+    const projectRoot = resolveProjectRoot(request.workingDirectory)
     const favoriteKeys = new Set(request.favoriteKeys)
     const excludedKeys = new Set(request.excludedKeys ?? [])
     const currentSkills = annotateManagedSkills(

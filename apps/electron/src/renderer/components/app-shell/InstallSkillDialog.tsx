@@ -11,6 +11,8 @@ import {
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { ServerDirectoryBrowser } from '@/components/ServerDirectoryBrowser'
+import { useDirectoryPicker } from '@/hooks/useDirectoryPicker'
 import { cn } from '@/lib/utils'
 import { isSkillInOwnCollection } from '@/hooks/useSkillCollections'
 import type { LoadedSkill } from '../../../shared/types'
@@ -69,6 +71,7 @@ export function InstallSkillPopoverContent({
   const [existingSkills, setExistingSkills] = React.useState<Map<string, LoadedSkill>>(new Map())
   const [selected, setSelected] = React.useState<Set<string>>(new Set())
   const [scope, setScope] = React.useState<SkillManagementScope>('global')
+  const [projectDirectory, setProjectDirectory] = React.useState<string>()
   const [scanning, setScanning] = React.useState(false)
   const [statuses, setStatuses] = React.useState<Record<string, InstallStatus>>({})
   const folderInputRef = React.useRef<HTMLInputElement>(null)
@@ -77,10 +80,23 @@ export function InstallSkillPopoverContent({
   const installing = Object.values(statuses).some(status => status === 'installing')
   const busy = scanning || installing
 
+  const handleProjectDirectorySelected = React.useCallback((path: string) => {
+    setProjectDirectory(path)
+    setScope('project')
+  }, [])
+
+  const {
+    pickDirectory,
+    showServerBrowser,
+    serverBrowserMode,
+    cancelServerBrowser,
+    confirmServerBrowser,
+  } = useDirectoryPicker(handleProjectDirectorySelected)
+
   React.useEffect(() => {
-    onBusyChange?.(busy)
+    onBusyChange?.(busy || showServerBrowser)
     return () => onBusyChange?.(false)
-  }, [busy, onBusyChange])
+  }, [busy, onBusyChange, showServerBrowser])
 
   React.useEffect(() => {
     if (kind !== 'url' && kind !== 'git') return
@@ -162,7 +178,9 @@ export function InstallSkillPopoverContent({
             source: candidate.installSource ?? scanResult.installSource,
             slug: candidate.slug,
             scope: mode === 'import-own' ? 'global' : scope,
-            workingDirectory,
+            workingDirectory: mode === 'import-own' || scope === 'global'
+              ? workingDirectory
+              : projectDirectory,
           })
           if (mode === 'import-own') onAddToOwn?.({ slug: candidate.slug, source: 'global' })
         }
@@ -408,15 +426,18 @@ export function InstallSkillPopoverContent({
 
       {scanResult && (
         <div className="flex shrink-0 items-end justify-between gap-3 border-t border-border/50 p-3">
-          {mode === 'install' && <div>
+          {mode === 'install' && <div className="min-w-0 flex-1">
             <div className="mb-1.5 text-xs font-medium text-muted-foreground">{t('skillsManager.scopeLabel')}</div>
-            <div className="flex rounded-[7px] bg-foreground-2 p-0.5 shadow-minimal">
+            <div className={cn(
+              'flex rounded-[7px] bg-foreground-2 p-0.5 shadow-minimal transition-[width]',
+              scope === 'project' && projectDirectory ? 'w-full' : 'w-fit',
+            )}>
               <button
                 type="button"
                 aria-pressed={scope === 'global'}
                 onClick={() => setScope('global')}
                 className={cn(
-                  'h-7 rounded-[5px] px-2.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
+                  'h-7 shrink-0 rounded-[5px] px-2.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
                   scope === 'global' ? 'bg-background font-medium shadow-minimal' : 'text-muted-foreground hover:text-foreground',
                 )}
               >
@@ -425,16 +446,28 @@ export function InstallSkillPopoverContent({
               <button
                 type="button"
                 aria-pressed={scope === 'project'}
-                onClick={() => setScope('project')}
-                disabled={!workingDirectory}
-                title={!workingDirectory ? t('skillsManager.projectUnavailable') : undefined}
+                onClick={pickDirectory}
+                title={projectDirectory}
                 className={cn(
-                  'h-7 rounded-[5px] px-2.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40',
+                  'h-7 shrink-0 rounded-[5px] px-2.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
                   scope === 'project' ? 'bg-background font-medium shadow-minimal' : 'text-muted-foreground hover:text-foreground',
                 )}
               >
-                {t('skillsManager.scopeProject')}
+                {t('skillsManager.scopeChoosePath')}
               </button>
+              {scope === 'project' && projectDirectory && (
+                <button
+                  type="button"
+                  onClick={pickDirectory}
+                  title={projectDirectory}
+                  className="ml-1 flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-[5px] px-2 text-left text-xs text-muted-foreground transition-colors hover:bg-background/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                >
+                  <FolderOpen className="h-3.5 w-3.5 shrink-0" />
+                  <span dir="rtl" className="min-w-0 flex-1 truncate text-left">
+                    <bdi dir="ltr">{projectDirectory}</bdi>
+                  </span>
+                </button>
+              )}
             </div>
           </div>}
           {mode === 'import-own' && <div />}
@@ -442,7 +475,7 @@ export function InstallSkillPopoverContent({
             size="sm"
             className="h-9 gap-1.5"
             onClick={() => void installSelected()}
-            disabled={selected.size === 0 || installing}
+            disabled={selected.size === 0 || installing || (scope === 'project' && !projectDirectory)}
           >
             {installing && <LoaderCircle className="animate-spin" />}
             {t(mode === 'import-own' ? 'skillsLibrary.importSelected' : 'skillsManager.installSelected', {
@@ -450,6 +483,15 @@ export function InstallSkillPopoverContent({
             })}
           </Button>
         </div>
+      )}
+      {mode === 'install' && (
+        <ServerDirectoryBrowser
+          open={showServerBrowser}
+          mode={serverBrowserMode}
+          onSelect={confirmServerBrowser}
+          onCancel={cancelServerBrowser}
+          initialPath={projectDirectory ?? workingDirectory}
+        />
       )}
     </div>
   )

@@ -877,6 +877,7 @@ function findLockEntry(
 function toManagementInfo(
   scope: SkillManagementScope,
   entry: SkillLockEntry,
+  projectRoot?: string,
 ): SkillManagementInfo {
   const canUpdate = scope === 'global'
     ? entry.sourceType === 'github' && !!entry.skillFolderHash && !!entry.skillPath
@@ -885,6 +886,7 @@ function toManagementInfo(
   return {
     manager: 'skills-cli',
     scope,
+    projectRoot: scope === 'project' ? projectRoot : undefined,
     source: entry.source,
     sourceType: entry.sourceType,
     sourceUrl: entry.sourceUrl,
@@ -915,6 +917,6 @@ export function annotateManagedSkills(
     const entries = skill.source === 'global' ? globalEntries : projectEntries
     const entry = findLockEntry(entries, skill.slug)
     if (!entry) return skill
-    return { ...skill, management: toManagementInfo(skill.source, entry) }
+    return { ...skill, management: toManagementInfo(skill.source, entry, projectRoot) }
   })
 }

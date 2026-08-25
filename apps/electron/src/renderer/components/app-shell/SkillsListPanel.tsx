@@ -378,7 +378,7 @@ export function SkillsListPanel({
         await window.electronAPI.uninstallSkill(workspaceId, {
           slug: skill.slug,
           scope: skill.management.scope,
-          workingDirectory,
+          workingDirectory: skill.management.projectRoot ?? workingDirectory,
         })
         toast.success(t('skillsManager.uninstalled', { name: skill.metadata.name }))
       } else if (skill.source !== 'plugin') {

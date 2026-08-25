@@ -51,7 +51,7 @@ export function UpdateSkillPopover({
     return {
       slug: skill.slug,
       scope: skill.management.scope,
-      workingDirectory,
+      workingDirectory: skill.management.projectRoot ?? workingDirectory,
     }
   }, [skill, workingDirectory])
 
@@ -96,7 +96,7 @@ export function UpdateSkillPopover({
         await window.electronAPI.updateSkill(workspaceId, {
           slug: skill.slug,
           scope: skill.management.scope,
-          workingDirectory,
+          workingDirectory: skill.management.projectRoot ?? workingDirectory,
         })
         toast.success(t('skillsManager.updated', { name: skill.metadata.name }))
       } else {

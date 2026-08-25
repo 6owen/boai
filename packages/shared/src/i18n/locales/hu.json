@@ -1325,6 +1325,7 @@
   "skillsManager.scan": "Scan",
   "skillsManager.scanFailed": "Could not scan this source",
   "skillsManager.scanHint": "Enter a source and scan to see the skills available to install.",
+  "skillsManager.scopeChoosePath": "Útvonal kiválasztása",
   "skillsManager.scopeGlobal": "Globális",
   "skillsManager.scopeLabel": "Telepítés helye",
   "skillsManager.scopeProject": "Aktuális projekt",

@@ -6,6 +6,8 @@ This file accumulates release notes for the next unreleased version. PRs that ad
 
 ## Improvements
 
+- **技能支持选择安装路径**：项目级技能不再依赖当前会话目录，可在安装时明确选择任意项目文件夹。
+
 ## Bug Fixes
 
 ## Breaking Changes
