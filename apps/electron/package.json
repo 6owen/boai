@@ -1,6 +1,6 @@
 {
   "name": "@craft-agent/electron",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "description": "Local-first personal AI asset and skill manager",
   "homepage": "https://github.com/6owen/boai",
   "repository": {
