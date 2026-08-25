@@ -108,13 +108,8 @@ win:
   # Use predictable naming: BoAI-x64.exe
   artifactName: "BoAI-${arch}.${ext}"
   files:
-    # Platform-level file filters override the root filter in electron-builder,
-    # so repeat the positive runtime allowlist before excluding Windows uv.
-    - dist/**/*
-    - "!dist/renderer/src/**"
-    - "!**/*.map"
-    - package.json
-    - "!node_modules/**/*"
+    # Platform file filters are merged with the root allowlist. Keep only the
+    # Windows-specific exclusion here so files are not scheduled for copying twice.
     # WORKAROUND: Exclude uv from regular files on Windows.
     # electron-builder's npm node module collector causes EBUSY errors when copying
     # .exe files because it scans/locks files while simultaneously trying to copy them.
