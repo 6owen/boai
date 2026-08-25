@@ -4,6 +4,8 @@
 # macOS does not automatically add optical padding to images passed to
 # app.dock.setIcon(). Keep the artwork inside an 80.5% rounded tile so the Dock
 # icon matches the visual size of system apps instead of appearing full-bleed.
+# Windows uses its own, larger master: reusing the padded macOS artwork makes
+# taskbar and shortcut icons visibly undersized.
 #
 # Usage: ./generate-icons.sh [source.png]
 
@@ -35,6 +37,7 @@ MASTER_SIZE=1024
 TILE_SIZE=824
 CORNER_RADIUS=180
 MACOS_MASTER="$TMP_DIR/macos-master.png"
+WINDOWS_MASTER="$TMP_DIR/windows-master.png"
 ICONSET="$TMP_DIR/icon.iconset"
 
 echo "Generating icons from: $SOURCE"
@@ -52,6 +55,22 @@ echo "Generating icons from: $SOURCE"
 "$IMAGEMAGICK" "$TMP_DIR/rounded-tile.png" \
     -background none -gravity center -extent "${MASTER_SIZE}x${MASTER_SIZE}" \
     -define png:color-type=6 "$MACOS_MASTER"
+
+# Windows app icons are aligned on a 48 px grid. Keep only a small optical
+# margin and use the equivalent of a 2 px corner radius at that grid size so
+# the branded plate fills the native Windows icon footprint.
+WINDOWS_TILE_SIZE=960
+WINDOWS_CORNER_RADIUS=40
+"$IMAGEMAGICK" "$SOURCE" -resize "${WINDOWS_TILE_SIZE}x${WINDOWS_TILE_SIZE}!" -alpha set "$TMP_DIR/windows-tile.png"
+"$IMAGEMAGICK" -size "${WINDOWS_TILE_SIZE}x${WINDOWS_TILE_SIZE}" xc:none \
+    -fill white \
+    -draw "roundrectangle 0,0 $((WINDOWS_TILE_SIZE - 1)),$((WINDOWS_TILE_SIZE - 1)) ${WINDOWS_CORNER_RADIUS},${WINDOWS_CORNER_RADIUS}" \
+    "$TMP_DIR/windows-mask.png"
+"$IMAGEMAGICK" "$TMP_DIR/windows-tile.png" "$TMP_DIR/windows-mask.png" \
+    -compose DstIn -composite "$TMP_DIR/windows-rounded-tile.png"
+"$IMAGEMAGICK" "$TMP_DIR/windows-rounded-tile.png" \
+    -background none -gravity center -extent "${MASTER_SIZE}x${MASTER_SIZE}" \
+    -define png:color-type=6 "$WINDOWS_MASTER"
 
 mkdir -p "$ICONSET"
 
@@ -75,8 +94,8 @@ echo "Creating transparent icon.png..."
 sips -z 512 512 "$MACOS_MASTER" --out "$SCRIPT_DIR/icon.png" >/dev/null
 
 echo "Creating icon.ico..."
-"$IMAGEMAGICK" "$MACOS_MASTER" \
-    -define icon:auto-resize=256,128,64,48,32,24,16 \
+"$IMAGEMAGICK" "$WINDOWS_MASTER" \
+    -define icon:auto-resize=256,96,80,72,64,60,48,40,36,32,30,24,20,16 \
     "$SCRIPT_DIR/icon.ico"
 
 echo "Icons generated:"

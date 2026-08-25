@@ -1,12 +1,15 @@
 import { resolve } from 'path'
-import { join } from 'path'
 import { homedir } from 'os'
 import { execSync } from 'child_process'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import { getWorkspaceByNameOrId, getGitBashPath, setGitBashPath, clearGitBashPath } from '@craft-agent/shared/config'
 import { CONFIG_DIR } from '@craft-agent/shared/config/paths'
 import { classifyExternalUrl, formatBlockedUrlError } from '@craft-agent/shared/utils/url-safety'
-import { isUsableGitBashPath, validateGitBashPath } from '@craft-agent/server-core/services'
+import {
+  getGitBashCandidatePaths,
+  isUsableGitBashPath,
+  validateGitBashPath,
+} from '@craft-agent/server-core/services'
 import { validateFilePath, getWorkspaceAllowedDirs } from '@craft-agent/server-core/handlers'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
@@ -206,12 +209,7 @@ export function registerSystemCoreHandlers(server: RpcServer, deps: HandlerDeps)
       return { found: true, path: null, platform }
     }
 
-    const commonPaths = [
-      'C:\\Program Files\\Git\\bin\\bash.exe',
-      'C:\\Program Files (x86)\\Git\\bin\\bash.exe',
-      join(process.env.LOCALAPPDATA || '', 'Programs', 'Git', 'bin', 'bash.exe'),
-      join(process.env.PROGRAMFILES || '', 'Git', 'bin', 'bash.exe'),
-    ]
+    const commonPaths = getGitBashCandidatePaths()
 
     const persistedPath = getGitBashPath()
     if (persistedPath) {

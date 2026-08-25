@@ -27,6 +27,9 @@ files:
   - "!node_modules/**/*"
 
 extraMetadata:
+  # Keep the workspace package name internal to the monorepo. The packaged
+  # application/updater must use the BoAI identity for data and cache paths.
+  name: boai
   main: dist/main.cjs
 
 # Generate GitHub Release update manifests (latest.yml, latest-mac.yml, and
@@ -137,10 +140,14 @@ win:
       to: messaging-whatsapp-worker/worker.cjs
 
 nsis:
-  oneClick: true
+  # Assisted mode exposes the installation-directory page.
+  oneClick: false
+  allowToChangeInstallationDirectory: true
   # Per-user install to %LOCALAPPDATA%\Programs\ (not Program Files).
-  # Keep the existing per-user install behavior for update compatibility.
+  # Users can choose another writable directory in the installer.
   perMachine: false
+  shortcutName: BoAI
+  uninstallDisplayName: BoAI
   deleteAppDataOnUninstall: true
 
 linux:

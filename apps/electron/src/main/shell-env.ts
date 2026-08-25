@@ -3,6 +3,8 @@
  *
  * When Electron apps are launched from Finder/Dock on macOS, they inherit
  * a minimal launchd environment with PATH=/usr/bin:/bin:/usr/sbin:/sbin.
+ * Windows apps launched from Explorer can likewise inherit a stale PATH that
+ * does not contain tools installed after the Explorer process started.
  *
  * This module loads the user's full shell environment by spawning their
  * login shell and extracting environment variables. This ensures tools
@@ -11,6 +13,7 @@
 
 import { execSync } from 'child_process'
 import { mainLog } from './logger'
+import { resolveWindowsPath } from './windows-path'
 
 // Environment variables that should NOT be imported from the shell
 // VITE_* vars from dev mode would make packaged app try to load from localhost
@@ -19,13 +22,25 @@ const shouldSkipEnvVar = (key: string): boolean => {
 }
 
 /**
- * Load the user's shell environment and merge it into process.env
+ * Refresh the user's executable environment and merge it into process.env.
  *
- * This should be called early in app startup, before creating any agents.
- * It spawns the user's login shell to get the full environment including
- * PATH modifications from .zshrc, .bashrc, .zprofile, etc.
+ * This should be called early in app startup, before creating any agents. On
+ * Windows it reloads registry PATH values; on macOS it spawns the user's login
+ * shell to read PATH modifications from .zshrc, .bashrc, .zprofile, etc.
  */
 export function loadShellEnv(): void {
+  if (process.platform === 'win32') {
+    const resolved = resolveWindowsPath()
+    process.env.PATH = resolved.path
+    mainLog.info(`[shell-env] Refreshed Windows PATH with ${resolved.addedEntries.length} registry/common entries`)
+    if (resolved.gitExecutable) {
+      mainLog.info(`[shell-env] Git available at ${resolved.gitExecutable}`)
+    } else {
+      mainLog.warn('[shell-env] Git was not found after refreshing Windows PATH')
+    }
+    return
+  }
+
   // Only needed on macOS where GUI apps have minimal environment
   if (process.platform !== 'darwin') {
     return
