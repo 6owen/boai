@@ -146,7 +146,7 @@ jobs:
         if: matrix.platform == 'win'
         working-directory: apps/electron
         shell: pwsh
-        run: bun run dist:win
+        run: ./scripts/build-win.ps1
         env:
           BOAI_SKIP_INSTALL: "1"
 

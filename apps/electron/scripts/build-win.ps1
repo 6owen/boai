@@ -126,6 +126,32 @@ try {
     Pop-Location
 }
 
+# Bun/esbuild can briefly retain the freshly written bundle on Windows. Verify
+# that the main bundle can be opened exclusively before electron-builder starts
+# its parallel file copy. The release workflow invokes this script directly so
+# there is no outer `bun run` process kept alive during packaging.
+$MainBundle = "$ElectronDir\dist\main.cjs"
+$maxUnlockAttempts = 10
+for ($attempt = 1; $attempt -le $maxUnlockAttempts; $attempt++) {
+    try {
+        $stream = [System.IO.File]::Open(
+            $MainBundle,
+            [System.IO.FileMode]::Open,
+            [System.IO.FileAccess]::Read,
+            [System.IO.FileShare]::None
+        )
+        $stream.Dispose()
+        Write-Host "Main bundle is ready for packaging."
+        break
+    } catch {
+        if ($attempt -eq $maxUnlockAttempts) {
+            throw "Main bundle remained locked after $maxUnlockAttempts attempts: $_"
+        }
+        Write-Host "Main bundle is still locked; retrying ($attempt/$maxUnlockAttempts)..." -ForegroundColor Yellow
+        Start-Sleep -Seconds 1
+    }
+}
+
 # 6. Package with electron-builder
 Write-Host "Packaging app with electron-builder..."
 
