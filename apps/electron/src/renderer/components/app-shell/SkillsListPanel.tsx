@@ -381,7 +381,7 @@ export function SkillsListPanel({
           workingDirectory: skill.management.projectRoot ?? workingDirectory,
         })
         toast.success(t('skillsManager.uninstalled', { name: skill.metadata.name }))
-      } else if (skill.source !== 'plugin') {
+      } else if (skill.source !== 'plugin' && skill.source !== 'agent') {
         await window.electronAPI.deleteSkill(workspaceId, {
           slug: skill.slug,
           source: skill.source,
@@ -497,6 +497,11 @@ export function SkillsListPanel({
                     {skill.pluginName}
                   </span>
                 )}
+                {skill.source === 'agent' && (
+                  <span className="shrink-0 rounded-full bg-foreground/5 px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                    {t('skillsList.agentBadge')}
+                  </span>
+                )}
                 <span className="truncate">{skill.metadata.description}</span>
               </span>
             ),
@@ -518,8 +523,8 @@ export function SkillsListPanel({
                 }}
                 canShowInFinder={canRevealLocally}
                 onUninstall={skill.management ? () => void handleRemoveSkill(skill) : undefined}
-                onDelete={!skill.management && skill.source !== 'plugin' ? () => void handleRemoveSkill(skill) : undefined}
-                canDelete={skill.source !== 'plugin'}
+                onDelete={!skill.management && skill.source !== 'plugin' && skill.source !== 'agent' ? () => void handleRemoveSkill(skill) : undefined}
+                canDelete={skill.source !== 'plugin' && skill.source !== 'agent'}
                 deleteLabel={t('skillsList.deleteSkill')}
                 isFavorite={isSkillInOwnCollection(skill, favoriteSkillKeys, excludedOwnSkillKeys)}
                 onToggleFavorite={onToggleFavorite ? () => onToggleFavorite(skill) : undefined}

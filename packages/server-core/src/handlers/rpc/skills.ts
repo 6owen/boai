@@ -305,6 +305,9 @@ export function registerSkillsHandlers(
   server.handle(RPC_CHANNELS.skills.DELETE, async (_ctx, workspaceId: string, request: DeleteSkillRequest) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error('Workspace not found')
+    if ((request as { source?: string }).source === 'agent') {
+      throw new Error('External Agent skills are read-only')
+    }
 
     const projectRoot = resolveProjectRoot(request.workingDirectory)
     if (request.source === 'project' && !projectRoot) {

@@ -31,7 +31,7 @@ export interface SkillMetadata {
 }
 
 /** Source of a loaded skill */
-export type SkillSource = 'global' | 'workspace' | 'project' | 'plugin';
+export type SkillSource = 'global' | 'workspace' | 'project' | 'plugin' | 'agent';
 
 /** Source shape accepted by the install-source scanner. */
 export type SkillInstallSourceKind = 'folder' | 'zip' | 'url' | 'git';
@@ -110,7 +110,7 @@ export interface ManageSkillRequest {
 /** Request for permanently deleting one unmanaged skill from its exact source. */
 export interface DeleteSkillRequest {
   slug: string;
-  source: Exclude<SkillSource, 'plugin'>;
+  source: Exclude<SkillSource, 'plugin' | 'agent'>;
   workingDirectory?: string;
 }
 

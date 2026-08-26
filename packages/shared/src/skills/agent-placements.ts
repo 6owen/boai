@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from 'fs'
 import { homedir } from 'os'
-import { join } from 'path'
+import { join, normalize, resolve } from 'path'
 import type { InstalledSkillAgent, LoadedSkill, SkillAgentPlacement } from './types.ts'
 
 interface AgentDefinition {
@@ -143,6 +143,46 @@ export interface SkillAgentPlacementOptions {
   configDir?: string
 }
 
+export interface SkillAgentDiscoveryRoot {
+  path: string
+  agents: InstalledSkillAgent[]
+}
+
+function pathIdentity(path: string): string {
+  const normalized = normalize(resolve(path))
+  return process.platform === 'win32' ? normalized.toLocaleLowerCase('en-US') : normalized
+}
+
+/**
+ * Return every distinct Agent-owned global skills directory.
+ *
+ * Discovery deliberately does not require an Agent executable or the `skills`
+ * CLI to be installed. An existing skills directory is itself sufficient
+ * evidence that its SKILL.md files should be visible to BoAI.
+ */
+export function getSkillAgentDiscoveryRoots(
+  options: SkillAgentPlacementOptions = {},
+): SkillAgentDiscoveryRoot[] {
+  const home = options.homeDir ?? homedir()
+  const config = options.configDir ?? process.env.XDG_CONFIG_HOME?.trim() ?? join(home, '.config')
+  const sharedRootIdentity = pathIdentity(sharedSkills(home))
+  const roots = new Map<string, SkillAgentDiscoveryRoot>()
+
+  for (const agent of AGENTS) {
+    const path = agent.globalRoot(home, config)
+    const identity = pathIdentity(path)
+    // ~/.agents/skills already has first-class `global` source semantics.
+    if (identity === sharedRootIdentity) continue
+
+    const existing = roots.get(identity)
+    const installedAgent = { agentId: agent.id, agentName: agent.name }
+    if (existing) existing.agents.push(installedAgent)
+    else roots.set(identity, { path, agents: [installedAgent] })
+  }
+
+  return [...roots.values()]
+}
+
 /** Detect Agent applications from their standard local configuration roots. */
 export function detectInstalledSkillAgents(
   options: SkillAgentPlacementOptions = {},
@@ -181,7 +221,11 @@ export function annotateSkillAgentPlacements(
 
     const placements: SkillAgentPlacement[] = []
     for (const agent of AGENTS) {
-      if (!isInstalled(agent, home, config)) continue
+      const installed = isInstalled(agent, home, config)
+      // A directly discovered external Skill proves that exact Agent root is
+      // meaningful even if no CLI/runtime footprint is installed. Preserve
+      // the existing installed-Agent filter for all other skill sources.
+      if (!installed && skill.source !== 'agent') continue
       const directRoot = skill.source === 'project' && projectRoot
         ? join(projectRoot, agent.projectRoot)
         : agent.globalRoot(home, config)
@@ -189,6 +233,7 @@ export function annotateSkillAgentPlacements(
         placements.push({ agentId: agent.id, agentName: agent.name })
         continue
       }
+      if (!installed) continue
       if (skill.source !== 'global') continue
       const inherited = agent.readableRoots?.(home, config)
         .find(readable => isSameSkillAt(readable.path, skill))

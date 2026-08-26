@@ -87,14 +87,15 @@ function createEmptySkillDir(skillsDir: string, slug: string): string {
   return skillDir;
 }
 
-/** Get the set of slugs currently in the real global skills directory */
+/** Get pre-existing shared-global and external Agent skill slugs. */
 function getExistingGlobalSlugs(): Set<string> {
   const emptyWs = mkdtempSync(join(tmpdir(), 'skills-baseline-'));
   mkdirSync(join(emptyWs, 'skills'), { recursive: true });
   try {
     const skills = loadAllSkills(emptyWs);
-    // These are all global skills since the workspace is empty
-    return new Set(skills.filter(s => s.source === 'global').map(s => s.slug));
+    return new Set(skills
+      .filter(s => s.source === 'global' || s.source === 'agent')
+      .map(s => s.slug));
   } finally {
     rmSync(emptyWs, { recursive: true, force: true });
   }
@@ -351,11 +352,11 @@ describe('loadAllSkills', () => {
     expect(projSkill).toBeDefined();
     expect(projSkill!.source).toBe('project');
 
-    // All baseline global skills should still be present with source 'global'
+    // All pre-existing shared-global and Agent-directory skills should remain visible.
     for (const globalSlug of baselineGlobal) {
       const skill = skills.find(s => s.slug === globalSlug);
       expect(skill).toBeDefined();
-      expect(skill!.source).toBe('global');
+      expect(['global', 'agent']).toContain(skill!.source);
     }
   });
 

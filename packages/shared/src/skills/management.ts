@@ -913,7 +913,7 @@ export function annotateManagedSkills(
     : {}
 
   return annotateSkillAgentPlacements(skills, projectRoot).map(skill => {
-    if (skill.source === 'workspace' || skill.source === 'plugin') return skill
+    if (skill.source === 'workspace' || skill.source === 'plugin' || skill.source === 'agent') return skill
     const entries = skill.source === 'global' ? globalEntries : projectEntries
     const entry = findLockEntry(entries, skill.slug)
     if (!entry) return skill

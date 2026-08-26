@@ -129,3 +129,67 @@ test('installs a project Skill into an explicitly selected directory without an 
     }],
   })
 }, 15_000)
+
+test('rejects deletion of a read-only external Agent Skill at the RPC boundary', () => {
+  const { configDir } = makeFixture()
+  const script = `
+    import { RPC_CHANNELS } from '@craft-agent/shared/protocol';
+    import { registerSkillsHandlers } from ${JSON.stringify(SKILLS_HANDLER_URL)};
+
+    const handlers = new Map();
+    const server = {
+      handle(channel, handler) { handlers.set(channel, handler); },
+      push() {},
+      async invokeClient() { return undefined; },
+      hasClientCapability() { return false; },
+      findClientsWithCapability() { return []; },
+    };
+    const deps = {
+      sessionManager: { getSessions() { return []; } },
+      oauthFlowStore: {},
+      platform: {
+        appRootPath: '/',
+        resourcesPath: '/',
+        isPackaged: false,
+        appVersion: '0.0.0-test',
+        isDebugMode: false,
+        logger: { info() {}, warn() {}, error() {}, debug() {} },
+        imageProcessor: {
+          async getMetadata() { return null; },
+          async process() { return Buffer.from(''); },
+        },
+      },
+    };
+
+    registerSkillsHandlers(server, deps, {});
+    const handler = handlers.get(RPC_CHANNELS.skills.DELETE);
+    let payload;
+    try {
+      await handler(
+        { clientId: 'test-client', workspaceId: 'workspace-1', webContentsId: 1 },
+        'workspace-1',
+        { slug: 'external-example', source: 'agent' },
+      );
+      payload = { ok: true };
+    } catch (error) {
+      payload = { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+    console.log('__SKILL_DELETE_RESULT__' + JSON.stringify(payload));
+  `
+
+  const run = Bun.spawnSync([process.execPath, '--eval', script], {
+    cwd: join(import.meta.dir, '..', '..', '..', '..', '..'),
+    env: { ...process.env, CRAFT_CONFIG_DIR: configDir },
+    stdout: 'pipe',
+    stderr: 'pipe',
+  })
+  expect(run.exitCode).toBe(0)
+
+  const resultLine = run.stdout.toString().split('\n')
+    .find(line => line.startsWith('__SKILL_DELETE_RESULT__'))
+  expect(resultLine).toBeDefined()
+  expect(JSON.parse(resultLine!.slice('__SKILL_DELETE_RESULT__'.length))).toEqual({
+    ok: false,
+    error: 'External Agent skills are read-only',
+  })
+}, 15_000)

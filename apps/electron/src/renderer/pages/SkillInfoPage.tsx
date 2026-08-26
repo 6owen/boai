@@ -126,7 +126,7 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
           workingDirectory: skill.management.projectRoot ?? workingDirectory,
         })
         toast.success(t('skillsManager.uninstalled', { name: skill.metadata.name }))
-      } else if (skill.source !== 'plugin') {
+      } else if (skill.source !== 'plugin' && skill.source !== 'agent') {
         await window.electronAPI.deleteSkill(workspaceId, {
           slug: skill.slug,
           source: skill.source,
@@ -201,8 +201,8 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
             onShowInFinder={handleOpenInFinder}
             canShowInFinder={canRevealLocally}
             onUninstall={skill?.management ? () => void handleDelete() : undefined}
-            onDelete={skill && !skill.management && skill.source !== 'plugin' ? () => void handleDelete() : undefined}
-            canDelete={Boolean(skill && skill.source !== 'plugin')}
+            onDelete={skill && !skill.management && skill.source !== 'plugin' && skill.source !== 'agent' ? () => void handleDelete() : undefined}
+            canDelete={Boolean(skill && skill.source !== 'plugin' && skill.source !== 'agent')}
             deleteLabel={t('skillInfo.deleteSkill')}
             isFavorite={skill ? isSkillInOwnCollection(skill, favoriteKeys, excludedOwnSkillKeys) : false}
             onToggleFavorite={skill ? handleToggleFavorite : undefined}
@@ -222,7 +222,7 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
           {/* Metadata */}
           <Info_Section
             title={t('skillInfo.metadata')}
-            actions={skill.source !== 'plugin' ? (
+            actions={skill.source !== 'plugin' && skill.source !== 'agent' ? (
               // EditPopover for AI-assisted metadata editing (name, description in frontmatter)
               <EditPopover
                 trigger={<EditButton />}
@@ -244,6 +244,7 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
                 {skill.source === 'project' ? t('skillInfo.sourceProject') :
                  skill.source === 'global' ? t('skillInfo.sourceGlobal') :
                  skill.source === 'plugin' ? t('skillInfo.sourcePlugin', { name: skill.pluginName }) :
+                 skill.source === 'agent' ? t('skillInfo.sourceAgent') :
                  t('skillInfo.sourceWorkspace')}
               </Info_Table.Row>
               <Info_Table.Row label={t('common.location')}>
