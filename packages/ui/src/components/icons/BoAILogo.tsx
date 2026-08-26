@@ -4,7 +4,7 @@ export interface BoAILogoProps {
   className?: string
 }
 
-/** BoAI's transparent mascot mark for shared and web interfaces. */
+/** BoAI's transparent character mark for shared and web interfaces. */
 export function BoAILogo({ className }: BoAILogoProps) {
   return <img src={boaiMascot} alt="BoAI" className={className} />
 }

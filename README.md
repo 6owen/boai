@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="apps/electron/resources/boai-mascot.png" width="160" alt="BoAI 奶牛图标" />
+  <img src="apps/electron/resources/boai-mascot.png" width="160" alt="BoAI 人物图标" />
 
   <h1>BoAI</h1>
 

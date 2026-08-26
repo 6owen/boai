@@ -35,8 +35,8 @@ These files are used by electron-builder or the app directly, not synced to user
 | `icon.*` | App icons (icns, ico, png, svg) |
 | `Assets.car` | macOS compiled asset catalog |
 | `dmg-background.*` | DMG installer background |
-| `boai-mascot.png` | Transparent in-product BoAI mascot |
-| `source.png` | Default source icon |
+| `boai-mascot.png` | Transparent in-product BoAI character mark |
+| `source.png` | Padded white source artwork used to generate platform icons |
 | `generate-icons.sh` | Icon generation script |
 | `bridge-mcp-server/` | Bundled MCP server for Codex/Copilot API source bridge |
 | `session-mcp-server/` | Bundled MCP server for session tools |

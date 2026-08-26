@@ -4,8 +4,9 @@
 # macOS does not automatically add optical padding to images passed to
 # app.dock.setIcon(). Keep the artwork inside an 80.5% rounded tile so the Dock
 # icon matches the visual size of system apps instead of appearing full-bleed.
-# Windows uses its own, larger master: reusing the padded macOS artwork makes
-# taskbar and shortcut icons visibly undersized.
+# Windows uses its own master with an 87.5% tile. This is larger than the
+# macOS tile, while still retaining enough padding for taskbar and shortcut
+# presentation at small sizes.
 #
 # Usage: ./generate-icons.sh [source.png]
 
@@ -56,11 +57,10 @@ echo "Generating icons from: $SOURCE"
     -background none -gravity center -extent "${MASTER_SIZE}x${MASTER_SIZE}" \
     -define png:color-type=6 "$MACOS_MASTER"
 
-# Windows app icons are aligned on a 48 px grid. Keep only a small optical
-# margin and use the equivalent of a 2 px corner radius at that grid size so
-# the branded plate fills the native Windows icon footprint.
-WINDOWS_TILE_SIZE=960
-WINDOWS_CORNER_RADIUS=40
+# Windows app icons are aligned on a 48 px grid. Keep a 6.25% margin on each
+# side so the plate does not look oversized next to native application icons.
+WINDOWS_TILE_SIZE=896
+WINDOWS_CORNER_RADIUS=176
 "$IMAGEMAGICK" "$SOURCE" -resize "${WINDOWS_TILE_SIZE}x${WINDOWS_TILE_SIZE}!" -alpha set "$TMP_DIR/windows-tile.png"
 "$IMAGEMAGICK" -size "${WINDOWS_TILE_SIZE}x${WINDOWS_TILE_SIZE}" xc:none \
     -fill white \

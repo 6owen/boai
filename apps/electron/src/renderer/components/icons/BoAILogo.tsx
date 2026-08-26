@@ -5,7 +5,7 @@ interface BoAILogoProps {
   size?: number
 }
 
-/** BoAI's transparent mascot mark for compact, in-product branding. */
+/** BoAI's transparent character mark for compact, in-product branding. */
 export function BoAILogo({ className, size }: BoAILogoProps) {
   return (
     <img

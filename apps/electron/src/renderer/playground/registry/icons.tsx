@@ -8,7 +8,7 @@ export const iconComponents: ComponentEntry[] = [
     id: 'boai-logo',
     name: 'BoAILogo',
     category: 'Icons',
-    description: 'Transparent BoAI cow mascot',
+    description: 'Transparent BoAI character mascot',
     component: BoAILogo,
     props: [
       {
