@@ -78,7 +78,10 @@ describe('Electron packaging resources', () => {
       electronLanguages?: string[]
       files?: string[]
       mac?: { files?: string[]; electronLanguages?: string[] }
-      win?: { files?: string[] }
+      win?: {
+        files?: string[]
+        target?: Array<{ target?: string; arch?: string[] }>
+      }
       linux?: { files?: string[] }
     }
 
@@ -94,5 +97,9 @@ describe('Electron packaging resources', () => {
     expect(config.linux?.files).toBeUndefined()
     expect(config.win?.files).toContain('dist/**/*')
     expect(config.win?.files).toContain('package.json')
+    expect(config.win?.target).toEqual(expect.arrayContaining([
+      expect.objectContaining({ target: 'nsis', arch: ['x64'] }),
+      expect.objectContaining({ target: 'zip', arch: ['x64'] }),
+    ]))
   })
 })

@@ -1,4 +1,4 @@
-# Build script for Windows NSIS installer
+# Build script for Windows NSIS installer and portable ZIP
 # Usage: powershell -ExecutionPolicy Bypass -File scripts/build-win.ps1
 
 $ErrorActionPreference = "Stop"
@@ -7,7 +7,7 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ElectronDir = Split-Path -Parent $ScriptDir
 $RootDir = Split-Path -Parent (Split-Path -Parent $ElectronDir)
 
-Write-Host "=== Building BoAI Windows Installer using electron-builder ===" -ForegroundColor Cyan
+Write-Host "=== Building BoAI Windows Installer and Portable ZIP using electron-builder ===" -ForegroundColor Cyan
 
 # Debug: System information
 Write-Host ""
@@ -231,11 +231,19 @@ try {
     Pop-Location
 }
 
-# 7. Verify the installer was built
+# 7. Verify the installer and portable ZIP were built
 $InstallerPath = Get-ChildItem -Path "$ElectronDir\release" -Filter "*.exe" | Select-Object -First 1
+$PortableZipPath = Join-Path "$ElectronDir\release" "BoAI-x64.zip"
 
 if (-not $InstallerPath) {
     Write-Host "ERROR: Installer not found in $ElectronDir\release" -ForegroundColor Red
+    Write-Host "Contents of release directory:"
+    Get-ChildItem "$ElectronDir\release"
+    exit 1
+}
+
+if (-not (Test-Path $PortableZipPath)) {
+    Write-Host "ERROR: Portable ZIP not found at $PortableZipPath" -ForegroundColor Red
     Write-Host "Contents of release directory:"
     Get-ChildItem "$ElectronDir\release"
     exit 1
@@ -245,3 +253,6 @@ Write-Host ""
 Write-Host "=== Build Complete ===" -ForegroundColor Green
 Write-Host "Installer: $($InstallerPath.FullName)"
 Write-Host "Size: $([math]::Round($InstallerPath.Length / 1MB, 2)) MB"
+$PortableZip = Get-Item $PortableZipPath
+Write-Host "Portable ZIP: $($PortableZip.FullName)"
+Write-Host "Size: $([math]::Round($PortableZip.Length / 1MB, 2)) MB"

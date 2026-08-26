@@ -108,7 +108,11 @@ win:
     - target: nsis
       arch:
         - x64
-  # Use predictable naming: BoAI-x64.exe
+    # Portable/green distribution: extract the ZIP and run BoAI.exe directly.
+    - target: zip
+      arch:
+        - x64
+  # Use predictable naming: BoAI-x64.exe and BoAI-x64.zip
   artifactName: "BoAI-${arch}.${ext}"
   files:
     # Platform-level file filters replace the root filter in electron-builder,

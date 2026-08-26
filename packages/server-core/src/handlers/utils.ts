@@ -22,6 +22,7 @@ export function buildBackendHostRuntimeContext(platform: PlatformServices) {
     appRootPath: platform.appRootPath,
     resourcesPath: platform.resourcesPath,
     isPackaged: platform.isPackaged,
+    isElectron: platform.isElectron,
   }
 }
 
