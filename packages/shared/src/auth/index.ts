@@ -5,6 +5,7 @@ export * from './callback-page.ts';
 export * from './callback-server.ts';
 export * from './chatgpt-oauth.ts';
 export * from './chatgpt-oauth-config.ts';
+export * from './github-copilot.ts';
 export * from './google-oauth.ts';
 export * from './slack-oauth.ts';
 export * from './microsoft-oauth.ts';
