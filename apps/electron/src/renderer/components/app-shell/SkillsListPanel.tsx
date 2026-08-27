@@ -456,6 +456,7 @@ export function SkillsListPanel({
                 <DraggableSkill dragId={getSkillCollectionKey(skill)}>{content}</DraggableSkill>
               )
             : undefined}
+          deferItemInteractionUntilClick={collection === 'own' && Boolean(onAssignGroup)}
           emptyState={
             normalizedSearch
               ? <EntityListEmptyScreen

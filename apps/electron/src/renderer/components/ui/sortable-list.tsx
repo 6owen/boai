@@ -3,8 +3,8 @@
  *
  * Uses @dnd-kit for polished DnD with:
  * - SmartPointerSensor (5px activation distance, skips data-no-dnd elements)
- * - KeyboardSensor for accessibility
- * - DragOverlay (position:fixed) for proper z-index layering above all panels
+ * - SmartKeyboardSensor for accessible sorting without capturing interactive descendants
+ * - Body-portaled DragOverlay for correct fixed positioning above transformed panels
  * - Crossfade drop animation: overlay fades out while ghost fades in
  * - Smooth sibling reflow via CSS transforms
  *
@@ -13,6 +13,7 @@
  */
 
 import * as React from 'react'
+import { createPortal } from 'react-dom'
 import {
   DndContext,
   closestCenter,
@@ -62,6 +63,25 @@ export class SmartPointerSensor extends PointerSensor {
       },
     },
   ]
+}
+
+export class SmartKeyboardSensor extends KeyboardSensor {
+  static activators = KeyboardSensor.activators.map(activator => ({
+    ...activator,
+    handler: (...args: Parameters<typeof activator.handler>) => {
+      const [event] = args
+      if (hasNoDndAncestor(event.target as HTMLElement)) {
+        return false
+      }
+
+      return activator.handler(...args)
+    },
+  }))
+}
+
+export function SortableDragOverlayPortal({ children }: { children: React.ReactNode }) {
+  if (typeof document === 'undefined') return null
+  return createPortal(children, document.body)
 }
 
 // ============================================================
@@ -135,12 +155,12 @@ export function SortableList<T extends SortableItemData>({
 }: SortableListProps<T>) {
   const [activeId, setActiveId] = React.useState<string | null>(null)
 
-  // Sensors: SmartPointerSensor skips data-no-dnd elements, 5px distance threshold
+  // Both sensors skip interactive data-no-dnd descendants; pointer drag starts after 5px.
   const sensors = useSensors(
     useSensor(SmartPointerSensor, {
       activationConstraint: { distance: 5 },
     }),
-    useSensor(KeyboardSensor)
+    useSensor(SmartKeyboardSensor)
   )
 
   const activeItem = React.useMemo(
@@ -200,21 +220,23 @@ export function SortableList<T extends SortableItemData>({
       {/* DragOverlay uses position:fixed — escapes all stacking contexts and overflow.
          Inline boxShadow avoids Tailwind CSS variable scoping issues in portals. */}
       {showOverlay && (
-        <DragOverlay
-          dropAnimation={dropAnimationConfig}
-          style={{ zIndex: 'var(--z-floating-menu, 400)' }}
-        >
-          {activeItem ? (
-            <div
-              className="sortable-overlay rounded-[6px] bg-background"
-              style={{
-                boxShadow: '0 0 0 1px rgba(63, 63, 68, 0.05), 0px 15px 15px 0 rgba(34, 33, 81, 0.25)',
-              }}
-            >
-              {(renderOverlay ?? renderItem)(activeItem, false)}
-            </div>
-          ) : null}
-        </DragOverlay>
+        <SortableDragOverlayPortal>
+          <DragOverlay
+            dropAnimation={dropAnimationConfig}
+            style={{ zIndex: 'var(--z-floating-menu, 400)' }}
+          >
+            {activeItem ? (
+              <div
+                className="sortable-overlay rounded-[6px] bg-background"
+                style={{
+                  boxShadow: '0 0 0 1px rgba(63, 63, 68, 0.05), 0px 15px 15px 0 rgba(34, 33, 81, 0.25)',
+                }}
+              >
+                {(renderOverlay ?? renderItem)(activeItem, false)}
+              </div>
+            ) : null}
+          </DragOverlay>
+        </SortableDragOverlayPortal>
       )}
     </DndContext>
   )

@@ -9,6 +9,7 @@ import * as React from 'react'
 import { useAction } from '@/actions'
 import { EntityList, type EntityListGroup } from './entity-list'
 import { EntityRow } from './entity-row'
+import { createEntityRowInteractionHandlers } from './entity-panel-interactions'
 import { useEntityListInteractions } from '@/hooks/useEntityListInteractions'
 import type { createEntitySelection } from '@/hooks/useEntitySelection'
 
@@ -48,6 +49,8 @@ export interface EntityPanelProps<T> {
   wrapGroupHeader?: (group: EntityListGroup<T>, content: React.ReactNode) => React.ReactNode
   /** Optional domain-specific wrapper around a rendered item. */
   wrapItem?: (item: T, content: React.ReactNode) => React.ReactNode
+  /** Delay pointer selection until click so an activated drag does not select the pressed row. */
+  deferItemInteractionUntilClick?: boolean
 }
 
 export function EntityPanel<T>({
@@ -68,6 +71,7 @@ export function EntityPanel<T>({
   wrapGroup,
   wrapGroupHeader,
   wrapItem,
+  deferItemInteractionUntilClick = false,
 }: EntityPanelProps<T>) {
   const selectionStore = selection.useSelectionStore()
   const interactions = useEntityListInteractions<T>({
@@ -99,6 +103,11 @@ export function EntityPanel<T>({
     const mapped = mapItem(item)
     const globalIndex = itemIndexes.get(getId(item)) ?? index
     const rowProps = interactions.getRowProps(item, globalIndex)
+    const mouseHandlers = createEntityRowInteractionHandlers({
+      deferUntilClick: deferItemInteractionUntilClick,
+      onSelection: rowProps.onMouseDown,
+      onActivate: () => onItemClick(item),
+    })
     return (
       <EntityRow
         icon={mapped.icon}
@@ -109,12 +118,8 @@ export function EntityPanel<T>({
         isSelected={selectedId === getId(item)}
         isInMultiSelect={rowProps.isInMultiSelect}
         showSeparator={!isFirst}
-        onMouseDown={(e) => {
-          rowProps.onMouseDown(e)
-          if (!e.metaKey && !e.ctrlKey && !e.shiftKey && e.button !== 2) {
-            onItemClick(item)
-          }
-        }}
+        onMouseDown={mouseHandlers.onMouseDown}
+        onClick={mouseHandlers.onClick}
         buttonProps={rowProps.buttonProps}
         menuContent={mapped.menu}
         dataAttributes={mapped.dataAttributes}
