@@ -7,6 +7,8 @@ import type {
   InstallSkillRequest,
   ManageSkillRequest,
   ScanSkillSourceRequest,
+  SkillMarketplaceDetailRequest,
+  SkillMarketplaceListRequest,
   SkillUsageRange,
 } from '@craft-agent/shared/skills'
 import type { ExportOwnSkillLibraryRequest } from '@craft-agent/shared/personal-repository'
@@ -19,10 +21,13 @@ import {
 } from '@craft-agent/shared/skills'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import { computeSkillUsageStats } from '@craft-agent/server-core/services/skill-usage-stats'
+import { getSkillMarketplaceDetail, listSkillMarketplace } from '@craft-agent/server-core/services/skill-marketplace'
 import type { HandlerDeps } from '../handler-deps'
 
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.skills.GET,
+  RPC_CHANNELS.skills.MARKETPLACE_LIST,
+  RPC_CHANNELS.skills.MARKETPLACE_DETAIL,
   RPC_CHANNELS.skills.GET_FILES,
   RPC_CHANNELS.skills.GET_USAGE_STATS,
   RPC_CHANNELS.skills.SCAN_SOURCE,
@@ -80,6 +85,16 @@ export function registerSkillsHandlers(
     const skills = loadAllSkills(workspace.rootPath, effectiveWorkingDir)
     deps.platform.logger?.info(`SKILLS_GET: Loaded ${skills.length} skills from ${workspace.rootPath}`)
     return annotateManagedSkills(skills, effectiveWorkingDir)
+  })
+
+  // Public provider catalogs are fetched server-side so the Electron renderer
+  // does not depend on third-party CORS policy or embed provider credentials.
+  server.handle(RPC_CHANNELS.skills.MARKETPLACE_LIST, async (_ctx, request: SkillMarketplaceListRequest) => {
+    return await listSkillMarketplace(request)
+  })
+
+  server.handle(RPC_CHANNELS.skills.MARKETPLACE_DETAIL, async (_ctx, request: SkillMarketplaceDetailRequest) => {
+    return await getSkillMarketplaceDetail(request)
   })
 
   // Get files in a skill directory

@@ -33,5 +33,7 @@ export function isDetailNavState(navState: NavigationState | null): boolean {
       return navState.details !== null
     case 'skills':
       return navState.viewMode === 'stats' || navState.details !== null
+    case 'skill-marketplace':
+      return navState.details !== null
   }
 }

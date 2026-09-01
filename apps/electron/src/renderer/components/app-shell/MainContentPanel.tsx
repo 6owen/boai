@@ -30,6 +30,7 @@ import {
   isSourcesNavigation,
   isSettingsNavigation,
   isSkillsNavigation,
+  isSkillMarketplaceNavigation,
   isProjectsNavigation,
 } from '@/contexts/NavigationContext'
 import { useSessionSelection, useIsMultiSelectActive, useSelectedIds, useSelectionCount } from '@/hooks/useSession'
@@ -39,6 +40,7 @@ import type { SessionStatusId } from '@/config/session-status-config'
 import { SourceInfoPage, ChatPage } from '@/pages'
 import SkillInfoPage from '@/pages/SkillInfoPage'
 import SkillStatsRoutePage from '@/pages/SkillStatsRoutePage'
+import SkillMarketplaceInfoPage from '@/pages/SkillMarketplaceInfoPage'
 import { getSettingsPageComponent } from '@/pages/settings/settings-pages'
 import ProjectInfoPage from '@/pages/ProjectInfoPage'
 import { KanbanBoardContainer } from './kanban/KanbanBoardContainer'
@@ -243,6 +245,30 @@ export function MainContentPanel({
       <Panel variant="grow" className={className}>
         <div className="flex items-center justify-center h-full text-muted-foreground">
           <p className="text-sm">{t("skillsList.noSkillsConfigured")}</p>
+        </div>
+      </Panel>
+    )
+  }
+
+  // Public Skill marketplace - provider list lives in the navigator; details
+  // reuse the same Craft info-page language as installed Skills and Sources.
+  if (isSkillMarketplaceNavigation(navState)) {
+    if (navState.details) {
+      return wrapWithStoplight(
+        <Panel variant="grow" className={className}>
+          <SkillMarketplaceInfoPage
+            provider={navState.provider}
+            skillId={navState.details.skillId}
+            workspaceId={activeWorkspaceId || ''}
+            workingDirectory={activeSessionWorkingDirectory}
+          />
+        </Panel>
+      )
+    }
+    return wrapWithStoplight(
+      <Panel variant="grow" className={className}>
+        <div className="flex h-full items-center justify-center text-muted-foreground">
+          <p className="text-sm">{t('skillMarketplace.noSelection')}</p>
         </div>
       </Panel>
     )

@@ -254,6 +254,8 @@ const EXPECTED_CHANNELS: string[] = [
   'skills:getFiles',
   'skills:getUsageStats',
   'skills:install',
+  'skills:marketplaceDetail',
+  'skills:marketplaceList',
   'skills:openEditor',
   'skills:openFinder',
   'skills:scanSource',

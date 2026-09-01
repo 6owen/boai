@@ -5,6 +5,7 @@
  */
 
 export * from './types.ts';
+export * from './marketplace.ts';
 export * from './agent-placements.ts';
 export * from './management.ts';
 export * from './usage.ts';

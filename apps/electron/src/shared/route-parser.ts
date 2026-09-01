@@ -14,6 +14,7 @@ import type {
   SessionFilter,
   SourceFilter,
   SkillFilter,
+  SkillMarketplaceProvider,
   RightSidebarPanel,
 } from './types'
 import { isValidSettingsSubpage, type SettingsSubpage } from './settings-registry'
@@ -35,7 +36,7 @@ export interface ParsedRoute {
 // Compound Route Types (new format)
 // =============================================================================
 
-export type NavigatorType = 'sessions' | 'sources' | 'skills' | 'projects' | 'settings'
+export type NavigatorType = 'sessions' | 'sources' | 'skills' | 'skill-marketplace' | 'projects' | 'settings'
 
 export interface ParsedCompoundRoute {
   /** The navigator type */
@@ -48,6 +49,8 @@ export interface ParsedCompoundRoute {
   skillFilter?: SkillFilter
   /** Alternate skills content view (only for skills navigator). */
   skillViewMode?: 'stats'
+  /** Public catalog provider (only for Skill marketplace navigator). */
+  marketplaceProvider?: SkillMarketplaceProvider
   /** Sessions presentation mode (only for sessions navigator). 'board' = Kanban view. */
   viewMode?: 'list' | 'board'
   /** Details page info (null for empty state) */
@@ -65,7 +68,7 @@ export interface ParsedCompoundRoute {
  * Known prefixes that indicate a compound route
  */
 const COMPOUND_ROUTE_PREFIXES = [
-  'allSessions', 'flagged', 'archived', 'state', 'label', 'view', 'board', 'sources', 'skills', 'automations', 'projects', 'settings'
+  'allSessions', 'flagged', 'archived', 'state', 'label', 'view', 'board', 'sources', 'skills', 'skill-marketplace', 'automations', 'projects', 'settings'
 ]
 
 /**
@@ -198,6 +201,27 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
     return null
   }
 
+  // Public Skill marketplace navigator
+  if (first === 'skill-marketplace') {
+    const provider = segments[1]
+    if (provider !== 'skills-sh' && provider !== 'clawhub' && provider !== 'skillhub') return null
+    if (segments.length === 2) {
+      return { navigator: 'skill-marketplace', marketplaceProvider: provider, details: null }
+    }
+    if (segments[2] === 'skill' && segments[3] && segments.length === 4) {
+      try {
+        return {
+          navigator: 'skill-marketplace',
+          marketplaceProvider: provider,
+          details: { type: 'marketplace-skill', id: decodeURIComponent(segments[3]) },
+        }
+      } catch {
+        return null
+      }
+    }
+    return null
+  }
+
   // Projects were removed from BoAI's product surface. Recognize legacy deep
   // links without exposing or mutating their stored project data.
   if (first === 'projects') {
@@ -295,6 +319,13 @@ export function buildCompoundRoute(parsed: ParsedCompoundRoute): string {
     return `${base}/skill/${parsed.details.id}`
   }
 
+  if (parsed.navigator === 'skill-marketplace') {
+    const provider = parsed.marketplaceProvider ?? 'skills-sh'
+    const base = `skill-marketplace/${provider}`
+    if (!parsed.details) return base
+    return `${base}/skill/${encodeURIComponent(parsed.details.id)}`
+  }
+
   if (parsed.navigator === 'projects') {
     if (!parsed.details) return 'projects'
     return `projects/project/${parsed.details.id}`
@@ -390,6 +421,19 @@ function convertCompoundToViewRoute(compound: ParsedCompoundRoute): ParsedRoute 
       return { type: 'view', name: 'skills', params: {} }
     }
     return { type: 'view', name: 'skill-info', id: compound.details.id, params: {} }
+  }
+
+  // Public Skill marketplace
+  if (compound.navigator === 'skill-marketplace') {
+    if (!compound.details) {
+      return { type: 'view', name: 'skill-marketplace', params: { provider: compound.marketplaceProvider ?? 'skills-sh' } }
+    }
+    return {
+      type: 'view',
+      name: 'skill-marketplace-info',
+      id: compound.details.id,
+      params: { provider: compound.marketplaceProvider ?? 'skills-sh' },
+    }
   }
 
   // Projects
@@ -522,6 +566,17 @@ function convertCompoundToNavigationState(compound: ParsedCompoundRoute): Naviga
       details: { type: 'skill', skillSlug: compound.details.id },
     }
   }
+  // Public Skill marketplace
+  if (compound.navigator === 'skill-marketplace') {
+    const provider = compound.marketplaceProvider ?? 'skills-sh'
+    return {
+      navigator: 'skill-marketplace',
+      provider,
+      details: compound.details
+        ? { type: 'marketplace-skill', skillId: compound.details.id }
+        : null,
+    }
+  }
 
   // Projects
   if (compound.navigator === 'projects') {
@@ -598,6 +653,24 @@ function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationSta
         }
       }
       return { navigator: 'skills', details: null }
+    case 'skill-marketplace': {
+      const provider = parsed.params.provider
+      if (provider === 'skills-sh' || provider === 'clawhub' || provider === 'skillhub') {
+        return { navigator: 'skill-marketplace', provider, details: null }
+      }
+      return null
+    }
+    case 'skill-marketplace-info': {
+      const provider = parsed.params.provider
+      if (parsed.id && (provider === 'skills-sh' || provider === 'clawhub' || provider === 'skillhub')) {
+        return {
+          navigator: 'skill-marketplace',
+          provider,
+          details: { type: 'marketplace-skill', skillId: parsed.id },
+        }
+      }
+      return null
+    }
     case 'automations':
     case 'automation-info':
       return { navigator: 'sessions', filter: { kind: 'allSessions' }, details: null }
@@ -658,6 +731,16 @@ function navigationStateToCompoundRoute(state: NavigationState): ParsedCompoundR
       skillViewMode: state.viewMode,
       skillFilter: state.filter ?? undefined,
       details: state.details?.type === 'skill' ? { type: 'skill', id: state.details.skillSlug } : null,
+    }
+  }
+
+  if (state.navigator === 'skill-marketplace') {
+    return {
+      navigator: 'skill-marketplace',
+      marketplaceProvider: state.provider,
+      details: state.details
+        ? { type: 'marketplace-skill', id: state.details.skillId }
+        : null,
     }
   }
 

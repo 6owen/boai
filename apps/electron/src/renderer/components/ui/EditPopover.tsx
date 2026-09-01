@@ -79,6 +79,7 @@ export type EditContextKey =
   | 'add-source-mcp'   // Filter-specific: user is viewing MCPs
   | 'add-source-local' // Filter-specific: user is viewing Local Folders
   | 'add-skill'
+  | 'find-skill'
   | 'edit-statuses'
   | 'edit-labels'
   | 'edit-auto-rules'
@@ -376,6 +377,24 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
     displayLabelKey: 'editPopover.label.addSkill',
     exampleKey: 'editPopover.example.addSkill',
     overridePlaceholderKey: 'editPopover.placeholder.addSkill',
+  }),
+
+  'find-skill': (location) => ({
+    context: {
+      label: 'Find Skill',
+      filePath: location,
+      context:
+        'The user wants help finding an existing Skill for their workspace. ' +
+        'Ask what workflow, tool, or problem the Skill should address when the request is ambiguous. ' +
+        'Search public Skill catalogs, including skills.sh, ClawHub, and Tencent SkillHub, and compare the most relevant candidates. ' +
+        'For each recommendation, explain what it does, name its source, and provide a link or install command when available. ' +
+        'Prefer recommending an existing Skill over creating a new one. Do not create or install anything unless the user explicitly asks.',
+    },
+    example: 'Find a Skill that reviews React performance',
+    overridePlaceholder: 'What kind of Skill are you looking for?',
+    displayLabelKey: 'skillMarketplace.aiLabel',
+    exampleKey: 'skillMarketplace.aiExample',
+    overridePlaceholderKey: 'skillMarketplace.aiPlaceholder',
   }),
 
   // Status configuration context

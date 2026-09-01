@@ -271,6 +271,8 @@ export const RPC_CHANNELS = {
   },
   skills: {
     GET: 'skills:get',
+    MARKETPLACE_LIST: 'skills:marketplaceList',
+    MARKETPLACE_DETAIL: 'skills:marketplaceDetail',
     GET_FILES: 'skills:getFiles',
     GET_USAGE_STATS: 'skills:getUsageStats',
     SCAN_SOURCE: 'skills:scanSource',

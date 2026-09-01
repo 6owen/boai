@@ -17,6 +17,7 @@
 
 import type { SettingsSubpage } from './settings-registry'
 import type { PermissionMode } from '@craft-agent/shared/agent/mode-types'
+import type { SkillMarketplaceProvider } from '@craft-agent/shared/skills'
 
 // Helper to build query strings from params
 function toQueryString(params?: Record<string, string | undefined>): string {
@@ -172,6 +173,12 @@ export const routes = {
 
     /** Skill usage statistics. */
     skillsStats: () => 'skills/stats' as const,
+
+    /** Browse one public Skill marketplace provider. */
+    skillMarketplace: (provider: SkillMarketplaceProvider, skillId?: string) =>
+      skillId
+        ? `skill-marketplace/${provider}/skill/${encodeURIComponent(skillId)}` as const
+        : `skill-marketplace/${provider}` as const,
 
     /** Settings view (settings navigator) - uses SettingsSubpage from registry */
     settings: (subpage?: SettingsSubpage) =>

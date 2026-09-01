@@ -29,6 +29,8 @@ import {
   PackageCheck,
   UserRound,
   ChartNoAxesColumnIncreasing,
+  RefreshCw,
+  Store,
 } from "lucide-react"
 // SessionStatusIcons no longer used - icons come from dynamic sessionStatuses
 import { SourceAvatar } from "@/components/ui/source-avatar"
@@ -87,7 +89,7 @@ import { useFocusContext } from "@/context/FocusContext"
 import { getSessionTitle } from "@/utils/session"
 import { selectVisibleWorkspaceSessions } from "@/utils/visible-sessions"
 import { useSetAtom } from "jotai"
-import type { Session, Workspace, FileAttachment, PermissionRequest, LoadedSource, LoadedSkill, PermissionMode, SourceFilter, SkillFilter } from "../../../shared/types"
+import type { Session, Workspace, FileAttachment, PermissionRequest, LoadedSource, LoadedSkill, PermissionMode, SourceFilter, SkillFilter, SkillMarketplaceItem, SkillMarketplaceProvider } from "../../../shared/types"
 import { sessionMetaMapAtom, sendToWorkspaceAtom, type SessionMeta } from "@/atoms/sessions"
 import { sourcesAtom } from "@/atoms/sources"
 import { skillsAtom } from "@/atoms/skills"
@@ -113,12 +115,15 @@ import {
   isSourcesNavigation,
   isSettingsNavigation,
   isSkillsNavigation,
+  isSkillMarketplaceNavigation,
   type NavigationState,
 } from "@/contexts/NavigationContext"
 import type { SettingsSubpage } from "../../../shared/types"
 import { SourcesListPanel } from "./SourcesListPanel"
 import { SkillsListPanel } from "./SkillsListPanel"
 import { SkillGroupsPopover } from "./SkillGroupsPopover"
+import { SkillMarketplaceListPanel } from "@/components/skill-marketplace/SkillMarketplaceListPanel"
+import { SKILL_MARKETPLACE_PROVIDER_META } from "@/components/skill-marketplace/provider-meta"
 import { PanelHeader } from "./PanelHeader"
 import { FabNewChat } from "./FabNewChat"
 import { SendToWorkspaceDialog } from "./SendToWorkspaceDialog"
@@ -137,6 +142,7 @@ import {
 } from "./panel-constants"
 import { hasOpenOverlay } from "@/lib/overlay-detection"
 import { clearSourceIconCaches } from "@/lib/icon-cache"
+import { invalidateSkillMarketplaceProvider } from "@/lib/skill-marketplace-cache"
 import { dispatchFocusInputEvent } from "./input/focus-input-events"
 import { getSkillCollectionKey, isSkillInOwnCollection, useSkillFavorites } from "@/hooks/useSkillCollections"
 
@@ -320,6 +326,10 @@ function AppShellContent({
   // Derive skill collection from navigation state. Legacy bare `skills` routes map to Installed.
   const skillFilter: SkillFilter | null = isSkillsNavigation(navState) ? navState.filter ?? null : null
   const isSkillStatsView = isSkillsNavigation(navState) && navState.viewMode === 'stats'
+  const marketplaceProvider: SkillMarketplaceProvider | null = isSkillMarketplaceNavigation(navState)
+    ? navState.provider
+    : null
+  const [marketplaceRefreshKey, setMarketplaceRefreshKey] = React.useState(0)
 
   // Standalone content views use Craft's existing panel-stack seam: keep the
   // route in the content panel, but collapse the navigator and its resize sash.
@@ -369,6 +379,9 @@ function AppShellContent({
     if (isSkillsNavigation(navState)) {
       return `skills:${navState.viewMode ?? navState.filter?.collection ?? 'installed'}`
     }
+    if (isSkillMarketplaceNavigation(navState)) {
+      return `skill-marketplace:${navState.provider}`
+    }
     return navState.navigator
   }, [navState])
 
@@ -377,8 +390,10 @@ function AppShellContent({
     setSearchQuery('')
   }, [navFilterKey])
 
-  // Cmd+F to activate search
-  useAction('app.search', () => setSearchActive(true))
+  // Cmd+F focuses the search surface owned by the active navigator.
+  useAction('app.search', () => {
+    setSearchActive(true)
+  })
 
   // Unified sidebar keyboard navigation state
   const [focusedSidebarItemId, setFocusedSidebarItemId] = React.useState<string | null>(null)
@@ -586,6 +601,10 @@ function AppShellContent({
       ? routes.view.skillsOwn(skill.slug)
       : routes.view.skillsInstalled(skill.slug))
   }, [activeWorkspaceId, isSkillStatsView, skillFilter])
+
+  const handleMarketplaceSkillSelect = React.useCallback((skill: SkillMarketplaceItem) => {
+    navigate(routes.view.skillMarketplace(skill.provider, skill.id))
+  }, [])
 
   const handleToggleFavoriteSkill = React.useCallback((skill: LoadedSkill) => {
     const wasInOwn = isSkillInOwnCollection(skill, favoriteSkillKeys, excludedOwnSkillKeys)
@@ -974,6 +993,14 @@ function AppShellContent({
     navigate(routes.view.skillsStats())
   }, [])
 
+  const handleSkillMarketplaceClick = useCallback(() => {
+    navigate(routes.view.skillMarketplace('skills-sh'))
+  }, [])
+
+  const handleSkillMarketplaceProviderClick = useCallback((provider: SkillMarketplaceProvider) => {
+    navigate(routes.view.skillMarketplace(provider))
+  }, [])
+
   // Handler for settings view. With no arg → bare `settings` route (navigator-only
   // in compact mode, App fallback on desktop). With an arg → `settings/<subpage>`.
   const handleSettingsClick = useCallback((subpage?: SettingsSubpage) => {
@@ -1121,17 +1148,21 @@ function AppShellContent({
     // 1. Sessions section: a single canonical entry.
     result.push({ id: 'nav:allSessions', type: 'nav', action: handleAllSessionsClick })
 
-    // 2. Sources, Skills, Settings
+    // 2. Sources, installed Skills, public Skill marketplace, Settings
     result.push({ id: 'nav:sources', type: 'nav', action: handleSourcesClick })
     result.push({ id: 'nav:skills', type: 'nav', action: handleSkillsClick })
     result.push({ id: 'nav:skills:installed', type: 'nav', action: handleSkillsInstalledClick })
     result.push({ id: 'nav:skills:own', type: 'nav', action: handleSkillsOwnClick })
     result.push({ id: 'nav:skills:stats', type: 'nav', action: handleSkillStatsClick })
+    result.push({ id: 'nav:skill-marketplace', type: 'nav', action: handleSkillMarketplaceClick })
+    result.push({ id: 'nav:skill-marketplace:skills-sh', type: 'nav', action: () => handleSkillMarketplaceProviderClick('skills-sh') })
+    result.push({ id: 'nav:skill-marketplace:clawhub', type: 'nav', action: () => handleSkillMarketplaceProviderClick('clawhub') })
+    result.push({ id: 'nav:skill-marketplace:skillhub', type: 'nav', action: () => handleSkillMarketplaceProviderClick('skillhub') })
     result.push({ id: 'nav:settings', type: 'nav', action: () => handleSettingsClick() })
     result.push({ id: 'nav:whats-new', type: 'nav', action: handleWhatsNewClick })
 
     return result
-  }, [handleAllSessionsClick, handleSourcesClick, handleSkillsClick, handleSkillsInstalledClick, handleSkillsOwnClick, handleSkillStatsClick, handleSettingsClick, handleWhatsNewClick])
+  }, [handleAllSessionsClick, handleSourcesClick, handleSkillsClick, handleSkillsInstalledClick, handleSkillsOwnClick, handleSkillStatsClick, handleSkillMarketplaceClick, handleSkillMarketplaceProviderClick, handleSettingsClick, handleWhatsNewClick])
 
   // Get props for any sidebar item (unified roving tabindex pattern)
   const getSidebarItemProps = React.useCallback((id: string) => ({
@@ -1235,6 +1266,10 @@ function AppShellContent({
     // Skills navigator
     if (isSkillsNavigation(navState)) {
       return !isSkillStatsView && skillFilter?.collection === 'own' ? t("sidebar.ownSkills") : t("sidebar.installedSkills")
+    }
+
+    if (isSkillMarketplaceNavigation(navState)) {
+      return t(SKILL_MARKETPLACE_PROVIDER_META[navState.provider].labelKey)
     }
 
     // Settings navigator
@@ -1466,6 +1501,26 @@ function AppShellContent({
                         },
                       ],
                     },
+                    {
+                      id: "nav:skill-marketplace",
+                      title: t("skillMarketplace.title"),
+                      icon: Store,
+                      variant: "ghost",
+                      onClick: handleSkillMarketplaceClick,
+                      expandable: true,
+                      expanded: isExpanded('nav:skill-marketplace'),
+                      onToggle: () => toggleExpanded('nav:skill-marketplace'),
+                      items: (['skills-sh', 'clawhub', 'skillhub'] as const).map(provider => {
+                        const meta = SKILL_MARKETPLACE_PROVIDER_META[provider]
+                        return {
+                          id: `nav:skill-marketplace:${provider}`,
+                          title: t(meta.labelKey),
+                          icon: meta.Icon,
+                          variant: (isSkillMarketplaceNavigation(navState) && navState.provider === provider) ? "default" as const : "ghost" as const,
+                          onClick: () => handleSkillMarketplaceProviderClick(provider),
+                        }
+                      }),
+                    },
                     // --- Separator ---
                     { id: "separator:skills-settings", type: "separator" },
                     // --- Settings ---
@@ -1509,7 +1564,7 @@ function AppShellContent({
               title={isSidebarVisible ? listTitle : undefined}
               centerTitle
               compensateForStoplight={!isSidebarVisible}
-              leftActions={isSkillsNavigation(navState) ? (
+              leftActions={isSkillsNavigation(navState) || isSkillMarketplaceNavigation(navState) ? (
                 <>
                   <HeaderIconButton
                     icon={<Search className="h-4 w-4" />}
@@ -1517,14 +1572,25 @@ function AppShellContent({
                     aria-label={t("common.search")}
                     onClick={() => setSearchActive(true)}
                   />
-                  {activeWorkspace && (isSkillStatsView || skillFilter?.collection !== 'own') && (
+                  {isSkillMarketplaceNavigation(navState) && (
+                    <HeaderIconButton
+                      icon={<RefreshCw className="h-4 w-4" />}
+                      tooltip={t('common.refresh')}
+                      aria-label={t('common.refresh')}
+                      onClick={() => {
+                        if (marketplaceProvider) invalidateSkillMarketplaceProvider(marketplaceProvider)
+                        setMarketplaceRefreshKey(value => value + 1)
+                      }}
+                    />
+                  )}
+                  {isSkillsNavigation(navState) && activeWorkspace && (isSkillStatsView || skillFilter?.collection !== 'own') && (
                     <UpdateSkillPopover
                       workspaceId={activeWorkspace.id}
                       workingDirectory={activeSessionWorkingDirectory}
                       align="start"
                     />
                   )}
-                  {activeWorkspace && !isSkillStatsView && skillFilter?.collection === 'own' && (
+                  {isSkillsNavigation(navState) && activeWorkspace && !isSkillStatsView && skillFilter?.collection === 'own' && (
                     <SkillGroupsPopover
                       groups={skillGroups}
                       groupCounts={skillGroupCounts}
@@ -1559,6 +1625,18 @@ function AppShellContent({
                         sourceFilter?.kind === 'type' ? `add-source-${sourceFilter.sourceType}` as EditContextKey : 'add-source',
                         activeWorkspace.rootPath
                       )}
+                    />
+                  )}
+                  {isSkillMarketplaceNavigation(navState) && activeWorkspace && (
+                    <EditPopover
+                      trigger={
+                        <HeaderIconButton
+                          icon={<Bot className="h-4 w-4" />}
+                          tooltip={t('skillMarketplace.askAi')}
+                          aria-label={t('skillMarketplace.askAi')}
+                        />
+                      }
+                      {...getEditConfig('find-skill', activeWorkspace.rootPath)}
                     />
                   )}
                   {/* Create-with-AI button (only for skills mode) */}
@@ -1632,6 +1710,21 @@ function AppShellContent({
                 onReorderGroup={reorderSkillGroups}
                 onSkillClick={handleSkillSelect}
                 selectedSkillSlug={isSkillsNavigation(navState) && navState.details?.type === 'skill' ? navState.details.skillSlug : null}
+              />
+            )}
+            {isSkillMarketplaceNavigation(navState) && marketplaceProvider && (
+              <SkillMarketplaceListPanel
+                provider={marketplaceProvider}
+                selectedSkillId={navState.details?.skillId ?? null}
+                refreshKey={marketplaceRefreshKey}
+                searchActive={searchActive}
+                searchQuery={searchQuery}
+                onSearchChange={setSearchQuery}
+                onSearchClose={() => {
+                  setSearchActive(false)
+                  setSearchQuery('')
+                }}
+                onSkillClick={handleMarketplaceSkillSelect}
               />
             )}
             {isSettingsNavigation(navState) && (

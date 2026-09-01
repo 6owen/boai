@@ -238,6 +238,8 @@ export const CHANNEL_MAP = {
 
   // Skills
   getSkills: invoke(RPC_CHANNELS.skills.GET),
+  listSkillMarketplace: invoke(RPC_CHANNELS.skills.MARKETPLACE_LIST),
+  getSkillMarketplaceDetail: invoke(RPC_CHANNELS.skills.MARKETPLACE_DETAIL),
   getSkillFiles: invoke(RPC_CHANNELS.skills.GET_FILES),
   getSkillUsageStats: invoke(RPC_CHANNELS.skills.GET_USAGE_STATS),
   scanSkillSource: invoke(RPC_CHANNELS.skills.SCAN_SOURCE, undefined, 180_000),

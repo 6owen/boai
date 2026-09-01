@@ -61,7 +61,9 @@ export type { LoadedSource, FolderSourceConfig, SourceConnectionStatus };
 
 // Skill types
 import type { InstallSkillRequest, LoadedSkill, ManageSkillRequest, ScanSkillSourceRequest, SkillAgentPlacement, SkillManagementResult, SkillMetadata, SkillSourceScanResult, SkillUpdateCheckResult, SkillUsageRange, SkillUsageStats } from '@craft-agent/shared/skills/types';
+import type { SkillMarketplaceDetailRequest, SkillMarketplaceItem, SkillMarketplaceListRequest, SkillMarketplaceListResult, SkillMarketplaceProvider, SkillMarketplaceSort } from '@craft-agent/shared/skills';
 export type { InstallSkillRequest, LoadedSkill, ManageSkillRequest, ScanSkillSourceRequest, SkillAgentPlacement, SkillManagementResult, SkillMetadata, SkillSourceScanResult, SkillUpdateCheckResult, SkillUsageRange, SkillUsageStats };
+export type { SkillMarketplaceDetailRequest, SkillMarketplaceItem, SkillMarketplaceListRequest, SkillMarketplaceListResult, SkillMarketplaceProvider, SkillMarketplaceSort };
 
 // Resource bundle types (cross-workspace export/import)
 import type { ExportResourcesOptions, ExportResult, ResourceImportMode, ResourceBundle, ResourceImportResult } from '@craft-agent/shared/resources';
@@ -493,6 +495,8 @@ export interface ElectronAPI {
 
   // Skills
   getSkills(workspaceId: string, workingDirectory?: string): Promise<LoadedSkill[]>
+  listSkillMarketplace(request: SkillMarketplaceListRequest): Promise<SkillMarketplaceListResult>
+  getSkillMarketplaceDetail(request: SkillMarketplaceDetailRequest): Promise<SkillMarketplaceItem>
   getSkillFiles?(workspaceId: string, skillSlug: string): Promise<SkillFile[]>
   getSkillUsageStats(workspaceId: string, range: SkillUsageRange): Promise<SkillUsageStats>
   scanSkillSource(workspaceId: string, request: ScanSkillSourceRequest): Promise<SkillSourceScanResult>
@@ -869,6 +873,14 @@ export interface SkillsNavigationState {
   viewMode?: 'stats'
 }
 
+/** Public Skill marketplace navigation state. */
+export interface SkillMarketplaceNavigationState {
+  navigator: 'skill-marketplace'
+  provider: SkillMarketplaceProvider
+  details: { type: 'marketplace-skill'; skillId: string } | null
+  rightSidebar?: RightSidebarPanel
+}
+
 /**
  * Projects navigation state
  */
@@ -886,6 +898,7 @@ export type NavigationState =
   | SourcesNavigationState
   | SettingsNavigationState
   | SkillsNavigationState
+  | SkillMarketplaceNavigationState
   | ProjectsNavigationState
 
 export const isSessionsNavigation = (
@@ -903,6 +916,10 @@ export const isSettingsNavigation = (
 export const isSkillsNavigation = (
   state: NavigationState
 ): state is SkillsNavigationState => state.navigator === 'skills'
+
+export const isSkillMarketplaceNavigation = (
+  state: NavigationState
+): state is SkillMarketplaceNavigationState => state.navigator === 'skill-marketplace'
 
 export const isProjectsNavigation = (
   state: NavigationState
@@ -928,6 +945,12 @@ export const getNavigationStateKey = (state: NavigationState): string => {
       return `${base}/skill/${state.details.skillSlug}`
     }
     return base
+  }
+  if (state.navigator === 'skill-marketplace') {
+    const base = `skill-marketplace/${state.provider}`
+    return state.details
+      ? `${base}/skill/${encodeURIComponent(state.details.skillId)}`
+      : base
   }
   if (state.navigator === 'projects') {
     if (state.details?.type === 'project') {
@@ -984,6 +1007,28 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
       return { navigator: 'skills', details: { type: 'skill', skillSlug } }
     }
     return { navigator: 'skills', details: null }
+  }
+
+  // Handle public Skill marketplace routes.
+  if (key.startsWith('skill-marketplace/')) {
+    const segments = key.split('/')
+    const provider = segments[1]
+    if (provider !== 'skills-sh' && provider !== 'clawhub' && provider !== 'skillhub') return null
+    if (segments.length === 2) {
+      return { navigator: 'skill-marketplace', provider, details: null }
+    }
+    if (segments[2] === 'skill' && segments[3]) {
+      try {
+        return {
+          navigator: 'skill-marketplace',
+          provider,
+          details: { type: 'marketplace-skill', skillId: decodeURIComponent(segments[3]) },
+        }
+      } catch {
+        return null
+      }
+    }
+    return null
   }
 
   // Legacy automation navigation state is no longer representable in BoAI.
