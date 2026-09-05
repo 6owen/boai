@@ -11,6 +11,17 @@ export default defineConfig({
   // Keeping bumpp's built-in push disabled prevents inherited local tags from
   // being uploaded to this fork.
   push: false,
-  execute: 'bun run check-version && bun install --lockfile-only --ignore-scripts && bun install --frozen-lockfile --lockfile-only --ignore-scripts',
+  // bumpp executes strings directly, without a shell; run each check explicitly.
+  execute: async () => {
+    for (const args of [
+      ['run', 'check-version'],
+      ['install', '--lockfile-only', '--ignore-scripts'],
+      ['install', '--frozen-lockfile', '--lockfile-only', '--ignore-scripts'],
+    ]) {
+      const child = Bun.spawn([process.execPath, ...args], { stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' })
+      const code = await child.exited
+      if (code !== 0) throw new Error(`Release preparation failed: bun ${args.join(' ')}`)
+    }
+  },
   printCommits: true,
 })
