@@ -16,6 +16,14 @@ async function run(command: string, args: string[]): Promise<string> {
   return output.trim()
 }
 
+const branch = await run('git', ['branch', '--show-current'])
+if (branch !== 'main') {
+  throw new Error(`Releases must be created from main, not ${branch || 'detached HEAD'}`)
+}
+if (await run('git', ['status', '--porcelain'])) {
+  throw new Error('Commit all changes before releasing. The release commit must contain only version and lockfile updates.')
+}
+
 const forwardedArgs = Bun.argv.slice(2).filter(arg => arg !== '--')
 const bumpp = Bun.spawn(['bunx', 'bumpp', ...forwardedArgs], {
   stdin: 'inherit',
@@ -28,11 +36,6 @@ if (bumpExitCode !== 0) process.exit(bumpExitCode)
 
 const manifest = JSON.parse(await readFile('package.json', 'utf8')) as PackageManifest
 if (!manifest.version) throw new Error('Root package.json does not declare a version')
-
-const branch = await run('git', ['branch', '--show-current'])
-if (branch !== 'main') {
-  throw new Error(`Releases must be created from main, not ${branch || 'detached HEAD'}`)
-}
 
 const tag = `v${manifest.version}`
 const headCommit = await run('git', ['rev-parse', 'HEAD'])
