@@ -1,4 +1,5 @@
 import { defineConfig } from 'bumpp'
+import { execFileSync } from 'node:child_process'
 
 export default defineConfig({
   recursive: true,
@@ -12,15 +13,13 @@ export default defineConfig({
   // being uploaded to this fork.
   push: false,
   // bumpp executes strings directly, without a shell; run each check explicitly.
-  execute: async () => {
+  execute: () => {
     for (const args of [
       ['run', 'check-version'],
       ['install', '--lockfile-only', '--ignore-scripts'],
       ['install', '--frozen-lockfile', '--lockfile-only', '--ignore-scripts'],
     ]) {
-      const child = Bun.spawn([process.execPath, ...args], { stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' })
-      const code = await child.exited
-      if (code !== 0) throw new Error(`Release preparation failed: bun ${args.join(' ')}`)
+      execFileSync('bun', args, { stdio: 'inherit' })
     }
   },
   printCommits: true,
