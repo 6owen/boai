@@ -1,7 +1,7 @@
 export type CustomEndpointInput = 'text' | 'image'
 
 /** Custom endpoint protocol — determines which streaming adapter Pi SDK uses. */
-export type CustomEndpointApi = 'openai-completions' | 'anthropic-messages'
+export type CustomEndpointApi = 'openai-completions' | 'openai-responses' | 'anthropic-messages'
 
 export interface CustomEndpointModelDefaults {
   supportsImages?: boolean

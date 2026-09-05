@@ -49,7 +49,8 @@ export type {
 // Auth types for onboarding
 import type { AuthState, SetupNeeds } from '@craft-agent/shared/auth/types';
 import type { AuthType } from '@craft-agent/shared/config/types';
-export type { AuthState, SetupNeeds, AuthType };
+import type { DetectedLogin, LocalConfigScanResult, LocalConfigScanOptions, LocalApiKeyImportOptions } from '@craft-agent/shared/auth';
+export type { AuthState, SetupNeeds, AuthType, DetectedLogin };
 
 // Credential health types
 import type { CredentialHealthStatus, CredentialHealthIssue, CredentialHealthIssueType } from '@craft-agent/shared/credentials/types';
@@ -206,6 +207,8 @@ import type {
   LlmConnectionSetup,
   TestLlmConnectionParams,
   TestLlmConnectionResult,
+  DiscoverConnectionModelsParams,
+  DiscoverConnectionModelsResult,
   SkillFile,
   SessionFile,
   OAuthResult,
@@ -423,6 +426,14 @@ export interface ElectronAPI {
   cancelChatGptOAuth(): Promise<{ success: boolean }>
   getChatGptAuthStatus(connectionSlug: string): Promise<{ authenticated: boolean; expiresAt?: number; hasRefreshToken?: boolean }>
   chatGptLogout(connectionSlug: string): Promise<{ success: boolean }>
+  /** Token-free local login scan (Codex CLI etc.) for the add-connection picker */
+  detectLocalLogins(options?: { force?: boolean }): Promise<DetectedLogin[]>
+  /** Import a displayed Codex API configuration; secrets stay in the server. */
+  scanLocalConfigs(options?: LocalConfigScanOptions): Promise<LocalConfigScanResult>
+  importLocalApiKey(configId: string, options?: LocalApiKeyImportOptions): Promise<{ success: boolean; slug?: string; error?: string; modelRequired?: boolean }>
+  importCodexApiKey(configId: string): Promise<{ success: boolean; slug?: string; error?: string }>
+  /** Seed a connection from the local Codex CLI login, bypassing browser OAuth */
+  importChatGptFromCli(connectionSlug: string, expectedConfigId: string, codexHome?: string): Promise<{ success: boolean; error?: string; accountEmail?: string; slug?: string }>
 
   // GitHub Copilot OAuth
   startCopilotOAuth(connectionSlug: string): Promise<{ success: boolean; error?: string }>
@@ -660,6 +671,8 @@ export interface ElectronAPI {
   saveLlmConnection(connection: LlmConnection): Promise<{ success: boolean; error?: string }>
   deleteLlmConnection(slug: string): Promise<{ success: boolean; error?: string }>
   testLlmConnection(slug: string): Promise<{ success: boolean; error?: string }>
+  refreshLlmConnectionModels(slug: string): Promise<{ success: boolean; error?: string }>
+  discoverLlmConnectionModels(params: DiscoverConnectionModelsParams): Promise<DiscoverConnectionModelsResult>
   setDefaultLlmConnection(slug: string): Promise<{ success: boolean; error?: string }>
   getDefaultThinkingLevel(): Promise<ThinkingLevel>
   setDefaultThinkingLevel(level: ThinkingLevel): Promise<{ success: boolean; error?: string }>

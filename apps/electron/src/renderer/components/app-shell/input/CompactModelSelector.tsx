@@ -1,3 +1,4 @@
+import { ConnectionModelControls } from './ConnectionModelControls'
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import {
@@ -95,7 +96,7 @@ export function CompactModelSelector({
   const connectionDefaultModel = React.useMemo(() => {
     const conn = effectiveConnectionDetails
     if (!conn) return null
-    if (!isCompatProvider(conn.providerType)) return null
+    if (!isCompatProvider(conn.providerType) || conn.modelSelectionMode === 'automaticallySyncedFromProvider') return null
     if (conn.models && conn.models.length > 1) return null
     return conn.defaultModel ?? null
   }, [effectiveConnectionDetails])
@@ -393,6 +394,8 @@ export function CompactModelSelector({
               )
             })
           )}
+
+          <ConnectionModelControls connection={effectiveConnectionDetails} />
 
           {/* === Thinking section === */}
           {THINKING_LEVELS.length > 0 && pickerMode !== 'unavailable' && (

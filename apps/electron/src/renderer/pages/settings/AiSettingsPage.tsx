@@ -47,7 +47,8 @@ import { OnboardingWizard, type ApiSetupMethod } from '@/components/onboarding'
 import { RenameDialog } from '@/components/ui/rename-dialog'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { getModelShortName, type ModelDefinition } from '@config/models'
-import { getModelsForProviderType, resolveMidStreamBehavior, type CustomEndpointApi, type MidStreamBehavior } from '@config/llm-connections'
+import { getModelsForProviderType, resolveMidStreamBehavior, type MidStreamBehavior } from '@config/llm-connections'
+import type { ApiKeyInputProps } from '@/components/apisetup'
 import { toast } from 'sonner'
 
 /**
@@ -190,6 +191,7 @@ interface ConnectionRowProps {
   onDelete: () => void
   onSetDefault: () => void
   onValidate: () => void
+  onRefreshModels: () => void
   onReauthenticate: () => void
   onEdit: () => void
   onSetMidStreamBehavior: (behavior: MidStreamBehavior) => void
@@ -198,7 +200,7 @@ interface ConnectionRowProps {
   /** True when another OAuth connection resolves to the same Anthropic account (issue #838) */
 }
 
-function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, onSetDefault, onValidate, onReauthenticate, onEdit, onSetMidStreamBehavior, validationState, validationError }: ConnectionRowProps) {
+function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, onSetDefault, onValidate, onRefreshModels, onReauthenticate, onEdit, onSetMidStreamBehavior, validationState, validationError }: ConnectionRowProps) {
   const { t } = useTranslation()
   const [menuOpen, setMenuOpen] = useState(false)
   const [piBaseUrl, setPiBaseUrl] = useState<string | undefined>(undefined)
@@ -332,6 +334,12 @@ function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, 
             <CheckCircle2 className="h-3.5 w-3.5" />
             <span>{t("settings.ai.validateConnection")}</span>
           </StyledDropdownMenuItem>
+          {connection.customEndpoint && (
+            <StyledDropdownMenuItem onClick={onRefreshModels}>
+              <RefreshCcw className="h-3.5 w-3.5" />
+              <span>{t('chat.modelPicker.refreshModels')}</span>
+            </StyledDropdownMenuItem>
+          )}
           {(() => {
             const currentBehavior = resolveMidStreamBehavior(connection)
             return (
@@ -393,14 +401,7 @@ export default function AiSettingsPage() {
   const [showApiSetup, setShowApiSetup] = useState(false)
   const [editingConnectionSlug, setEditingConnectionSlug] = useState<string | null>(null)
   const [isDirectEdit, setIsDirectEdit] = useState(false)
-  const [editInitialValues, setEditInitialValues] = useState<{
-    apiKey?: string
-    baseUrl?: string
-    connectionDefaultModel?: string
-    activePreset?: string
-    models?: string[]
-    customApi?: CustomEndpointApi
-  } | undefined>(undefined)
+  const [editInitialValues, setEditInitialValues] = useState<ApiKeyInputProps['initialValues']>(undefined)
   const setFullscreenOverlayOpen = useSetAtom(fullscreenOverlayOpenAtom)
 
   // Default settings state (app-level)
@@ -572,18 +573,17 @@ export default function AiSettingsPage() {
   }, [apiSetupOnboarding, openApiSetup])
 
   const handleEditConnection = useCallback(async (connection: LlmConnectionWithStatus) => {
-    // Fetch stored API key (best-effort — if IPC not available yet, skip pre-fill)
-    let apiKey: string | undefined
+    // Fetch only a display preview. It must never become the editable credential value.
+    let apiKeyPreview: string | undefined
     try {
-      apiKey = (await window.electronAPI.getLlmConnectionApiKey(connection.slug)) ?? undefined
+      apiKeyPreview = (await window.electronAPI.getLlmConnectionApiKey(connection.slug)) ?? undefined
     } catch {
       // IPC method may not exist if app wasn't restarted after code change
     }
 
-    // Build model string from connection's models array
-    const modelStr = connection.models
-      ?.map((m: string | ModelDefinition) => typeof m === 'string' ? m : m.id)
-      .join(', ') || connection.defaultModel || ''
+    // Keep the selected default separate from the full catalog in the custom endpoint picker.
+    const allModelIds = connection.models?.map((m: string | ModelDefinition) => typeof m === 'string' ? m : m.id) ?? []
+    const modelStr = [...new Set([connection.defaultModel, ...allModelIds].filter(Boolean))].join(', ')
 
     // Set initial values before opening overlay so ApiKeyInput mounts with them
     const modelIds = connection.models
@@ -593,9 +593,11 @@ export default function AiSettingsPage() {
     const isCustomEndpointConnection = !!connection.customEndpoint && !!connection.baseUrl?.trim()
 
     setEditInitialValues({
-      apiKey,
+      connectionSlug: connection.slug,
+      apiKeyPreview,
+      modelSelectionMode: connection.modelSelectionMode,
       baseUrl: connection.baseUrl,
-      connectionDefaultModel: modelStr,
+      connectionDefaultModel: isCustomEndpointConnection ? connection.defaultModel : modelStr,
       activePreset: isCustomEndpointConnection ? 'custom' : (connection.piAuthProvider || undefined),
       models: modelIds,
       customApi: connection.customEndpoint?.api,
@@ -657,6 +659,15 @@ export default function AiSettingsPage() {
       }, 5000)
     }
   }, [t])
+
+  const handleRefreshModels = useCallback(async (slug: string) => {
+    try {
+      const result = await window.electronAPI.refreshLlmConnectionModels(slug)
+      await refreshLlmConnections?.()
+      if (result.success) toast.success(t('settings.ai.modelsRefreshed'))
+      else toast.error(t('chat.modelPicker.discoveryUnavailable'))
+    } catch { toast.error(t('chat.modelPicker.discoveryUnavailable')) }
+  }, [refreshLlmConnections, t])
 
   const handleSetDefaultConnection = useCallback(async (slug: string) => {
     if (!window.electronAPI) return
@@ -852,6 +863,7 @@ export default function AiSettingsPage() {
                         onDelete={() => handleDeleteConnection(conn.slug)}
                         onSetDefault={() => handleSetDefaultConnection(conn.slug)}
                         onValidate={() => handleValidateConnection(conn.slug)}
+                        onRefreshModels={() => void handleRefreshModels(conn.slug)}
                         onReauthenticate={() => handleReauthenticateConnection(conn)}
                         onEdit={() => handleEditConnection(conn)}
                         onSetMidStreamBehavior={(behavior) => handleSetMidStreamBehavior(conn, behavior)}
@@ -958,6 +970,14 @@ export default function AiSettingsPage() {
                   onContinue={apiSetupOnboarding.handleContinue}
                   onBack={isDirectEdit ? handleCloseApiSetup : apiSetupOnboarding.handleBack}
                   onSelectProvider={apiSetupOnboarding.handleSelectProvider}
+                  detectedLogins={apiSetupOnboarding.detectedLogins}
+                  onScanLocalLogins={apiSetupOnboarding.scanLocalLogins}
+                  localConfigScanStatus={apiSetupOnboarding.localConfigScanStatus}
+                  localConfigDirectory={apiSetupOnboarding.localConfigDirectory}
+                  localConfigScanPartial={apiSetupOnboarding.localConfigScanPartial}
+                  onChooseConfigDirectory={apiSetupOnboarding.handleChooseConfigDirectory}
+                  onScanDefaultConfigs={apiSetupOnboarding.handleScanDefaultConfigs}
+                  onImportLocalConfig={apiSetupOnboarding.handleImportLocalConfig}
                   onSelectApiSetupMethod={apiSetupOnboarding.handleSelectApiSetupMethod}
                   onSubmitCredential={apiSetupOnboarding.handleSubmitCredential}
                   onSubmitLocalModel={apiSetupOnboarding.handleSubmitLocalModel}

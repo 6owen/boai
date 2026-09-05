@@ -3,17 +3,20 @@ import { WelcomeStep } from "./WelcomeStep"
 import type { ApiSetupMethod } from "./APISetupStep"
 import { ProviderSelectStep, type ProviderChoice } from "./ProviderSelectStep"
 import { CredentialsStep, type CredentialStatus } from "./CredentialsStep"
+import type { DetectedLogin } from '../../../shared/types'
+import { LocalConfigScanStep, type LocalConfigScanStatus } from "./LocalConfigScanStep"
 import { LocalModelStep, type LocalModelSubmitData } from "./LocalModelStep"
 import { CompletionStep } from "./CompletionStep"
 import { GitBashWarning, type GitBashStatus } from "./GitBashWarning"
-import type { ApiKeySubmitData } from "../apisetup"
-import type { CustomEndpointApi } from '@config/llm-connections'
+import type { ApiKeySubmitData, ApiKeyInputProps } from "../apisetup"
+import type { DetectedApiKeyConfig } from '@craft-agent/shared/auth'
 
 export type OnboardingStep =
   | 'welcome'
   | 'git-bash'
   | 'provider-select'
   | 'local-model'
+  | 'local-config-scan'
   | 'credentials'
   | 'complete'
 
@@ -27,6 +30,9 @@ export interface OnboardingState {
   apiSetupMethod: ApiSetupMethod | null
   isExistingUser: boolean
   errorMessage?: string
+  credentialsOrigin?: 'local-config-scan'
+  detectedApiKey?: DetectedApiKeyConfig
+  importedConnectionSlug?: string
   gitBashStatus?: GitBashStatus
   isRecheckingGitBash?: boolean
   isCheckingGitBash?: boolean
@@ -58,18 +64,22 @@ interface OnboardingWizardProps {
   /** Called when user chooses "Setup later" on provider select */
   onSkipSetup?: () => void
 
+  // Local configuration scan (secondary page only)
+  detectedLogins?: DetectedLogin[]
+  /** Scan only after entering the dedicated local configuration page. */
+  onScanLocalLogins?: () => void
+  localConfigScanStatus?: LocalConfigScanStatus
+  localConfigDirectory?: string
+  localConfigScanPartial?: boolean
+  onChooseConfigDirectory?: () => void
+  onScanDefaultConfigs?: () => void
+  onImportLocalConfig?: (login: DetectedLogin) => void
+
   // Local model
   onSubmitLocalModel?: (data: LocalModelSubmitData) => void
 
   // Edit mode (pre-fill existing connection values)
-  editInitialValues?: {
-    apiKey?: string
-    baseUrl?: string
-    connectionDefaultModel?: string
-    activePreset?: string
-    models?: string[]
-    customApi?: CustomEndpointApi
-  }
+  editInitialValues?: ApiKeyInputProps['initialValues']
 
   className?: string
 }
@@ -101,6 +111,15 @@ export function OnboardingWizard({
   // Provider select (new flow)
   onSelectProvider,
   onSkipSetup,
+  // Local login detection
+  detectedLogins,
+  onScanLocalLogins,
+  localConfigScanStatus,
+  localConfigDirectory,
+  localConfigScanPartial,
+  onChooseConfigDirectory,
+  onScanDefaultConfigs,
+  onImportLocalConfig,
   // Local model
   onSubmitLocalModel,
   // Edit mode
@@ -140,6 +159,23 @@ export function OnboardingWizard({
           />
         )
 
+      case 'local-config-scan':
+        return (
+          <LocalConfigScanStep
+            detectedLogins={detectedLogins ?? []}
+            directory={localConfigDirectory}
+            partial={localConfigScanPartial}
+            onChooseDirectory={onChooseConfigDirectory}
+            onScanDefaults={onScanDefaultConfigs}
+            status={localConfigScanStatus ?? 'idle'}
+            onScan={onScanLocalLogins!}
+            onImport={onImportLocalConfig!}
+            onBack={onBack}
+            isImporting={state.credentialStatus === 'validating'}
+            errorMessage={state.errorMessage}
+          />
+        )
+
       case 'local-model':
         return (
           <LocalModelStep
@@ -159,7 +195,15 @@ export function OnboardingWizard({
             onSubmit={onSubmitCredential}
             onStartOAuth={onStartOAuth}
             onBack={onBack}
-            editInitialValues={editInitialValues}
+            editInitialValues={editInitialValues ?? (state.detectedApiKey ? {
+              connectionSlug: state.importedConnectionSlug,
+              modelSelectionMode: 'automaticallySyncedFromProvider',
+              baseUrl: state.detectedApiKey.baseUrl,
+              connectionDefaultModel: state.detectedApiKey.model,
+              models: state.detectedApiKey.model ? [state.detectedApiKey.model] : undefined,
+              activePreset: 'custom',
+              customApi: state.detectedApiKey.api,
+            } : undefined)}
             copilotDeviceCode={copilotDeviceCode}
           />
         )

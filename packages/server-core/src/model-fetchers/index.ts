@@ -4,7 +4,7 @@
  * Centralized service for fetching and refreshing model lists across all providers.
  * Replaces the scattered fetchAndStore*Models() functions and startCodexModelRefresh().
  *
- * Fallback chain (same for every provider):
+ * Fallback chain for built-in providers (custom endpoints keep their cached list on failure):
  * 1. Provider runtime discovery via backend driver dispatch
  * 2. Persisted connection.models — previously fetched, survives offline/restart
  * 3. MODEL_REGISTRY — hardcoded offline seed data, last resort
@@ -49,11 +49,11 @@ class ModelRefreshService {
    * Deduplicates concurrent calls for the same slug — if a refresh is already
    * in progress, callers share the same promise instead of racing.
    */
-  async refreshConnection(slug: string): Promise<void> {
+  async refreshConnection(slug: string, force = false): Promise<void> {
     const existing = this.inFlight.get(slug)
     if (existing) return existing
 
-    const promise = this._doRefresh(slug).finally(() => {
+    const promise = this._doRefresh(slug, force).finally(() => {
       this.inFlight.delete(slug)
     })
     this.inFlight.set(slug, promise)
@@ -62,21 +62,19 @@ class ModelRefreshService {
 
   /**
    * Internal: actual refresh logic with fallback chain.
-   * Skips compat providers (not in fetcher map).
+   * Discovers compatible endpoints when automatic sync is enabled or explicitly requested.
    * Preserves user's defaultModel if still valid.
    * Updates connection.models in storage on success.
    */
-  private async _doRefresh(slug: string): Promise<void> {
+  private async _doRefresh(slug: string, force: boolean): Promise<void> {
     const connection = getLlmConnection(slug)
     if (!connection) {
       handlerLog.warn(`Model refresh: connection not found: ${slug}`)
       return
     }
 
-    // Skip compat providers — users configure models manually
-    if (isCompatProvider(connection.providerType)) {
-      return
-    }
+    const isCompat = isCompatProvider(connection.providerType)
+    if (isCompat && (!connection.customEndpoint || (!force && connection.modelSelectionMode !== 'automaticallySyncedFromProvider'))) return
 
     const providerType = connection.providerType as FetchableProvider
     const fetcher = this.fetchers[providerType]
@@ -99,6 +97,9 @@ class ModelRefreshService {
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error)
       handlerLog.warn(`Model refresh [${slug}]: provider fetch failed: ${msg}`)
+      // Keep the cached list, but report discovery failures honestly to explicit callers.
+      // A generic Anthropic/OpenAI catalog says nothing about this custom endpoint.
+      if (isCompat) throw error
     }
 
     // Layer 2: Persisted connection.models (keep what we have)
@@ -136,15 +137,25 @@ class ModelRefreshService {
       return
     }
 
-    // Preserve user's defaultModel if still valid
-    const currentDefault = connection.defaultModel
+    // Don't apply a response fetched with an endpoint the user changed meanwhile.
+    const latest = getLlmConnection(slug)
+    if (!latest || latest.baseUrl !== connection.baseUrl || latest.customEndpoint?.api !== connection.customEndpoint?.api) return
+    // Preserve the latest choice, including edits made while discovery was in flight.
+    const currentDefault = latest.defaultModel
     const stillValid = currentDefault && newModels.some(m => m.id === currentDefault)
-    const newDefault = stillValid
-      ? currentDefault
-      : serverDefault ?? newModels[0]?.id
-
+    const newDefault = stillValid ? currentDefault : serverDefault ?? newModels[0]?.id
+    const mergedModels = newModels.map(model => {
+      const saved = latest.models?.find(m => typeof m !== 'string' && m.id === model.id)
+      return typeof saved === 'object' ? {
+        ...model,
+        ...(saved.supportsImages !== undefined ? { supportsImages: saved.supportsImages } : {}),
+        ...(isCompat && saved.contextWindow !== undefined ? { contextWindow: saved.contextWindow } : {}),
+        ...(isCompat && saved.supportsThinking !== undefined ? { supportsThinking: saved.supportsThinking } : {}),
+      } : model
+    })
     updateLlmConnection(slug, {
-      models: newModels,
+      models: mergedModels,
+      ...(isCompat && force ? { modelSelectionMode: 'automaticallySyncedFromProvider' as const } : {}),
       ...(newDefault && !stillValid ? { defaultModel: newDefault } : {}),
     })
   }
@@ -158,7 +169,7 @@ class ModelRefreshService {
     const connections = getLlmConnections()
 
     for (const conn of connections) {
-      if (isCompatProvider(conn.providerType)) continue
+      if (isCompatProvider(conn.providerType) && conn.modelSelectionMode !== 'automaticallySyncedFromProvider') continue
 
       const providerType = conn.providerType as FetchableProvider
       const fetcher = this.fetchers[providerType]
@@ -197,8 +208,8 @@ class ModelRefreshService {
    * Also starts a periodic timer if the fetcher supports it.
    * Called when: connection created, auth completed, user clicks refresh.
    */
-  async refreshNow(slug: string): Promise<void> {
-    await this.refreshConnection(slug)
+  async refreshNow(slug: string, force = false): Promise<void> {
+    await this.refreshConnection(slug, force)
 
     // Ensure periodic timer is running
     const connection = getLlmConnection(slug)

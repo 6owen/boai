@@ -9,17 +9,20 @@
  * 4. Credentials
  * 5. Complete
  */
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import type {
   OnboardingState,
   OnboardingStep,
   ApiSetupMethod,
 } from '@/components/onboarding'
+import type { LocalConfigScanStatus } from '@/components/onboarding/LocalConfigScanStep'
 import type { ProviderChoice } from '@/components/onboarding/ProviderSelectStep'
 import type { LocalModelSubmitData } from '@/components/onboarding/LocalModelStep'
 import type { ApiKeySubmitData } from '@/components/apisetup'
 import type { CustomEndpointConfig } from '@config/llm-connections'
-import type { SetupNeeds, LlmConnectionSetup } from '../../shared/types'
+import type { SetupNeeds, LlmConnectionSetup, DetectedLogin } from '../../shared/types'
+import type { DetectedApiKeyConfig } from '@craft-agent/shared/auth'
 
 interface UseOnboardingOptions {
   /** Called when onboarding is complete */
@@ -61,6 +64,17 @@ interface UseOnboardingReturn {
   // Local model
   handleSubmitLocalModel: (data: LocalModelSubmitData) => void
   handleStartOAuth: (methodOverride?: ApiSetupMethod, connectionSlugOverride?: string) => void
+
+  // Explicit local configuration scan and import
+  detectedLogins: DetectedLogin[]
+  /** Read local configuration only from the dedicated secondary page. */
+  scanLocalLogins: () => Promise<void>
+  localConfigScanStatus: LocalConfigScanStatus
+  localConfigDirectory?: string
+  localConfigScanPartial: boolean
+  handleChooseConfigDirectory: () => Promise<void>
+  handleScanDefaultConfigs: () => void
+  handleImportLocalConfig: (login: DetectedLogin) => void
 
   // Copilot device code (displayed during device flow)
   copilotDeviceCode?: { userCode: string; verificationUri: string }
@@ -192,6 +206,8 @@ export function useOnboarding({
   existingSlugs = new Set(),
 }: UseOnboardingOptions): UseOnboardingReturn {
   // Main wizard state
+  const { t } = useTranslation()
+
   const [state, setState] = useState<OnboardingState>({
     step: initialStep,
     loginStatus: 'idle',
@@ -267,7 +283,7 @@ export function useOnboarding({
         iamCredentials: options?.iamCredentials,
         awsRegion: options?.awsRegion,
         bedrockAuthMethod: options?.bedrockAuthMethod,
-      }, connectionSlugOverride ?? editingSlug, existingSlugs)
+      }, connectionSlugOverride ?? editingSlug ?? state.importedConnectionSlug ?? null, existingSlugs)
       // Use new unified API
       const result = await window.electronAPI.setupLlmConnection(
         updateOnly ? { ...setup, updateOnly: true } : setup
@@ -295,11 +311,12 @@ export function useOnboarding({
       }))
       return false
     }
-  }, [state.apiSetupMethod, onConfigSaved, editingSlug, existingSlugs])
+  }, [state.apiSetupMethod, state.importedConnectionSlug, onConfigSaved, editingSlug, existingSlugs])
 
   // Continue to next step
   const handleContinue = useCallback(async () => {
     switch (state.step) {
+      case 'local-config-scan':
       case 'provider-select':
         // Handled by handleSelectProvider (card click navigates directly)
         break
@@ -352,8 +369,9 @@ export function useOnboarding({
         }
         break
       case 'credentials':
-        setState(s => ({ ...s, step: 'provider-select', credentialStatus: 'idle', errorMessage: undefined }))
+        setState(s => ({ ...s, step: s.credentialsOrigin ?? 'provider-select', credentialStatus: 'idle', errorMessage: undefined }))
         break
+      case 'local-config-scan':
       case 'local-model':
         setState(s => ({ ...s, step: 'provider-select', credentialStatus: 'idle', errorMessage: undefined }))
         break
@@ -369,8 +387,6 @@ export function useOnboarding({
   // Tests the connection first before saving to catch issues early
   const handleSubmitCredential = useCallback(async (data: ApiKeySubmitData) => {
     setState(s => ({ ...s, credentialStatus: 'validating', errorMessage: undefined }))
-
-    const isPiApiKeyFlow = state.apiSetupMethod === 'pi_api_key'
 
     try {
       // Bedrock (Pi+amazon-bedrock) — skip API key validation and connection test
@@ -393,46 +409,33 @@ export function useOnboarding({
         return
       }
 
-      // When editing an existing connection, API key is optional (empty = keep existing credential)
-      if (!data.apiKey.trim() && editingSlug) {
-        const saved = await handleSaveConfig(undefined, {
-          baseUrl: data.baseUrl,
-          connectionDefaultModel: data.connectionDefaultModel,
-          models: data.models,
-          piAuthProvider: data.piAuthProvider,
-          modelSelectionMode: data.modelSelectionMode,
-          customEndpoint: data.customEndpoint,
+      // A configuration with only URL + key can be completed without exposing or retyping its key.
+      const scanned = state.detectedApiKey
+      if (!data.apiKey.trim() && scanned?.hasApiKey && scanned.issue === 'missing-model'
+        && data.baseUrl?.replace(/\/+$/, '') === scanned.baseUrl
+        && data.customEndpoint?.api === scanned.api && data.connectionDefaultModel?.trim()) {
+        const imported = await window.electronAPI.importLocalApiKey(scanned.configId, {
+          directory: scanDirectoryRef.current, model: data.connectionDefaultModel.trim(),
         })
-        if (saved) {
-          setState(s => ({ ...s, credentialStatus: 'success', step: 'complete' }))
-        } else {
-          setState(s => ({ ...s, credentialStatus: 'error' }))
+        if (!imported.success || !imported.slug) {
+          setState(s => ({ ...s, credentialStatus: 'error', errorMessage: t('onboarding.credentials.codexApiImportFailed') }))
+          return
         }
+        setState(s => ({ ...s, importedConnectionSlug: imported.slug }))
+        onConfigSaved?.()
+        const tested = await window.electronAPI.testLlmConnection(imported.slug)
+        setState(s => tested.success
+          ? { ...s, step: 'complete', credentialStatus: 'success', completionStatus: 'complete' }
+          : { ...s, credentialStatus: 'error', errorMessage: t('onboarding.credentials.codexApiTestFailed') })
         return
       }
 
-      // API key validation differs by endpoint locality:
-      // - Local/loopback custom endpoints may be keyless (e.g. Ollama)
-      // - Non-local endpoints require an API key
-      const isLoopbackCustomEndpoint = isLoopbackEndpoint(data.baseUrl)
-      if (isPiApiKeyFlow) {
-        if (!data.apiKey.trim() && !isLoopbackCustomEndpoint) {
-          setState(s => ({
-            ...s,
-            credentialStatus: 'error',
-            errorMessage: 'Please enter a valid API key',
-          }))
-          return
-        }
-      } else {
-        if (!data.apiKey.trim() && !isLoopbackCustomEndpoint) {
-          setState(s => ({
-            ...s,
-            credentialStatus: 'error',
-            errorMessage: 'Please enter a valid API key',
-          }))
-          return
-        }
+      // Empty on edit means reuse the server-stored key. Test the proposed settings
+      // before persisting any changes, just as we do for a newly entered key.
+      const connectionSlug = editingSlug || state.importedConnectionSlug
+      if (!data.apiKey.trim() && !connectionSlug && !isLoopbackEndpoint(data.baseUrl)) {
+        setState(s => ({ ...s, credentialStatus: 'error', errorMessage: 'Please enter a valid API key' }))
+        return
       }
 
       // Validate connection by spawning a lightweight subprocess test.
@@ -440,8 +443,9 @@ export function useOnboarding({
       const testResult = await window.electronAPI.testLlmConnectionSetup({
         provider: 'pi',
         apiKey: data.apiKey,
+        connectionSlug: connectionSlug || undefined,
         baseUrl: data.baseUrl,
-        model: data.models?.[0],
+        model: data.connectionDefaultModel || data.models?.[0],
         piAuthProvider: data.piAuthProvider,
         customEndpoint: data.customEndpoint,
       })
@@ -455,8 +459,8 @@ export function useOnboarding({
         return
       }
 
-      const saved = await handleSaveConfig(data.apiKey, {
-        baseUrl: data.baseUrl,
+      const saved = await handleSaveConfig(data.apiKey.trim() || undefined, {
+        baseUrl: data.baseUrl ?? (connectionSlug ? '' : undefined),
         connectionDefaultModel: data.connectionDefaultModel,
         models: data.models,
         piAuthProvider: data.piAuthProvider,
@@ -481,7 +485,7 @@ export function useOnboarding({
         errorMessage: error instanceof Error ? error.message : 'Validation failed',
       }))
     }
-  }, [handleSaveConfig, state.apiSetupMethod])
+  }, [handleSaveConfig, state.apiSetupMethod, state.detectedApiKey, onConfigSaved, state.importedConnectionSlug, editingSlug, t])
 
   // Save config, validate the connection, and update state accordingly.
   // Shared by all OAuth flows after tokens are captured.
@@ -596,32 +600,148 @@ export function useOnboarding({
     }
   }, [state.apiSetupMethod, saveAndValidateConnection, editingSlug, existingSlugs])
 
-  // Map ProviderChoice → ApiSetupMethod and navigate to the right step
-  const handleSelectProvider = useCallback((choice: ProviderChoice) => {
-    const CHOICE_TO_METHOD: Record<Exclude<ProviderChoice, 'local'>, ApiSetupMethod> = {
-      chatgpt: 'pi_chatgpt_oauth',
-      copilot: 'pi_copilot_oauth',
-      api_key: 'pi_api_key',
+  // Local files are read only after opening the scan page.
+  const [detectedLogins, setDetectedLogins] = useState<DetectedLogin[]>([])
+  const [localConfigScanStatus, setLocalConfigScanStatus] = useState<LocalConfigScanStatus>('idle')
+  const [localConfigDirectory, setLocalConfigDirectory] = useState<string>()
+  const [localConfigScanPartial, setLocalConfigScanPartial] = useState(false)
+  const scanDirectoryRef = useRef<string>()
+  const scanRequest = useRef(0)
+  const runLocalConfigScan = useCallback(async (directory?: string) => {
+    const request = ++scanRequest.current
+    scanDirectoryRef.current = directory
+    setLocalConfigDirectory(directory)
+    setLocalConfigScanStatus('scanning')
+    setLocalConfigScanPartial(false)
+    setDetectedLogins([])
+    setState(s => ({ ...s, errorMessage: undefined, credentialStatus: 'idle' }))
+    try {
+      const result = await window.electronAPI.scanLocalConfigs({ directory })
+      if (request !== scanRequest.current) return
+      setDetectedLogins(result.logins)
+      setLocalConfigScanPartial(result.truncated || result.skippedFiles > 0)
+      setLocalConfigScanStatus('complete')
+    } catch {
+      if (request === scanRequest.current) setLocalConfigScanStatus('error')
     }
-
-    if (choice === 'local') {
-      // Local uses anthropic_api_key with custom endpoint (Ollama doesn't need an API key)
-      setState(s => ({ ...s, step: 'local-model', apiSetupMethod: 'anthropic_api_key', credentialStatus: 'idle', errorMessage: undefined }))
-      return
+  }, [])
+  // Stable identity prevents the scan page's mount effect from rescanning on each directory change.
+  const scanLocalLogins = useCallback(() => runLocalConfigScan(scanDirectoryRef.current), [runLocalConfigScan])
+  const handleScanDefaultConfigs = useCallback(() => { void runLocalConfigScan() }, [runLocalConfigScan])
+  const handleChooseConfigDirectory = useCallback(async () => {
+    try {
+      const directory = await window.electronAPI.openFolderDialog({ title: t('onboarding.localConfig.chooseDirectory') })
+      if (directory) await runLocalConfigScan(directory)
+    } catch {
+      setState(s => ({ ...s, errorMessage: t('onboarding.localConfig.directoryFailed') }))
     }
+  }, [runLocalConfigScan, t])
 
-    const method = CHOICE_TO_METHOD[choice]
+  // Imports never run from a normal provider login card.
+  const importInFlight = useRef(false)
+  const handleImportDetected = useCallback(async (detected: Extract<DetectedLogin, { authType: 'oauth' }>) => {
+    if (importInFlight.current) return
+    importInFlight.current = true
+    const method: ApiSetupMethod = 'pi_chatgpt_oauth'
     setState(s => ({
       ...s,
       apiSetupMethod: method,
-      step: 'credentials',
-      credentialStatus: 'idle',
+      step: 'local-config-scan',
+      credentialStatus: 'validating',
       errorMessage: undefined,
     }))
+    const importFailed = (detail?: string) => setState(s => ({
+      ...s,
+      credentialStatus: 'error',
+      errorMessage: detail || t('onboarding.credentials.codexImportFailed'),
+    }))
+    try {
+      const connectionSlug = BASE_SLUG_FOR_METHOD[method]
+      const result = await window.electronAPI.importChatGptFromCli(connectionSlug, detected.configId, detected.sourcePath?.replace(/[\\/][^\\/]+$/, ''))
+      if (result.success) {
+        onConfigSaved?.()
+        const tested = await window.electronAPI.testLlmConnection(result.slug ?? connectionSlug)
+        if (tested.success) {
+          setState(s => ({ ...s, step: 'complete', credentialStatus: 'success', completionStatus: 'complete' }))
+        } else {
+          importFailed()
+        }
+      } else {
+        // Server-side failures carry actionable detail (e.g. "run codex login");
+        // only log it and show the localized message in the UI.
+        console.warn('[useOnboarding] Codex CLI import failed:', result.error)
+        importFailed()
+      }
+    } catch (error) {
+      console.warn('[useOnboarding] Codex CLI import failed:', error)
+      importFailed()
+    } finally {
+      importInFlight.current = false
+    }
+  }, [onConfigSaved, t])
 
-    // OAuth methods start immediately
+  const handleImportCodexApiKey = useCallback(async (detected: DetectedApiKeyConfig) => {
+    if (importInFlight.current) return
+    const issueMessage = detected.envKey && detected.issue === 'missing-api-key'
+      ? t('onboarding.credentials.codexMissingEnvKey', { name: detected.envKey })
+      : detected.issue === 'missing-model' && detected.hasApiKey ? t('onboarding.localConfig.completeModel')
+      : detected.issue ? t(`onboarding.codexConfig.issue.${detected.issue}`) : undefined
+    setState(s => ({
+      ...s, apiSetupMethod: 'pi_api_key', step: detected.usable ? 'local-config-scan' : 'credentials', detectedApiKey: detected,
+      credentialsOrigin: 'local-config-scan',
+      importedConnectionSlug: undefined,
+      credentialStatus: detected.usable ? 'validating' : 'error', errorMessage: issueMessage,
+    }))
+    if (!detected.usable) return
+    importInFlight.current = true
+    try {
+      const result = await window.electronAPI.importLocalApiKey(detected.configId, { directory: scanDirectoryRef.current })
+      if (!result.success || !result.slug) {
+        setState(s => ({ ...s, credentialStatus: 'error', errorMessage: t('onboarding.credentials.codexApiImportFailed') }))
+        return
+      }
+      setState(s => ({ ...s, importedConnectionSlug: result.slug }))
+      onConfigSaved?.()
+      if (result.modelRequired) {
+        setState(s => ({ ...s, step: 'credentials', credentialStatus: 'error', errorMessage: t('onboarding.localConfig.modelDiscoveryUnavailable') }))
+        return
+      }
+      const tested = await window.electronAPI.testLlmConnection(result.slug)
+      setState(s => tested.success
+        ? { ...s, credentialStatus: 'success', completionStatus: 'complete', step: 'complete' }
+        : { ...s, step: 'credentials', credentialStatus: 'error', errorMessage: t('onboarding.credentials.codexApiTestFailed') })
+    } catch {
+      setState(s => ({ ...s, credentialStatus: 'error', errorMessage: t('onboarding.credentials.codexApiImportFailed') }))
+    } finally {
+      importInFlight.current = false
+    }
+  }, [onConfigSaved, t])
+
+  const handleImportLocalConfig = useCallback((login: DetectedLogin) => {
+    if (login.authType === 'api_key') void handleImportCodexApiKey(login)
+    else if (login.usable) void handleImportDetected(login)
+  }, [handleImportCodexApiKey, handleImportDetected])
+
+  // Provider cards always retain their normal login/configuration behavior.
+  const handleSelectProvider = useCallback((choice: ProviderChoice) => {
+    setState(s => ({
+      ...s, detectedApiKey: undefined, importedConnectionSlug: undefined,
+      credentialsOrigin: undefined, credentialStatus: 'idle', errorMessage: undefined,
+    }))
+    if (choice === 'local-config') {
+      setState(s => ({ ...s, step: 'local-config-scan', apiSetupMethod: null }))
+      return
+    }
+    if (choice === 'local') {
+      setState(s => ({ ...s, step: 'local-model', apiSetupMethod: 'anthropic_api_key' }))
+      return
+    }
+    const methods: Record<Exclude<ProviderChoice, 'local' | 'local-config'>, ApiSetupMethod> = {
+      chatgpt: 'pi_chatgpt_oauth', copilot: 'pi_copilot_oauth', api_key: 'pi_api_key',
+    }
+    const method = methods[choice]
+    setState(s => ({ ...s, apiSetupMethod: method, step: 'credentials' }))
     if (choice === 'chatgpt' || choice === 'copilot') {
-      // Defer to next tick so state is updated before handleStartOAuth reads it
       setTimeout(() => handleStartOAuth(method), 0)
     }
   }, [handleStartOAuth])
@@ -721,6 +841,7 @@ export function useOnboarding({
     setState(s => ({
       ...s,
       step: 'credentials' as const,
+      detectedApiKey: undefined, importedConnectionSlug: undefined, credentialsOrigin: undefined,
       apiSetupMethod: method,
       credentialStatus: 'idle' as const,
       errorMessage: undefined,
@@ -729,6 +850,12 @@ export function useOnboarding({
 
   // Reset onboarding to initial state (used after logout or modal close)
   const reset = useCallback(() => {
+    scanRequest.current++
+    setDetectedLogins([])
+    setLocalConfigScanStatus('idle')
+    scanDirectoryRef.current = undefined
+    setLocalConfigDirectory(undefined)
+    setLocalConfigScanPartial(false)
     setState({
       step: initialStep,
       loginStatus: 'idle',
@@ -749,6 +876,14 @@ export function useOnboarding({
     handleSubmitCredential,
     handleSubmitLocalModel,
     handleStartOAuth,
+    detectedLogins,
+    scanLocalLogins,
+    localConfigScanStatus,
+    localConfigDirectory,
+    localConfigScanPartial,
+    handleChooseConfigDirectory,
+    handleScanDefaultConfigs,
+    handleImportLocalConfig,
     // Copilot device code
     copilotDeviceCode,
     // Git Bash (Windows)

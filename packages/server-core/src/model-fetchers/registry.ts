@@ -19,4 +19,5 @@ const piFetcher = new PiModelFetcher()
  */
 export const MODEL_FETCHERS: ModelFetcherMap = {
   pi:        piFetcher,
+  pi_compat: piFetcher,
 }

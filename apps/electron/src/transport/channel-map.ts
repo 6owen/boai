@@ -142,12 +142,17 @@ export const CHANNEL_MAP = {
   getSetupNeeds: invoke(RPC_CHANNELS.onboarding.GET_AUTH_STATE, r => r.setupNeeds),
   startWorkspaceMcpOAuth: invoke(RPC_CHANNELS.onboarding.START_MCP_OAUTH),
   deferSetup: invoke(RPC_CHANNELS.onboarding.DEFER_SETUP),
+  detectLocalLogins: invoke(RPC_CHANNELS.onboarding.DETECT_LOCAL_LOGINS),
+  importCodexApiKey: invoke(RPC_CHANNELS.onboarding.IMPORT_CODEX_API_KEY),
+  scanLocalConfigs: invoke(RPC_CHANNELS.onboarding.SCAN_LOCAL_CONFIGS),
+  importLocalApiKey: invoke(RPC_CHANNELS.onboarding.IMPORT_LOCAL_API_KEY),
 
   // ChatGPT OAuth
   startChatGptOAuth: invoke(RPC_CHANNELS.chatgpt.START_OAUTH),
   cancelChatGptOAuth: invoke(RPC_CHANNELS.chatgpt.CANCEL_OAUTH),
   getChatGptAuthStatus: invoke(RPC_CHANNELS.chatgpt.GET_AUTH_STATUS),
   chatGptLogout: invoke(RPC_CHANNELS.chatgpt.LOGOUT),
+  importChatGptFromCli: invoke(RPC_CHANNELS.chatgpt.IMPORT_FROM_CLI),
 
   // GitHub Copilot OAuth
   startCopilotOAuth: invoke(RPC_CHANNELS.copilot.START_OAUTH),
@@ -388,6 +393,8 @@ export const CHANNEL_MAP = {
   saveLlmConnection: invoke(RPC_CHANNELS.llmConnections.SAVE),
   deleteLlmConnection: invoke(RPC_CHANNELS.llmConnections.DELETE),
   testLlmConnection: invoke(RPC_CHANNELS.llmConnections.TEST),
+  refreshLlmConnectionModels: invoke(RPC_CHANNELS.llmConnections.REFRESH_MODELS),
+  discoverLlmConnectionModels: invoke(RPC_CHANNELS.llmConnections.DISCOVER_MODELS),
   setDefaultLlmConnection: invoke(RPC_CHANNELS.llmConnections.SET_DEFAULT),
   setWorkspaceDefaultLlmConnection: invoke(RPC_CHANNELS.llmConnections.SET_WORKSPACE_DEFAULT),
 

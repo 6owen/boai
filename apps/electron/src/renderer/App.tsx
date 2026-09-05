@@ -2002,6 +2002,14 @@ export default function App() {
             onContinue={onboarding.handleContinue}
             onBack={onboarding.handleBack}
             onSelectProvider={onboarding.handleSelectProvider}
+            detectedLogins={onboarding.detectedLogins}
+            onScanLocalLogins={onboarding.scanLocalLogins}
+            localConfigScanStatus={onboarding.localConfigScanStatus}
+            localConfigDirectory={onboarding.localConfigDirectory}
+            localConfigScanPartial={onboarding.localConfigScanPartial}
+            onChooseConfigDirectory={onboarding.handleChooseConfigDirectory}
+            onScanDefaultConfigs={onboarding.handleScanDefaultConfigs}
+            onImportLocalConfig={onboarding.handleImportLocalConfig}
             onSkipSetup={onboarding.handleSkipSetup}
             onSelectApiSetupMethod={onboarding.handleSelectApiSetupMethod}
             onSubmitCredential={onboarding.handleSubmitCredential}

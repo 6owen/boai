@@ -14,9 +14,9 @@ import {
   ApiKeyInput,
   type ApiKeyStatus,
   type ApiKeySubmitData,
+  type ApiKeyInputProps,
   type OAuthStatus,
 } from "../apisetup"
-import type { CustomEndpointApi } from '@config/llm-connections'
 
 export type CredentialStatus = ApiKeyStatus | OAuthStatus
 
@@ -30,14 +30,7 @@ interface CredentialsStepProps {
   // Device flow (Copilot)
   copilotDeviceCode?: { userCode: string; verificationUri: string }
   // Edit mode (pre-fill existing connection values)
-  editInitialValues?: {
-    apiKey?: string
-    baseUrl?: string
-    connectionDefaultModel?: string
-    activePreset?: string
-    models?: string[]
-    customApi?: CustomEndpointApi
-  }
+  editInitialValues?: ApiKeyInputProps['initialValues']
 }
 
 export function CredentialsStep({
@@ -188,9 +181,7 @@ export function CredentialsStep({
   // --- API Key flow ---
   // Determine provider type and description based on selected method
   const providerType = isPiApiKey ? 'pi_api_key' : 'anthropic'
-  const apiKeyDescription = isPiApiKey
-    ? "Select a provider preset and enter the API key. For arbitrary Anthropic-compatible endpoints, use Anthropic API Key mode."
-    : "Enter your API key. Optionally configure a custom endpoint for OpenRouter, Ollama, or compatible APIs."
+  const apiKeyDescription = t('apiSetup.connectionDescription')
 
   const apiKeyInputKey = [
     apiSetupMethod,

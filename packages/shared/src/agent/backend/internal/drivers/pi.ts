@@ -2,6 +2,7 @@ import type { ProviderDriver, DriverTestConnectionArgs } from '../driver-types.t
 import type { ModelDefinition } from '../../../../config/models.ts';
 import { getAllPiModels, getPiModelsForAuthProvider } from '../../../../config/models-pi.ts';
 import { getPiProviderBaseUrl } from '../../../../config/models-pi.ts';
+import { fetchCompatibleModels } from './compatible-models.ts';
 
 // ── Copilot model types ────────────────────────────────────────────────
 type RawCopilotModel = {
@@ -181,6 +182,7 @@ async function testAnthropicCompatible(
   baseUrl: string,
   model: string,
   timeoutMs: number,
+  useBearer: boolean,
 ): Promise<{ success: boolean; error?: string }> {
   const url = `${baseUrl.replace(/\/$/, '')}/v1/messages`;
   const controller = new AbortController();
@@ -192,7 +194,7 @@ async function testAnthropicCompatible(
       signal: controller.signal,
       headers: {
         'content-type': 'application/json',
-        'x-api-key': apiKey,
+        ...(useBearer ? { authorization: `Bearer ${apiKey}` } : { 'x-api-key': apiKey }),
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
@@ -202,7 +204,15 @@ async function testAnthropicCompatible(
       }),
     });
 
-    if (res.ok) return { success: true };
+    if (res.ok) {
+      const message = await res.json() as { type?: string; stop_reason?: string; content?: Array<{ type: string; text?: string }> };
+      // A short probe can exhaust its token budget during thinking (e.g. GLM).
+      // That is still an authenticated model response, even without visible text.
+      return message.type === 'message' && Array.isArray(message.content)
+        && (message.stop_reason === 'max_tokens' || message.content.some(block => block.type === 'text' && block.text?.trim()))
+        ? { success: true }
+        : { success: false, error: 'No valid message returned by the provider' };
+    }
 
     const text = await res.text().catch(() => '');
     return { success: false, error: `${res.status} ${text}`.slice(0, 500) };
@@ -244,6 +254,9 @@ export const piDriver: ProviderDriver = {
     }),
   }),
   fetchModels: async ({ connection, credentials, timeoutMs }) => {
+    if (connection.customEndpoint) {
+      return fetchCompatibleModels(connection, credentials.apiKey, timeoutMs);
+    }
     // Copilot OAuth: fetch models directly from the Copilot API via HTTP.
     // Uses the GitHub OAuth token (our refreshToken) to exchange for a
     // Copilot API token, then queries GET /models for the live model list.
@@ -268,6 +281,14 @@ export const piDriver: ProviderDriver = {
   },
   testConnection: async (args: DriverTestConnectionArgs): Promise<{ success: boolean; error?: string } | null> => {
     const piAuthProvider = args.connection?.piAuthProvider;
+    const customApi = args.connection?.customEndpoint?.api;
+    // An explicit protocol always wins over the provider catalog.
+    if (customApi && customApi !== 'anthropic-messages') return null;
+    if (customApi === 'anthropic-messages') {
+      if (!args.baseUrl?.trim()) return { success: false, error: 'API endpoint is required' };
+      const model = args.model.startsWith('pi/') ? args.model.slice(3) : args.model;
+      return testAnthropicCompatible(args.apiKey, args.baseUrl.trim(), model, args.timeoutMs, true);
+    }
     if (!piAuthProvider) {
       // No provider hint — fall back to generic subprocess path
       return null;
@@ -305,7 +326,6 @@ export const piDriver: ProviderDriver = {
     if (piAuthProvider === 'minimax-cn' && bareModel.startsWith('MiniMax-')) {
       bareModel = bareModel.slice('MiniMax-'.length);
     }
-    return testAnthropicCompatible(args.apiKey, baseUrl, bareModel, args.timeoutMs);
+    return testAnthropicCompatible(args.apiKey, baseUrl, bareModel, args.timeoutMs, false);
   },
-  validateStoredConnection: async () => ({ success: true }),
 };

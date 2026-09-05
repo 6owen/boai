@@ -1,3 +1,4 @@
+import { ConnectionModelControls } from './ConnectionModelControls'
 import * as React from 'react'
 import { useTranslation } from "react-i18next"
 import { AnimatePresence, motion } from 'motion/react'
@@ -334,7 +335,7 @@ export function FreeFormInput({
     const effectiveSlug = resolveEffectiveConnectionSlug(currentConnection, workspaceDefaultConnection, llmConnections)
     const conn = llmConnections.find(c => c.slug === effectiveSlug)
     if (!conn) return null
-    if (!isCompatProvider(conn.providerType)) return null
+    if (!isCompatProvider(conn.providerType) || conn.modelSelectionMode === 'automaticallySyncedFromProvider') return null
     // Allow model switching when connection has multiple models
     if (conn.models && conn.models.length > 1) return null
     return conn.defaultModel ?? null
@@ -2379,6 +2380,8 @@ export function FreeFormInput({
                   </DropdownMenuSub>
                 </>
               )}
+
+              <ConnectionModelControls connection={effectiveConnectionDetails} />
 
               {/* Context usage footer - only show when we have token data */}
               {contextStatus?.inputTokens != null && contextStatus.inputTokens > 0 && (

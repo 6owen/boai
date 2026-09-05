@@ -588,6 +588,8 @@ export interface LlmConnectionSetup {
 export interface TestLlmConnectionParams {
   provider: 'pi'
   apiKey: string
+  /** Test edited settings with the stored key when apiKey is empty; never return the key to the renderer. */
+  connectionSlug?: string
   baseUrl?: string
   model?: string
   piAuthProvider?: string
@@ -599,6 +601,19 @@ export interface TestLlmConnectionResult {
   success: boolean
   error?: string
 }
+
+/** Read model metadata for an unsaved endpoint, without changing a stored connection. */
+export interface DiscoverConnectionModelsParams {
+  baseUrl: string
+  customEndpoint: CustomEndpointConfig
+  apiKey?: string
+  /** Resolve the saved key server-side when no replacement key was entered. */
+  connectionSlug?: string
+}
+
+export type DiscoverConnectionModelsResult =
+  | { success: true; models: Array<{ id: string; name: string }> }
+  | { success: false; error: string }
 
 // ---------------------------------------------------------------------------
 // Source / skill types

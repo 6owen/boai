@@ -1,4 +1,4 @@
-import { RPC_CHANNELS, type LlmConnectionSetup } from '@craft-agent/shared/protocol'
+import { RPC_CHANNELS, type LlmConnectionSetup, type DiscoverConnectionModelsParams, type DiscoverConnectionModelsResult } from '@craft-agent/shared/protocol'
 import { getLlmConnections, getLlmConnection, addLlmConnection, updateLlmConnection, deleteLlmConnection, getDefaultLlmConnection, setDefaultLlmConnection, touchLlmConnection, isCompatProvider, getDefaultModelsForConnection, getDefaultModelForConnection, type LlmConnection, type LlmConnectionWithStatus, toBedrockNativeId, deriveBedrockRegionPrefix } from '@craft-agent/shared/config'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
 import { setSetupDeferred } from '@craft-agent/shared/config/storage'
@@ -6,8 +6,10 @@ import {
   resolveSetupTestConnectionHint,
   testBackendConnection,
   validateStoredBackendConnection,
+  fetchBackendModels,
 } from '@craft-agent/shared/agent/backend'
 import { getModelRefreshService } from '@craft-agent/server-core/model-fetchers'
+import { importLocalLoginAsConnection } from '../../services/local-login-import'
 import { parseTestConnectionError, createBuiltInConnection, validateModelList, piAuthProviderDisplayName, validateSetupTestInput, setupTestRequiresApiKey, resolveCustomEndpointSetup } from '@craft-agent/server-core/domain'
 import { getWorkspaceOrThrow, buildBackendHostRuntimeContext } from '@craft-agent/server-core/handlers'
 import { pushTyped, type RpcServer } from '@craft-agent/server-core/transport'
@@ -29,11 +31,13 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.llmConnections.SET_DEFAULT,
   RPC_CHANNELS.llmConnections.SET_WORKSPACE_DEFAULT,
   RPC_CHANNELS.llmConnections.REFRESH_MODELS,
+  RPC_CHANNELS.llmConnections.DISCOVER_MODELS,
   RPC_CHANNELS.chatgpt.START_OAUTH,
   RPC_CHANNELS.chatgpt.COMPLETE_OAUTH,
   RPC_CHANNELS.chatgpt.CANCEL_OAUTH,
   RPC_CHANNELS.chatgpt.GET_AUTH_STATUS,
   RPC_CHANNELS.chatgpt.LOGOUT,
+  RPC_CHANNELS.chatgpt.IMPORT_FROM_CLI,
   RPC_CHANNELS.copilot.START_OAUTH,
   RPC_CHANNELS.copilot.CANCEL_OAUTH,
   RPC_CHANNELS.copilot.GET_AUTH_STATUS,
@@ -85,6 +89,10 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
       }
 
       const updates: Partial<LlmConnection> = {}
+      // A manually entered replacement credential must survive future scans.
+      if (connection.localImport && setup.credential && !setup.credential.includes('••')) {
+        updates.localImport = undefined
+      }
       const hasConfiguredBaseUrl = !!setup.baseUrl?.trim()
       if (setup.baseUrl !== undefined) {
         updates.baseUrl = setup.baseUrl?.trim() || undefined
@@ -98,7 +106,12 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
         updates.defaultModel = setup.defaultModel ?? undefined
       }
       if (setup.models !== undefined) {
-        updates.models = setup.models ?? undefined
+        const sameEndpoint = connection.customEndpoint && connection.baseUrl === setup.baseUrl
+          && connection.customEndpoint.api === setup.customEndpoint?.api
+        updates.models = setup.models?.map(model => {
+          const saved = sameEndpoint && connection.models?.find(m => typeof m !== 'string' && m.id === model)
+          return saved || model
+        }) ?? undefined
       }
       if (setup.modelSelectionMode !== undefined) {
         updates.modelSelectionMode = setup.modelSelectionMode
@@ -111,7 +124,7 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
         updates.providerType = 'pi_compat'
         const branch = resolveCustomEndpointSetup({
           baseUrl: setup.baseUrl ?? undefined,
-          credential: setup.credential ?? undefined,
+          credential: setup.credential || (isNewConnection ? undefined : await manager.getLlmApiKey(setup.slug)) || undefined,
           customEndpointApi: customEndpoint.api,
         })
         updates.authType = branch.authType
@@ -299,7 +312,18 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
   // and validate credentials via runMiniCompletion(). Same code path as actual chat.
   server.handle(RPC_CHANNELS.settings.TEST_LLM_CONNECTION_SETUP, async (_ctx, params: import('@craft-agent/shared/protocol').TestLlmConnectionParams): Promise<import('@craft-agent/shared/protocol').TestLlmConnectionResult> => {
     const { provider, apiKey, baseUrl, model, piAuthProvider, customEndpoint } = params
-    const trimmedKey = apiKey?.trim() ?? ''
+    let trimmedKey = apiKey?.trim() ?? ''
+    if (trimmedKey.includes('••')) {
+      return { success: false, error: 'A masked API key cannot be used for a connection test' }
+    }
+    if (!trimmedKey && params.connectionSlug) {
+      const existing = getLlmConnection(params.connectionSlug)
+      if (!existing) return { success: false, error: 'Connection not found' }
+      if (!['api_key', 'api_key_with_endpoint', 'none'].includes(existing.authType)) {
+        return { success: false, error: 'This connection does not use an API key' }
+      }
+      trimmedKey = await getCredentialManager().getLlmApiKey(params.connectionSlug) ?? ''
+    }
     const allowEmptyApiKey = !setupTestRequiresApiKey(baseUrl)
 
     if (!trimmedKey && !allowEmptyApiKey) {
@@ -342,6 +366,44 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
       const msg = error instanceof Error ? error.message : String(error)
       deps.platform.logger?.info(`[testLlmConnectionSetup] Elapsed: ${elapsed}ms, threw: ${msg.slice(0, 1000)}`)
       return { success: false, error: parseTestConnectionError(msg) }
+    }
+  })
+
+  // Preview models with the form's current endpoint/key, without saving or editing anything.
+  server.handle(RPC_CHANNELS.llmConnections.DISCOVER_MODELS, async (_ctx, params: DiscoverConnectionModelsParams): Promise<DiscoverConnectionModelsResult> => {
+    let key = typeof params.apiKey === 'string' ? params.apiKey.trim() : ''
+    try {
+      const { normalizeConfigEndpoint } = await import('@craft-agent/shared/auth')
+      const baseUrl = typeof params.baseUrl === 'string' ? normalizeConfigEndpoint(params.baseUrl.trim()) : undefined
+      if (!baseUrl) return { success: false, error: 'A valid HTTP or HTTPS endpoint is required' }
+      const api = params.customEndpoint?.api
+      if (!['openai-completions', 'openai-responses', 'anthropic-messages'].includes(api)) {
+        return { success: false, error: 'Unsupported endpoint protocol' }
+      }
+      if (key.includes('••')) return { success: false, error: 'A masked API key cannot be used to fetch models' }
+      if (!key && params.connectionSlug) {
+        const existing = getLlmConnection(params.connectionSlug)
+        if (!existing) return { success: false, error: 'Connection not found' }
+        if (!['api_key', 'api_key_with_endpoint', 'none'].includes(existing.authType)) {
+          return { success: false, error: 'This connection does not use an API key' }
+        }
+        key = await getCredentialManager().getLlmApiKey(existing.slug) ?? ''
+      }
+      if (!key && setupTestRequiresApiKey(baseUrl)) return { success: false, error: 'API key is required' }
+      const result = await fetchBackendModels({
+        connection: {
+          slug: 'model-discovery-preview', name: 'Model discovery', createdAt: 0,
+          providerType: 'pi_compat', authType: key ? 'api_key_with_endpoint' : 'none',
+          baseUrl, customEndpoint: { api }, piAuthProvider: api === 'anthropic-messages' ? 'anthropic' : 'openai',
+        },
+        credentials: { apiKey: key || undefined },
+        hostRuntime: buildBackendHostRuntimeContext(deps.platform),
+        timeoutMs: 15_000,
+      })
+      return { success: true, models: result.models.map(({ id, name }) => ({ id, name })) }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Model discovery failed'
+      return { success: false, error: (key ? message.replaceAll(key, '[redacted]') : message).slice(0, 300) }
     }
   })
 
@@ -501,7 +563,7 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
       })
 
       if (!result.success) {
-        return { success: false, error: result.error }
+        return { success: false, error: parseTestConnectionError(result.error || 'Connection test failed') }
       }
 
       touchLlmConnection(slug)
@@ -579,7 +641,7 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
         return { success: false, error: 'Connection not found' }
       }
 
-      await getModelRefreshService().refreshNow(slug)
+      await getModelRefreshService().refreshNow(slug, true)
       return { success: true }
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error'
@@ -661,6 +723,12 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
 
       const tokens = await exchangeChatGptTokens(code, flow.codeVerifier)
 
+      // A deliberate sign-in takes ownership away from the local scanner.
+      if (getLlmConnection(flow.connectionSlug)?.localImport) {
+        if (!updateLlmConnection(flow.connectionSlug, { localImport: undefined })) {
+          throw new Error('Failed to save connection ownership')
+        }
+      }
       await credentialManager.setLlmOAuth(flow.connectionSlug, {
         accessToken: tokens.accessToken,
         idToken: tokens.idToken,
@@ -678,6 +746,33 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Token exchange failed',
+      }
+    }
+  })
+
+  // chatgpt:importFromCli — add a connection seeded from the local Codex CLI
+  // login explicitly selected on the scan page. The service verifies account
+  // identity and allocates a slug without overwriting manually signed-in accounts.
+  server.handle(RPC_CHANNELS.chatgpt.IMPORT_FROM_CLI, async (_ctx, connectionSlug: string, expectedConfigId: string, codexHome?: string): Promise<{
+    success: boolean
+    error?: string
+    accountEmail?: string
+  }> => {
+    try {
+      const result = await importLocalLoginAsConnection({ sourceId: 'codex-cli', slug: connectionSlug, expectedConfigId, codexHome })
+      if (result.success) {
+        deps.platform.logger?.info(
+          `[ChatGPT OAuth] Imported Codex CLI login for ${connectionSlug}${result.accountEmail ? ` (${result.accountEmail})` : ''}`,
+        )
+      } else {
+        deps.platform.logger?.error('[ChatGPT OAuth] Codex CLI import failed:', result.error)
+      }
+      return result
+    } catch (error) {
+      deps.platform.logger?.error('[ChatGPT OAuth] Codex CLI import failed:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Codex CLI import failed',
       }
     }
   })

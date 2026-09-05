@@ -24,6 +24,8 @@ import {
 import { cn } from "@/lib/utils"
 import { Check, ChevronDown, Eye, EyeOff, Loader2 } from "lucide-react"
 import { pickTierDefaults, resolveTierModels, type PiModelInfo } from "./tier-models"
+import { EndpointModelPicker } from './EndpointModelPicker'
+import { initialEndpointModelSelection, endpointModelSubmitValues } from './endpoint-model-selection'
 import {
   resolveCustomEndpointPayload,
   resolvePiAuthProviderForSubmit,
@@ -73,7 +75,10 @@ export interface ApiKeyInputProps {
   providerType?: 'anthropic' | 'openai' | 'pi' | 'google' | 'pi_api_key'
   /** Pre-fill values when editing an existing connection */
   initialValues?: {
+    connectionSlug?: string
     apiKey?: string
+    apiKeyPreview?: string
+    modelSelectionMode?: 'automaticallySyncedFromProvider' | 'userDefined3Tier'
     baseUrl?: string
     connectionDefaultModel?: string
     activePreset?: string
@@ -196,7 +201,7 @@ export function ApiKeyInput({
   const { t } = useTranslation()
   const [apiKey, setApiKey] = useState(initialValues?.apiKey ?? '')
   const [showValue, setShowValue] = useState(false)
-  const [baseUrl, setBaseUrl] = useState(initialValues?.baseUrl ?? defaultPreset.url)
+  const [baseUrl, setBaseUrl] = useState(initialValues?.baseUrl ?? presets.find(preset => preset.key === initialPreset)?.url ?? '')
   const [activePreset, setActivePreset] = useState<PresetKey>(initialPreset)
   const [lastNonCustomPreset, setLastNonCustomPreset] = useState<PresetKey | null>(
     initialPreset !== 'custom' ? initialPreset : defaultPreset.key
@@ -204,6 +209,13 @@ export function ApiKeyInput({
   const [connectionDefaultModel, setConnectionDefaultModel] = useState(initialValues?.connectionDefaultModel ?? '')
   const [customApi, setCustomApi] = useState<CustomEndpointApi>(initialValues?.customApi ?? 'openai-completions')
   const [modelError, setModelError] = useState<string | null>(null)
+  const [endpointSelection, setEndpointSelection] = useState(() => initialEndpointModelSelection(initialValues?.connectionDefaultModel, initialValues?.models))
+  const [endpointModelsDiscovered, setEndpointModelsDiscovered] = useState(false)
+  const resetEndpointModels = () => {
+    setEndpointSelection(initialEndpointModelSelection())
+    setEndpointModelsDiscovered(false)
+    setModelError(null)
+  }
 
   // Bedrock auth state
   const [bedrockAuthMethod, setBedrockAuthMethod] = useState<'iam_credentials' | 'environment'>('iam_credentials')
@@ -231,6 +243,7 @@ export function ApiKeyInput({
   // Hide endpoint/model fields for providers with well-known endpoints handled by the SDK
   const DEFAULT_ENDPOINT_PROVIDERS = new Set(['anthropic', 'openai', 'pi', 'google'])
   const isDefaultProviderPreset = DEFAULT_ENDPOINT_PROVIDERS.has(activePreset)
+  const useEndpointPicker = activePreset === 'custom' || OPENAI_COMPAT_CUSTOM_URL_PRESETS.has(activePreset)
 
   // Provider-specific placeholders from the active preset
   const activePresetObj = presets.find(p => p.key === activePreset)
@@ -275,6 +288,7 @@ export function ApiKeyInput({
   const hasPiModels = isPiApiKeyFlow && piModels.length > 0 && !isDefaultProviderPreset && activePreset !== 'custom' && !isBedrock
 
   const handlePresetSelect = (preset: Preset) => {
+    resetEndpointModels()
     setActivePreset(preset.key)
     if (preset.key !== 'custom') {
       setLastNonCustomPreset(preset.key)
@@ -298,13 +312,14 @@ export function ApiKeyInput({
     } else if (preset.key === 'manifest') {
       setConnectionDefaultModel('auto')
     } else if (preset.key === 'custom' || OPENAI_COMPAT_CUSTOM_URL_PRESETS.has(preset.key)) {
-      setConnectionDefaultModel(providerType === 'openai' ? COMPAT_OPENAI_DEFAULTS : COMPAT_ANTHROPIC_DEFAULTS)
+      setConnectionDefaultModel('')
     } else {
       setConnectionDefaultModel('')
     }
   }
 
   const handleBaseUrlChange = (value: string) => {
+    if (value !== baseUrl) resetEndpointModels()
     setBaseUrl(value)
     const presetKey = getPresetForUrl(value, presets)
     const currentPresetObj = presets.find(p => p.key === activePreset)
@@ -326,7 +341,7 @@ export function ApiKeyInput({
         setConnectionDefaultModel(COMPAT_MINIMAX_DEFAULTS)
       } else if (presetKey === 'kimi-coding') {
         setConnectionDefaultModel(COMPAT_KIMI_DEFAULTS)
-      } else if (presetKey === 'openrouter' || presetKey === 'vercel-ai-gateway' || presetKey === 'custom') {
+      } else if (presetKey === 'openrouter' || presetKey === 'vercel-ai-gateway') {
         setConnectionDefaultModel(providerType === 'openai' ? COMPAT_OPENAI_DEFAULTS : COMPAT_ANTHROPIC_DEFAULTS)
       }
     }
@@ -388,13 +403,19 @@ export function ApiKeyInput({
     }
 
     const effectiveBaseUrl = baseUrl.trim()
+    if (useEndpointPicker && !effectiveBaseUrl) {
+      setModelError(t('onboarding.localModel.endpointRequired'))
+      return
+    }
 
-    const parsedModels = parseModelList(connectionDefaultModel)
+    const endpointSubmit = endpointModelSubmitValues(endpointSelection)
+    const parsedModels = useEndpointPicker ? endpointSubmit.models : parseModelList(connectionDefaultModel)
+    const selectedDefaultModel = useEndpointPicker ? endpointSubmit.connectionDefaultModel : parsedModels[0]
 
     const isUsingDefaultEndpoint = isDefaultProviderPreset || !effectiveBaseUrl
     const requiresModel = !isDefaultProviderPreset && !!effectiveBaseUrl
-    if (requiresModel && parsedModels.length === 0) {
-      setModelError('Default model is required for custom endpoints.')
+    if (requiresModel && !selectedDefaultModel) {
+      setModelError(t('apiSetup.models.required'))
       return
     }
 
@@ -412,12 +433,12 @@ export function ApiKeyInput({
     onSubmit({
       apiKey: apiKey.trim(),
       baseUrl: isUsingDefaultEndpoint ? undefined : effectiveBaseUrl,
-      connectionDefaultModel: parsedModels[0],
+      connectionDefaultModel: selectedDefaultModel,
       models: parsedModels.length > 0 ? parsedModels : undefined,
       piAuthProvider: resolvedPiAuthProvider,
-      modelSelectionMode: isPiApiKeyFlow
+      modelSelectionMode: endpointModelsDiscovered ? 'automaticallySyncedFromProvider' : initialValues?.modelSelectionMode ?? (isPiApiKeyFlow
         ? (parsedModels.length > 0 ? 'userDefined3Tier' : 'automaticallySyncedFromProvider')
-        : undefined,
+        : undefined),
       customEndpoint,
     })
   }
@@ -442,8 +463,8 @@ export function ApiKeyInput({
             id="api-key"
             type={showValue ? 'text' : 'password'}
             value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            placeholder={apiKeyPlaceholder}
+            onChange={(e) => { if (e.target.value !== apiKey) resetEndpointModels(); setApiKey(e.target.value) }}
+            placeholder={initialValues?.apiKeyPreview ?? apiKeyPlaceholder}
             className={cn(
               "pr-10 border-0 bg-transparent shadow-none",
               status === 'error' && "focus-visible:ring-destructive"
@@ -465,6 +486,10 @@ export function ApiKeyInput({
           </button>
         </div>
       </div>)}
+
+      {(initialValues?.apiKeyPreview || initialValues?.connectionSlug) && (
+        <p className="text-xs text-muted-foreground">{t('apiSetup.keepStoredKey')}</p>
+      )}
 
       {/* Endpoint/Provider Preset Selector - hidden when only one preset (e.g. Codex/OpenAI direct) */}
       {presets.length > 1 && (
@@ -524,13 +549,14 @@ export function ApiKeyInput({
           )}>
             {([
               { value: 'openai-completions' as const, label: 'OpenAI Compatible' },
+              { value: 'openai-responses' as const, label: 'OpenAI Responses' },
               { value: 'anthropic-messages' as const, label: 'Anthropic Compatible' },
             ]).map(({ value, label }) => (
               <button
                 key={value}
                 type="button"
                 disabled={isDisabled}
-                onClick={() => setCustomApi(value)}
+                onClick={() => { if (value !== customApi) resetEndpointModels(); setCustomApi(value) }}
                 className={cn(
                   "flex-1 py-1.5 text-[12px] font-medium transition-colors",
                   customApi === value
@@ -783,6 +809,16 @@ export function ApiKeyInput({
             </>
           )}
         </div>
+      ) : useEndpointPicker ? (
+        <EndpointModelPicker
+          baseUrl={baseUrl} apiKey={apiKey}
+          api={OPENAI_COMPAT_CUSTOM_URL_PRESETS.has(activePreset) ? 'openai-completions' : customApi}
+          connectionSlug={initialValues?.connectionSlug}
+          selection={endpointSelection}
+          onChange={selection => { setEndpointSelection(selection); setModelError(null) }}
+          onDiscovered={() => setEndpointModelsDiscovered(true)}
+          disabled={isDisabled} error={modelError}
+        />
       ) : !isDefaultProviderPreset && (
         <div className="space-y-2">
           <Label htmlFor="connection-default-model" className="text-muted-foreground font-normal">

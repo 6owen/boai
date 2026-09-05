@@ -7,8 +7,7 @@
  * has a registered fetcher — adding a new LlmProviderType without a fetcher
  * causes a type error.
  *
- * Compat providers (pi_compat) are excluded —
- * they point to arbitrary endpoints where users configure models manually.
+ * Compatible endpoints use their model-list API when available.
  */
 
 import type { ModelDefinition } from './models';
@@ -20,15 +19,12 @@ import type { LlmProviderType, LlmConnection } from './llm-connections';
 
 /**
  * Providers that support automatic model fetching.
- * Compat providers are excluded — they point to arbitrary endpoints
- * (Ollama, OpenRouter, etc.) where users configure models manually.
+ * Compatible endpoints discover models from the configured URL and credentials.
  *
  * Adding a new LlmProviderType without updating this type
  * will cause a compile error in the fetcher registry.
  */
-export type FetchableProvider = Exclude<LlmProviderType,
-  | 'pi_compat'
->;
+export type FetchableProvider = LlmProviderType;
 
 /**
  * Result of a model fetch operation.

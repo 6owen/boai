@@ -276,6 +276,20 @@ export function loadStoredConfig(): StoredConfig | null {
       return null;
     }
 
+    // Early Claude Code imports copied the CLI-only context modifier into model IDs.
+    // Normalize only those imports, so edit, validation and chat see the same API model.
+    for (const connection of config.llmConnections ?? []) {
+      // Imported current-model hints are seeds, never a user-owned model allowlist.
+      if (connection.localImport && ['codex-api-key', 'claude-code-api-key', 'openai-config'].includes(connection.localImport.sourceId)) {
+        connection.modelSelectionMode = 'automaticallySyncedFromProvider';
+      }
+      if (connection.localImport?.sourceId !== 'claude-code-api-key') continue;
+      connection.defaultModel = connection.defaultModel?.replace(/\[1m\]$/i, '');
+      connection.models = connection.models?.map(model => typeof model === 'string'
+        ? model.replace(/\[1m\]$/i, '')
+        : { ...model, id: model.id.replace(/\[1m\]$/i, '') });
+    }
+
     // Expand path variables (~ and ${HOME}) for portability
     for (const workspace of config.workspaces) {
       workspace.rootPath = expandPath(workspace.rootPath);
@@ -2716,6 +2730,8 @@ export function updateLlmConnection(slug: string, updates: Partial<Omit<LlmConne
     customEndpoint: updates.customEndpoint !== undefined ? updates.customEndpoint : existing.customEndpoint,
     // Mid-stream send behavior (steer vs queue) — read via resolveMidStreamBehavior()
     midStreamBehavior: updates.midStreamBehavior !== undefined ? updates.midStreamBehavior : existing.midStreamBehavior,
+    // Keep scanner ownership across model refreshes; explicit reauthentication can clear it.
+    localImport: Object.prototype.hasOwnProperty.call(updates, 'localImport') ? updates.localImport : existing.localImport,
     // Timestamps
     lastUsedAt: updates.lastUsedAt !== undefined ? updates.lastUsedAt : existing.lastUsedAt,
   };

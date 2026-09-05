@@ -32,11 +32,13 @@ import type { LlmConnectionType, CustomEndpointConfig } from '../../config/llm-c
 // Import validation helpers for provider-auth combinations
 import {
   isValidProviderAuthCombination,
+  getDefaultModelForConnection,
 } from '../../config/llm-connections.ts';
 import type { ModelFetchResult } from '../../config/model-fetcher.ts';
 // Model resolution utilities
 import { normalizeDeprecatedModelId } from '../../config/models.ts';
 import { homedir } from 'node:os';
+import { randomUUID } from 'node:crypto';
 import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { getCredentialManager } from '../../credentials/index.ts';
@@ -432,16 +434,28 @@ export async function validateStoredBackendConnection(args: {
       resolvedPaths,
     });
 
-    if (!driver.validateStoredConnection) {
-      return { success: true };
+    const model = resolveModelForProvider(provider, undefined, connection)
+      || (connection.customEndpoint ? '' : getDefaultModelForConnection(connection.providerType, connection.piAuthProvider));
+    if (!model) return { success: false, error: 'A model is required to test this connection' };
+
+    if (['api_key', 'api_key_with_endpoint', 'none'].includes(connection.authType)) {
+      return await testBackendConnection({
+        provider,
+        apiKey: await credentialManager.getLlmApiKey(args.slug) ?? '',
+        allowEmptyApiKey: connection.authType === 'none',
+        model,
+        baseUrl: connection.baseUrl,
+        connection,
+        hostRuntime: args.hostRuntime,
+        timeoutMs: 45_000,
+      });
     }
 
-    return driver.validateStoredConnection({
-      slug: args.slug,
-      connection,
-      credentialManager,
+    // OAuth and AWS credentials must follow the same refresh/routing path as chat.
+    return await testBackendCompletion({
+      context: { connection, provider, authType: connection.authType, resolvedModel: model, capabilities: BACKEND_CAPABILITIES[provider] },
       hostRuntime: args.hostRuntime,
-      resolvedPaths,
+      timeoutMs: 45_000,
     });
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
@@ -640,7 +654,14 @@ export async function testBackendConnection(args: {
     return { success: false, error: 'API key is required' };
   }
 
-  const tempSlug = `__test-${Date.now()}`;
+  if (trimmedKey.includes('••')) {
+    return { success: false, error: 'A masked API key cannot be used for a connection test' };
+  }
+
+  const redact = (result: { success: boolean; error?: string }) => result.error && trimmedKey
+    ? { ...result, error: result.error.replaceAll(trimmedKey, '[redacted]') }
+    : result;
+  const tempSlug = `__test-${randomUUID()}`;
   const cm = getCredentialManager();
   if (trimmedKey) {
     await cm.setLlmApiKey(tempSlug, trimmedKey);
@@ -689,62 +710,75 @@ export async function testBackendConnection(args: {
         timeoutMs: args.timeoutMs ?? 20000,
       });
       // null = driver declined to handle; fall through to generic subprocess test
-      if (driverResult !== null) return driverResult;
+      if (driverResult !== null) return redact(driverResult);
     }
 
-    const cwd = homedir();
-    const agent = createBackendFromResolvedContext({
-      context,
-      coreConfig: {
-        workspace: { id: '__test', name: 'Connection Test', slug: '__test', rootPath: cwd, createdAt: 0 },
-        session: { id: `test-${now}`, workspaceRootPath: cwd, createdAt: 0, lastUsedAt: 0 },
-        isHeadless: true,
-        miniModel: testModel,
-      },
-      hostRuntime: args.hostRuntime,
-      providerOptions: { piAuthProvider: args.connection?.piAuthProvider },
-    });
-
-    const readAgentStderr = (): string => {
-      const maybe = agent as unknown as { getRecentStderr?: () => string };
-      return typeof maybe.getRecentStderr === 'function' ? maybe.getRecentStderr() : '';
-    };
-    const withStderrContext = (message: string): string => {
-      const stderr = readAgentStderr();
-      if (!stderr) return `${message} (subprocess produced no stderr output)`;
-      return `${message}\n--- subprocess stderr (last ~8KB) ---\n${stderr}`;
-    };
-
-    try {
-      const timeoutMs = args.timeoutMs ?? 20000;
-      const text = await Promise.race([
-        agent.runMiniCompletion('Say ok'),
-        new Promise<never>((_, reject) =>
-          setTimeout(
-            () => reject(new Error(withStderrContext(`Connection test timed out after ${timeoutMs}ms`))),
-            timeoutMs
-          )
-        ),
-      ]);
-
-      return text
-        ? { success: true }
-        : { success: false, error: 'No response from provider. Check your API key.' };
-    } catch (error) {
-      const base = error instanceof Error ? error.message : String(error);
-      // Avoid double-appending if the timeout branch already included stderr context.
-      const enriched = base.includes('subprocess stderr') ? base : withStderrContext(base);
-      return { success: false, error: enriched };
-    } finally {
-      agent.destroy();
-    }
+    return redact(await testBackendCompletion({ context, hostRuntime: args.hostRuntime, timeoutMs: args.timeoutMs ?? 20_000 }));
   } catch (error) {
-    return {
+    return redact({
       success: false,
       error: error instanceof Error ? error.message : String(error),
-    };
+    });
   } finally {
     await cm.deleteLlmApiKey(tempSlug).catch(() => {});
+  }
+}
+
+/** Send one completion using the configured runtime and always release its subprocess. */
+async function testBackendCompletion(args: {
+  context: ResolvedBackendContext;
+  hostRuntime: BackendHostRuntimeContext;
+  timeoutMs: number;
+}): Promise<{ success: boolean; error?: string }> {
+  const { context, timeoutMs } = args;
+  const now = Date.now();
+  const testModel = context.resolvedModel;
+  const cwd = homedir();
+  const agent = createBackendFromResolvedContext({
+    context,
+    coreConfig: {
+      workspace: { id: '__test', name: 'Connection Test', slug: '__test', rootPath: cwd, createdAt: 0 },
+      session: { id: `test-${now}`, workspaceRootPath: cwd, createdAt: 0, lastUsedAt: 0 },
+      isHeadless: true,
+      miniModel: testModel,
+    },
+    hostRuntime: args.hostRuntime,
+    providerOptions: { piAuthProvider: context.connection?.piAuthProvider },
+  });
+
+  const readAgentStderr = (): string => {
+    const maybe = agent as unknown as { getRecentStderr?: () => string };
+    return typeof maybe.getRecentStderr === 'function' ? maybe.getRecentStderr() : '';
+  };
+  const withStderrContext = (message: string): string => {
+    const stderr = readAgentStderr();
+    if (!stderr) return `${message} (subprocess produced no stderr output)`;
+    return `${message}\n--- subprocess stderr (last ~8KB) ---\n${stderr}`;
+  };
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const text = await Promise.race([
+      agent.runMiniCompletion('Say ok'),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(withStderrContext(`Connection test timed out after ${timeoutMs}ms`))),
+          timeoutMs
+        );
+      }),
+    ]);
+
+    return text
+      ? { success: true }
+      : { success: false, error: 'No response from provider. Check your API key.' };
+  } catch (error) {
+    const base = error instanceof Error ? error.message : String(error);
+    // Avoid double-appending if the timeout branch already included stderr context.
+    const enriched = base.includes('subprocess stderr') ? base : withStderrContext(base);
+    return { success: false, error: enriched };
+  } finally {
+    clearTimeout(timer);
+    agent.destroy();
   }
 }
 

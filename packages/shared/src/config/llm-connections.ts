@@ -96,7 +96,7 @@ export type ModelSelectionMode = 'automaticallySyncedFromProvider' | 'userDefine
  * Protocol for custom API endpoints.
  * Determines which streaming adapter the Pi SDK uses for requests.
  */
-export type CustomEndpointApi = 'openai-completions' | 'anthropic-messages';
+export type CustomEndpointApi = 'openai-completions' | 'openai-responses' | 'anthropic-messages';
 
 /**
  * Custom endpoint protocol config.
@@ -131,6 +131,9 @@ export type MidStreamBehavior = 'steer' | 'queue';
 export interface LlmConnection {
   /** URL-safe identifier (e.g., 'anthropic-api', 'ollama-local') */
   slug: string;
+
+  /** Local config import identity, used to re-import without overwriting manual connections. */
+  localImport?: { sourceId: string; configId: string };
 
   /** Display name shown in UI (e.g., 'Anthropic (API Key)', 'Ollama') */
   name: string;

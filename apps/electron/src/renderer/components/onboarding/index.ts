@@ -35,3 +35,5 @@ export type {
 export type {
   CredentialStatus as CredentialStatusType,
 } from './CredentialsStep'
+
+export { LocalConfigScanStep, type LocalConfigScanStatus } from './LocalConfigScanStep'

@@ -5,6 +5,7 @@ export * from './callback-page.ts';
 export * from './callback-server.ts';
 export * from './chatgpt-oauth.ts';
 export * from './chatgpt-oauth-config.ts';
+export * from './local-login-detection.ts';
 export * from './github-copilot.ts';
 export * from './google-oauth.ts';
 export * from './slack-oauth.ts';
@@ -13,3 +14,7 @@ export * from './oauth.ts';
 export * from './oauth-relay.ts';
 export * from './pkce.ts';
 export * from './state.ts';
+
+export * from './local-config-types.ts';
+export * from './local-config-scan.ts';
+export { normalizeConfigEndpoint } from './codex-api-key-detection.ts';

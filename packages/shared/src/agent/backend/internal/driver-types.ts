@@ -8,7 +8,6 @@ import type {
 } from '../types.ts';
 import type { LlmConnection } from '../../../config/storage.ts';
 import type { ModelFetchResult } from '../../../config/model-fetcher.ts';
-import type { CredentialManager } from '../../../credentials/manager.ts';
 import type { ResolvedBackendRuntimePaths } from './runtime-resolver.ts';
 
 export interface BackendRuntimePaths {
@@ -79,12 +78,6 @@ export interface StoredConnectionValidationResult {
   shouldRefreshModels?: boolean;
 }
 
-export interface DriverValidateStoredConnectionArgs extends DriverHostRuntimeArgs {
-  slug: string;
-  connection: LlmConnection;
-  credentialManager: CredentialManager;
-}
-
 export interface DriverTestConnectionArgs extends DriverHostRuntimeArgs {
   provider: AgentProvider;
   apiKey: string;
@@ -98,7 +91,6 @@ export interface ProviderDriver {
   provider: AgentProvider;
   initializeHostRuntime?: (args: DriverHostRuntimeArgs) => void;
   fetchModels?: (args: DriverFetchModelsArgs) => Promise<ModelFetchResult>;
-  validateStoredConnection?: (args: DriverValidateStoredConnectionArgs) => Promise<StoredConnectionValidationResult>;
   testConnection?: (args: DriverTestConnectionArgs) => Promise<{ success: boolean; error?: string } | null>;
   prepareRuntime?: (args: DriverBuildArgs) => void;
   buildRuntime: (args: DriverBuildArgs) => BackendRuntimePayload;

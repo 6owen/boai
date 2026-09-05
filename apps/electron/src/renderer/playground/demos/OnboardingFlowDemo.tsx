@@ -12,14 +12,15 @@ import { WelcomeStep } from '@/components/onboarding/WelcomeStep'
 import { ProviderSelectStep, type ProviderChoice } from '@/components/onboarding/ProviderSelectStep'
 import { CredentialsStep } from '@/components/onboarding/CredentialsStep'
 import { LocalModelStep } from '@/components/onboarding/LocalModelStep'
+import { LocalConfigScanStep } from '@/components/onboarding/LocalConfigScanStep'
 import { CompletionStep } from '@/components/onboarding/CompletionStep'
 import type { ApiSetupMethod } from '@/components/onboarding/APISetupStep'
 import type { CredentialStatus } from '@/components/onboarding/CredentialsStep'
 
-type DemoStep = 'welcome' | 'provider-select' | 'credentials' | 'local-model' | 'complete'
+type DemoStep = 'welcome' | 'provider-select' | 'credentials' | 'local-model' | 'local-config-scan' | 'complete'
 
 /** Map ProviderChoice → ApiSetupMethod for the credentials step */
-const CHOICE_TO_METHOD: Record<Exclude<ProviderChoice, 'local'>, ApiSetupMethod> = {
+const CHOICE_TO_METHOD: Record<Exclude<ProviderChoice, 'local' | 'local-config'>, ApiSetupMethod> = {
   chatgpt: 'pi_chatgpt_oauth',
   copilot: 'pi_copilot_oauth',
   api_key: 'pi_api_key',
@@ -43,7 +44,9 @@ export function OnboardingFlowDemo() {
     setLocalStatus('idle')
     setErrorMessage(undefined)
 
-    if (choice === 'local') {
+    if (choice === 'local-config') {
+      setStep('local-config-scan')
+    } else if (choice === 'local') {
       setMethod(null)
       setStep('local-model')
     } else {
@@ -58,6 +61,7 @@ export function OnboardingFlowDemo() {
         setStep('welcome')
         break
       case 'credentials':
+      case 'local-config-scan':
       case 'local-model':
         setStep('provider-select')
         setCredStatus('idle')
@@ -108,11 +112,11 @@ export function OnboardingFlowDemo() {
   }, [handleRestart])
 
   // Step labels for the breadcrumb
-  const activeStepLabel = step === 'local-model' ? 'Local Model' : 'Credentials'
+  const activeStepLabel = step === 'local-config-scan' ? 'Local Config' : step === 'local-model' ? 'Local Model' : 'Credentials'
   const STEP_ORDER: { key: DemoStep; label: string }[] = [
     { key: 'welcome', label: 'Welcome' },
     { key: 'provider-select', label: 'Provider' },
-    { key: step === 'local-model' ? 'local-model' : 'credentials', label: activeStepLabel },
+    { key: step === 'local-config-scan' ? 'local-config-scan' : step === 'local-model' ? 'local-model' : 'credentials', label: activeStepLabel },
     { key: 'complete', label: 'Done' },
   ]
 
@@ -160,6 +164,8 @@ export function OnboardingFlowDemo() {
         {step === 'provider-select' && (
           <ProviderSelectStep onSelect={handleProviderSelect} onSkip={handleSkip} />
         )}
+
+        {step === 'local-config-scan' && <LocalConfigScanStep detectedLogins={[]} status="complete" onScan={() => {}} onImport={() => {}} onBack={handleBack} />}
 
         {step === 'credentials' && method && (
           <CredentialsStep

@@ -185,6 +185,10 @@ export const RPC_CHANNELS = {
     VALIDATE_MCP: 'onboarding:validateMcp',
     START_MCP_OAUTH: 'onboarding:startMcpOAuth',
     DEFER_SETUP: 'onboarding:deferSetup',
+    DETECT_LOCAL_LOGINS: 'onboarding:detectLocalLogins',
+    IMPORT_CODEX_API_KEY: 'onboarding:importCodexApiKey',
+    SCAN_LOCAL_CONFIGS: 'onboarding:scanLocalConfigs',
+    IMPORT_LOCAL_API_KEY: 'onboarding:importLocalApiKey',
   },
   llmConnections: {
     LIST: 'LLM_Connection:list',
@@ -197,6 +201,7 @@ export const RPC_CHANNELS = {
     SET_DEFAULT: 'LLM_Connection:setDefault',
     SET_WORKSPACE_DEFAULT: 'LLM_Connection:setWorkspaceDefault',
     REFRESH_MODELS: 'LLM_Connection:refreshModels',
+    DISCOVER_MODELS: 'LLM_Connection:discoverModels',
     CHANGED: 'LLM_Connection:changed',
   },
   chatgpt: {
@@ -205,6 +210,7 @@ export const RPC_CHANNELS = {
     CANCEL_OAUTH: 'chatgpt:cancelOAuth',
     GET_AUTH_STATUS: 'chatgpt:getAuthStatus',
     LOGOUT: 'chatgpt:logout',
+    IMPORT_FROM_CLI: 'chatgpt:importFromCli',
   },
   copilot: {
     START_OAUTH: 'copilot:startOAuth',
